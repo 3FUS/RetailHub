@@ -1,0 +1,36 @@
+name: Build main.exe with PyInstaller
+
+on:
+  push:
+    branches:
+      - main  # 当推送到 main 分支时触发
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build:
+    runs-on: windows-latest  # 使用 Windows 环境
+    name: Build EXE for Windows
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'  # 指定 Python 版本
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build EXE with PyInstaller
+        run: |
+          python -m PyInstaller --onefile main.py
+
+      - name: Archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: main-exe
+          path: dist/main.exe
