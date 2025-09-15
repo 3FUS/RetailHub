@@ -1,3 +1,4 @@
+pyinstaller
 fastapi==0.100.0
 uvicorn==0.20.0
 sqlalchemy==2.0.0
