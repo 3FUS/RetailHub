@@ -33,11 +33,13 @@ jobs:
       - name: Build EXE with PyInstaller
         run: |
           python -m PyInstaller --onefile --hidden-import=aiomysql --name RetailHub main.py
-        if (!(Test-Path "dist/RetailHub.exe")) {
-          echo "Error: dist/RetailHub.exe not found"
-          dir "dist"  # 列出dist目录内容
-          exit 1
-        }
+          
+          if (!(Test-Path "dist/retailhub.exe")) {
+            echo "Error: dist/retailhub.exe not found"
+            dir "dist"  # 列出dist目录内容
+            exit 1
+          }
+
 
       - name: Debug information
         run: |    
