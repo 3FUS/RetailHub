@@ -32,21 +32,37 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          python -m PyInstaller --onefile --hidden-import=aiomysql --name retailhub main.py
+          python -m PyInstaller --onefile --hidden-import=aiomysql --name RetailHub main.py
+        if (!(Test-Path "dist/RetailHub.exe")) {
+          echo "Error: dist/RetailHub.exe not found"
+          dir "dist"  # 列出dist目录内容
+          exit 1
+        }
+
+      - name: Debug information
+        run: |    
+          echo "Current directory contents:"
+          dir
+          echo "Dist directory contents:"
+          dir "dist"
 
       - name: Create installer with NSIS
         run: |
+          if (!(Test-Path "dist/retailhub.exe")) {
+            echo "Error: dist/retailhub.exe not found, cannot create installer"
+            exit 1
+          }
           # 创建安装脚本
           echo 'Name "RetailHub"' > installer.nsi
           echo 'OutFile "dist/RetailHub-Installer.exe"' >> installer.nsi
           echo 'InstallDir $PROGRAMFILES\RetailHub' >> installer.nsi
           echo 'Section' >> installer.nsi
           echo '  SetOutPath $INSTDIR' >> installer.nsi
-          echo '  File "dist/retailhub.exe"' >> installer.nsi
+          echo '  File "dist/RetailHub.exe"' >> installer.nsi
           echo '  WriteUninstaller "$INSTDIR\uninstall.exe"' >> installer.nsi
           echo 'SectionEnd' >> installer.nsi
           echo 'Section "Uninstall"' >> installer.nsi
-          echo '  Delete "$INSTDIR\retailhub.exe"' >> installer.nsi
+          echo '  Delete "$INSTDIR\RetailHub.exe"' >> installer.nsi
           echo '  Delete "$INSTDIR\uninstall.exe"' >> installer.nsi
           echo '  RMDir "$INSTDIR"' >> installer.nsi
           echo 'SectionEnd' >> installer.nsi
@@ -55,5 +71,5 @@ jobs:
       - name: Archive installer artifact
         uses: actions/upload-artifact@v4
         with:
-          name: retailhub-installer
+          name: RetailHub-installer
           path: dist/RetailHub-Installer.exe
