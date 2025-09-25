@@ -20,13 +20,15 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Set up NSIS
-        uses: joncloud/makensis-action@v4.1
-
       - name: Install dependencies
         run: |    
           pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+          refreshenv
 
       - name: Build EXE with PyInstaller
         run: |
@@ -48,7 +50,7 @@ jobs:
           echo '  Delete "$INSTDIR\uninstall.exe"' >> installer.nsi
           echo '  RMDir "$INSTDIR"' >> installer.nsi
           echo 'SectionEnd' >> installer.nsi
-          makensis installer.nsi
+          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
 
       - name: Archive installer artifact
         uses: actions/upload-artifact@v4
