@@ -1,46 +1,27 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
-from typing import List
 
-from app.schemas.target import TargetStoreWeekCreate, TargetStoreDailyCreate, TargetStoreUpdate, StaffAttendanceCreate
+from app.schemas.target import TargetStoreWeekCreate, TargetStoreDailyCreate, StaffAttendanceCreate, \
+    BatchApprovedTarget, WithdrawnTarget
 from app.services.target_service import TargetStoreService, TargetStoreWeekService, TargetStoreDailyService, \
     TargetStaffService
+from app.services.commission_service import CommissionService
 from app.database import get_db
+from app.core.security import get_current_user
 
 router = APIRouter()
 
 
-#
-@router.put("/update/{store_code}/{fiscal_month}")
-async def update_target(store_code: str, fiscal_month: str, target: TargetStoreUpdate,
-                        db: AsyncSession = Depends(get_db)):
-    try:
-        return await TargetStoreService.update_target(db, store_code, fiscal_month, target)
-    except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
-    except SQLAlchemyError as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Database error occurred while updating target"
-        )
-    except Exception as e:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while updating target: {str(e)}"
-        )
-
-
 @router.get("/list")
-async def get_targets(fiscal_month: str, key_word: str = None, store_status: str = 'ALL', staff_status: str = 'ALL', db: AsyncSession = Depends(get_db)):
+async def get_targets(fiscal_month: str, key_word: str = None,
+                      store_status: str = 'ALL', staff_status: str = 'ALL',
+                      db: AsyncSession = Depends(get_db),
+                      current_user: dict = Depends(get_current_user)):
     try:
-        data = await TargetStoreService.get_all_target_stores_by_key(fiscal_month, key_word, db)
-        return {"code": 200, "data": data}
+        role_code = current_user['user_code']
+        data = await TargetStoreService.get_all_target_stores_by_key(role_code, fiscal_month, key_word, db)
+        return {"code": 200, "data": data['data'], "field_translations": data['field_translations']}
 
     except SQLAlchemyError as e:
         raise HTTPException(
@@ -55,9 +36,10 @@ async def get_targets(fiscal_month: str, key_word: str = None, store_status: str
 
 
 @router.post("/create_week")
-async def create_week_target(TargetStoreWeek: TargetStoreWeekCreate, db: AsyncSession = Depends(get_db)):
+async def create_week_target(TargetStoreWeek: TargetStoreWeekCreate, db: AsyncSession = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
     try:
-        data= await TargetStoreWeekService.create_target_store_week(db, TargetStoreWeek)
+        data = await TargetStoreWeekService.create_target_store_week(db, TargetStoreWeek)
         return {"code": 200, "data": data, "msg": "Success"}
     except SQLAlchemyError as e:
         raise HTTPException(
@@ -72,7 +54,8 @@ async def create_week_target(TargetStoreWeek: TargetStoreWeekCreate, db: AsyncSe
 
 
 @router.get("/get_week")
-async def get_week_target(store_code: str, fiscal_month: str, db: AsyncSession = Depends(get_db)):
+async def get_week_target(store_code: str, fiscal_month: str, db: AsyncSession = Depends(get_db),
+                          current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStoreWeekService.get_target_store_week(db, store_code, fiscal_month)
         return {"code": 200, "data": data}
@@ -86,9 +69,14 @@ async def get_week_target(store_code: str, fiscal_month: str, db: AsyncSession =
 
 
 @router.post("/create_daily")
-async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: AsyncSession = Depends(get_db)):
+async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: AsyncSession = Depends(get_db),
+                              current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStoreDailyService.create_target_store_daily(db, TargetStoreDaily)
+        # if TargetStoreDaily.store_status == "submitted":
+        #     await TargetStoreService.update_target_store_daily(db, TargetStoreDaily.store_code,
+        #                                                        TargetStoreDaily.fiscal_month)
+
         return {"code": 200, "data": data, "msg": "Success"}
     except SQLAlchemyError as e:
         raise HTTPException(
@@ -103,7 +91,8 @@ async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: Asyn
 
 
 @router.get("/get_daily")
-async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession = Depends(get_db)):
+async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession = Depends(get_db),
+                           current_user: dict = Depends(get_current_user)):
     try:
         target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month)
         return {"code": 200, "data": target_data}
@@ -121,7 +110,8 @@ async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession 
 
 @router.post("/create_staff_attendance")
 async def create_staff_attendance(TargetStaffAttendance: StaffAttendanceCreate,
-                                  db: AsyncSession = Depends(get_db)):
+                                  db: AsyncSession = Depends(get_db),
+                                  current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.create_staff_attendance(db, TargetStaffAttendance)
         return {"code": 200, "data": data, "msg": "Success"}
@@ -138,7 +128,8 @@ async def create_staff_attendance(TargetStaffAttendance: StaffAttendanceCreate,
 
 
 @router.get("/get_staff_attendance")
-async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSession = Depends(get_db)):
+async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSession = Depends(get_db),
+                               current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code)
         return {"code": 200, "data": data}
@@ -156,7 +147,7 @@ async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSess
 
 @router.delete("/delete_staff_attendance")
 async def delete_staff_attendance(fiscal_month: str, store_code: str, staff_code: str,
-                                  db: AsyncSession = Depends(get_db)):
+                                  db: AsyncSession = Depends(get_db), current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.delete_staff_attendance(db, fiscal_month, store_code, staff_code)
         return {"code": 200, "data": data, "msg": "Success"}
@@ -170,3 +161,42 @@ async def delete_staff_attendance(fiscal_month: str, store_code: str, staff_code
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"
         )
+
+
+@router.post("/batch_Approved")
+async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = Depends(get_db),
+                             current_user: dict = Depends(get_current_user)):
+    try:
+        await CommissionService.create_commission(db, request.fiscal_month, request.store_codes)
+
+        if request.store_status and request.store_status == "approved":
+            for store in request.store_codes:
+                await TargetStoreDailyService.update_target_monthly_percentage(db, store,
+                                                                               request.fiscal_month)
+
+        result = await TargetStoreService.batch_approved_target_by_store_codes(
+            db, request
+        )
+        return {"code": 200, "data": result, "msg": f"Successfully target"}
+    except ValueError as e:
+        return {"code": 404, "msg": str(e)}
+    except SQLAlchemyError as e:
+        return {"code": 500, "msg": "Database error occurred while processing batch audit"}
+    except Exception as e:
+        return {"code": 500, "msg": f"An error occurred while processing batch audit: {str(e)}"}
+
+
+@router.post("/withdrawn")
+async def withdrawn_target(request: WithdrawnTarget, db: AsyncSession = Depends(get_db),
+                           current_user: dict = Depends(get_current_user)):
+    try:
+        result = await TargetStoreService.withdrawn_target(
+            db, request
+        )
+        return {"code": 200, "data": result, "msg": f"Successfully withdrawn taget"}
+    except ValueError as e:
+        return {"code": 404, "msg": str(e)}
+    except SQLAlchemyError as e:
+        return {"code": 500, "msg": "Database error occurred while processing batch audit"}
+    except Exception as e:
+        return {"code": 500, "msg": f"An error occurred while processing batch audit: {str(e)}"}

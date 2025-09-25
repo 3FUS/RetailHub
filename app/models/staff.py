@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -19,8 +19,11 @@ class StaffAttendanceModel(Base):
     actual_attendance = Column(Float)  # 实际出勤天数
     position = Column(String(100), nullable=False)  # 职位
     salary_coefficient = Column(Float, nullable=False)  # 目标系数
+    target_value_ratio = Column(Float)
     target_value = Column(Float)  # 个人销售目标
-    sales_value = Column(Float)  # 个人销金额
+    sales_value = Column(Float)  # 个人总销金额 线下+线上
+    sales_value_ec = Column(Float)  # 线上销售金额
+    sales_value_store = Column(Float)  # 线下门店销售金额
     deletable = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
@@ -60,15 +63,31 @@ class StaffModel(Base):
     update_time = Column(DateTime)
 
 
-class Position(Base):
+class PositionModel(Base):
     """
     岗位信息模型
     用于存储岗位代码、描述和默认计算系数
     """
     __tablename__ = "positions"
 
-    position_code = Column(String(60), primary_key=True)  # 岗位代码
+    position = Column(String(30), primary_key=True)  # 岗位代码
+    position_code = Column(String(60), primary_key=True)
     description = Column(String(255))  # 岗位描述
     default_coefficient = Column(Float, default=1.0)  # 默认计算系数
+    is_active = Column(Boolean, default=True)  # 是否启用该规则分配
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+#
+# class StoreTypeModel(Base):
+#     """
+#     门店类型模型
+#     对应数据库中的store_type表
+#     """
+#     __tablename__ = "store_type"
+#     store_type_code = Column(String(30), primary_key=True)  # 门店类型代码
+#     store_type_name = Column(String(120))  # 门店类型名称
+#     store_type_group = Column(String(30))  # 门店类型组
+#     is_active = Column(Boolean, default=True)  # 是否启用该规则分配
+#     created_at = Column(DateTime, default=datetime.utcnow)
+#     creator_code = Column(String(30))
+#     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

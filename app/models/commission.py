@@ -11,7 +11,7 @@ class CommissionStoreModel(Base):
     fiscal_month = Column(String(50), primary_key=True)
     store_type = Column(String(50))
     fiscal_period = Column(String(50))
-    status = Column(String(20), default="draft")  # draft, submitted, approved, rejected
+    status = Column(String(20), default="draft")  # saved, submitted, approved, rejected
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

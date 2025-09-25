@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Date
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -12,7 +12,7 @@ class TargetStoreMain(Base):
     """
     __tablename__ = "target_stores_main"
 
-    store_code = Column(String(30),  primary_key=True)
+    store_code = Column(String(30), primary_key=True)
     fiscal_month = Column(String(50), primary_key=True)
     store_type = Column(String(50))
     target_value = Column(Float)
@@ -34,9 +34,9 @@ class TargetStoreWeek(Base):
     """
     __tablename__ = "target_store_weeks"
 
-    store_code = Column(String(30),  primary_key=True)
-    fiscal_month = Column(String(50),  primary_key=True)
-    week_number = Column(Integer,  primary_key=True)
+    store_code = Column(String(30), primary_key=True)
+    fiscal_month = Column(String(50), primary_key=True)
+    week_number = Column(Integer, primary_key=True)
     percentage = Column(Float, nullable=False)  # 每周目标占比
     target_value = Column(Float)  # 每周目标数值
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -51,10 +51,11 @@ class TargetStoreDaily(Base):
     """
     __tablename__ = "target_store_daily"
 
-    store_code = Column(String(50),  primary_key=True)
+    store_code = Column(String(50), primary_key=True)
     fiscal_month = Column(String(50), nullable=False)
-    target_date = Column(DateTime,  primary_key=True)  # 日期
+    target_date = Column(Date, primary_key=True)  # 日期
     percentage = Column(Float, nullable=False)  # 每日目标占比
+    monthly_percentage = Column(Float)
     target_value = Column(Float)  # 每日目标数值
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))

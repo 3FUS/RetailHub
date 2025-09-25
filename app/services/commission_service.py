@@ -1,27 +1,331 @@
+from typing import List
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.commission import CommissionStaffModel, CommissionStoreModel, CommissionRuleModel, \
     CommissionRuleAssignmentModel, CommissionRuleDetailModel
-from app.models.dimension import StoreModel
-from app.models.staff import StaffAttendanceModel
-from app.schemas.commission import CommissionCreate, CommissionUpdate, CommissionStaffCreate
+from app.models.dimension import StoreModel, DimensionDayWeek, RoleOrgJoin
+from app.models.staff import StaffAttendanceModel, StaffModel
+from app.schemas.commission import CommissionCreate, CommissionUpdate, CommissionStaffCreate, BatchApprovedCommission
 from app.models.target import TargetStoreMain
 
-from app.database import get_db
 from datetime import datetime
-from sqlalchemy import func
+from sqlalchemy import func, or_, exists
 from sqlalchemy.orm import aliased
 from sqlalchemy import delete
+from app.utils.permissions import build_store_permission_query
+
+class CommissionRPTService:
+
+    @staticmethod
+    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str = None):
+        try:
+            # 构建查询，包含所有需要的字段
+            query = (
+                select(
+                    CommissionStoreModel.store_code,
+                    StoreModel.store_name,
+                    CommissionStoreModel.store_type,
+                    StaffAttendanceModel.staff_code,
+                    StaffModel.first_name,
+                    StaffAttendanceModel.position,
+                    StaffAttendanceModel.salary_coefficient,
+                    CommissionStoreModel.fiscal_period,
+                    CommissionStoreModel.status,
+                    StaffAttendanceModel.sales_value,
+                    (TargetStoreMain.target_value * StaffAttendanceModel.target_value_ratio).label('target_value'),
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance,
+                    CommissionRuleModel.rule_class,
+                    func.sum(CommissionStaffModel.amount).label('amount')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(StoreModel,
+                          CommissionStoreModel.store_code == StoreModel.store_code)
+                    .join(StaffAttendanceModel,
+                          (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month) &
+                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code),
+                          isouter=True)
+                    .join(StaffModel,
+                          StaffAttendanceModel.staff_code == StaffModel.staff_code,
+                          isouter=True)
+                    .join(TargetStoreMain,
+                          (CommissionStoreModel.fiscal_month == TargetStoreMain.fiscal_month) &
+                          (CommissionStoreModel.store_code == TargetStoreMain.store_code),
+                          isouter=True)
+                    .join(CommissionStaffModel,
+                          (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month) &
+                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code) &
+                          (StaffAttendanceModel.staff_code == CommissionStaffModel.staff_code),
+                          isouter=True)
+                    .join(CommissionRuleDetailModel,
+                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code,
+                          isouter=True)
+                    .join(CommissionRuleModel,
+                          CommissionRuleModel.rule_code == CommissionRuleDetailModel.rule_code,
+                          isouter=True)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(StoreModel.manage_channel.in_(['ROCN', 'RFCN']))
+            )
+
+            # 如果提供了关键词，则添加过滤条件
+            if key_word:
+                query = query.where(
+                    or_(
+                        CommissionStoreModel.store_code.contains(key_word),
+                        StoreModel.store_name.contains(key_word),
+                        StaffAttendanceModel.staff_code.contains(key_word),
+                        StaffAttendanceModel.first_name.contains(key_word)
+                    )
+                )
+
+            # 按所有非聚合字段分组
+            query = query.group_by(
+                CommissionStoreModel.store_code,
+                StoreModel.store_name,
+                CommissionStoreModel.store_type,
+                StaffAttendanceModel.staff_code,
+                StaffModel.first_name,
+                StaffAttendanceModel.position,
+                StaffAttendanceModel.salary_coefficient,
+                CommissionStoreModel.fiscal_period,
+                CommissionStoreModel.status,
+                StaffAttendanceModel.sales_value,
+                TargetStoreMain.target_value,
+                StaffAttendanceModel.target_value_ratio,
+                StaffAttendanceModel.expected_attendance,
+                StaffAttendanceModel.actual_attendance,
+                CommissionRuleModel.rule_class
+            )
+
+            result = await db.execute(query)
+            commissions = result.fetchall()
+
+            # 使用 defaultdict 简化数据处理逻辑
+            from collections import defaultdict
+
+            commission_dict = defaultdict(lambda: {
+                'store_code': '',
+                'store_name': '',
+                'store_type': '',
+                'staff_code': '',
+                'first_name': '',
+                'position': '',
+                'salary_coefficient': 0.0,
+                'fiscal_period': '',
+                'status': '',
+                'sales_value': 0.0,
+                'target_value': 0.0,
+                'expected_attendance': 0.0,
+                'actual_attendance': 0.0,
+                'achievement_rate': 0.0,  # 计算达成率
+                'attendance_rate': 0.0,  # 考勤率
+                'amount_individual': 0.0,
+                'amount_team': 0.0,
+                'amount_incentive': 0.0,
+                'amount_adjustment': 0.0
+            })
+
+            fiscal_periods = set(commission.fiscal_period for commission in commissions if commission.fiscal_period)
+
+            # 为每个 fiscal_period 获取日期范围
+            date_ranges = {}
+            for fp in fiscal_periods:
+                if fp:
+                    # 分割可能包含多个财月的 fiscal_period
+                    months = [month.strip() for month in fp.split(',')]
+
+                    # 查询日期范围
+                    date_query = select(
+                        func.min(DimensionDayWeek.actual_date).label('min_date'),
+                        func.max(DimensionDayWeek.actual_date).label('max_date')
+                    ).where(
+                        DimensionDayWeek.fiscal_month.in_(months)
+                    )
+
+                    date_result = await db.execute(date_query)
+                    date_row = date_result.fetchone()
+
+                    if date_row and date_row.min_date and date_row.max_date:
+                        date_ranges[
+                            fp] = f"{date_row.min_date.strftime('%Y-%m-%d')} to {date_row.max_date.strftime('%Y-%m-%d')}"
+                    else:
+                        date_ranges[fp] = "N/A"
+
+            for commission in commissions:
+                store_code = commission.store_code
+                staff_code = commission.staff_code or ''
+
+                # 创建唯一键，包含 store_code 和 staff_code
+                key = f"{store_code}_{staff_code}" if staff_code else store_code
+
+                # 初始化店铺和员工信息
+                if commission_dict[key]['store_code'] == '':
+                    # 计算达成率
+                    sales_value = float(commission.sales_value) if commission.sales_value is not None else 0.0
+                    target_value = float(commission.target_value) if commission.target_value is not None else 0.0
+                    achievement_rate = 0.0
+                    if target_value > 0:
+                        achievement_rate = (sales_value / target_value) * 100
+
+                    # 计算考勤率
+                    expected_attendance = float(
+                        commission.expected_attendance) if commission.expected_attendance is not None else 0.0
+                    actual_attendance = float(
+                        commission.actual_attendance) if commission.actual_attendance is not None else 0.0
+                    attendance_rate = 0.0
+                    if expected_attendance > 0:
+                        attendance_rate = (actual_attendance / expected_attendance) * 100
+
+                    commission_dict[key].update({
+                        'store_code': store_code or '',
+                        'store_name': commission.store_name or '',
+                        'store_type': commission.store_type or '',
+                        'staff_code': staff_code,
+                        'first_name': commission.first_name or '',
+                        'position': commission.position or '',
+                        'salary_coefficient': float(
+                            commission.salary_coefficient) if commission.salary_coefficient is not None else 0.0,
+                        'fiscal_period': date_ranges.get(commission.fiscal_period, ''),
+                        'status': commission.status or '',
+                        'sales_value': sales_value,
+                        'target_value': target_value,
+                        'expected_attendance': expected_attendance,
+                        'actual_attendance': actual_attendance,
+                        'achievement_rate': round(achievement_rate, 2),
+                        'attendance_rate': round(attendance_rate, 2)
+                    })
+
+                # 根据规则类别累加金额
+                rule_class = commission.rule_class
+                amount = float(commission.amount) if commission.amount is not None else 0.0
+
+                if rule_class == 'individual':
+                    commission_dict[key]['amount_individual'] += amount
+                elif rule_class == 'team':
+                    commission_dict[key]['amount_team'] += amount
+                elif rule_class == 'incentive':
+                    commission_dict[key]['amount_incentive'] += amount
+                elif rule_class == 'adjustment':
+                    commission_dict[key]['amount_adjustment'] += amount
+
+            # 转换为列表格式返回
+            formatted_commissions = list(commission_dict.values())
+
+            status_count_query = (
+                select(
+                    CommissionStoreModel.status,
+                    func.count(CommissionStoreModel.store_code).label('count')
+                )
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .group_by(CommissionStoreModel.status)
+            )
+            status_count_result = await db.execute(status_count_query)
+            status_counts = status_count_result.fetchall()
+
+            # 转换为字典格式
+            status_count_dict = {row.status: row.count for row in status_counts}
+
+            field_translations = {
+                "store_code": {"en": "Store Code", "zh": "店铺代码"},
+                "store_name": {"en": "Store Name", "zh": "店铺名称"},
+                "store_type": {"en": "Store Type", "zh": "店铺类型"},
+                "staff_code": {"en": "Staff Code", "zh": "员工代码"},
+                "first_name": {"en": "Staff Name", "zh": "员工姓名"},
+                "position": {"en": "Position", "zh": "职位"},
+                "salary_coefficient": {"en": "Salary Coefficient", "zh": "薪资系数"},
+                "fiscal_period": {"en": "Fiscal Period", "zh": "计算周期"},
+                "status": {"en": "Status", "zh": "状态"},
+                "sales_value": {"en": "Sales Value", "zh": "销售额"},
+                "target_value": {"en": "Target Value", "zh": "目标值"},
+                "expected_attendance": {"en": "Expected Attendance", "zh": "应出勤"},
+                "actual_attendance": {"en": "Actual Attendance", "zh": "实际出勤"},
+                "achievement_rate": {"en": "Achievement Rate (%)", "zh": "达成率 (%)"},
+                "attendance_rate": {"en": "Attendance Rate (%)", "zh": "出勤率 (%)"},
+                "amount_individual": {"en": "Individual Amount", "zh": "个人提成"},
+                "amount_team": {"en": "Team Amount", "zh": "团队提成"},
+                "amount_incentive": {"en": "Incentive Amount", "zh": "激励金额"},
+                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
+            }
+
+            return {"data": formatted_commissions, "status_counts": status_count_dict,
+                    "field_translations": field_translations}
+
+        except Exception as e:
+            # 记录异常信息（在实际应用中可以使用日志记录器）
+            print(f"Error in get_rpt_commission_by_store: {str(e)}")
+            # 可以根据需要重新抛出异常或返回默认值
+            raise e
 
 
 class CommissionService:
     @staticmethod
-    async def create_commission(db: AsyncSession, commission_data: CommissionCreate):
-        commission = CommissionStaffModel(**commission_data.dict())
-        db.add(commission)
+    async def create_commission(db: AsyncSession, fiscal_month: str, store_codes: list):
+        created_commissions = []
+
+        for store_code in store_codes:
+            result = await db.execute(
+                select(CommissionStoreModel)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.store_code == store_code)
+            )
+            existing_commission = result.scalar_one_or_none()
+
+            if existing_commission:
+                # 如果记录已存在，添加到结果列表
+                created_commissions.append(existing_commission)
+            else:
+                # 如果记录不存在，则创建新记录
+                commission = CommissionStoreModel(
+                    fiscal_month=fiscal_month,
+                    store_code=store_code,
+                    fiscal_period=fiscal_month,
+                    status=None,  # 示例默认值
+                    created_at=datetime.now()
+                )
+                db.add(commission)
+                created_commissions.append(commission)
+
         await db.commit()
-        await db.refresh(commission)
-        return commission
+
+        # 刷新所有创建的对象以获取数据库生成的值
+        for commission in created_commissions:
+            await db.refresh(commission)
+
+        return created_commissions
+
+    @staticmethod
+    async def get_store_performance(db: AsyncSession, store_code: str, fiscal_month: str):
+
+        # 获取店铺目标数据
+        target_result = await db.execute(
+            select(
+                TargetStoreMain.target_value,
+                TargetStoreMain.sales_value
+            )
+                .where(TargetStoreMain.store_code == store_code)
+                .where(TargetStoreMain.fiscal_month == fiscal_month)
+        )
+        target_data = target_result.fetchone()
+
+        if not target_data:
+            raise ValueError(f"No target data found for store {store_code} in fiscal month {fiscal_month}")
+
+        target_value = target_data.target_value or 0
+        sales_value = target_data.sales_value or 0
+
+        # 计算达成率
+        achievement_rate = 0.0
+        if target_value > 0:
+            achievement_rate = (sales_value / target_value) * 100
+
+        return {
+            "store_code": store_code,
+            "fiscal_month": fiscal_month,
+            "target_value": target_value,
+            "sales_value": sales_value,
+            "achievement_rate": round(achievement_rate, 2)
+        }
 
     @staticmethod
     async def update_commission(db: AsyncSession, attendance_update) -> bool:
@@ -51,8 +355,20 @@ class CommissionService:
                 # 如果找到记录，则更新实际出勤字段
                 if staff_record:
                     staff_record.actual_attendance = actual_attendance
-                    staff_record.updated_at = datetime.utcnow()
+                    staff_record.updated_at = datetime.now()
                     updated_count += 1
+
+            result_store = await db.execute(
+                select(CommissionStoreModel)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.store_code == store_code)
+            )
+
+            existing_store = result_store.scalar_one_or_none()
+
+            if existing_store:
+                existing_store.status = attendance_update.staff_status
+                existing_store.updated_at = datetime.now()
 
             # 提交更改
             await db.commit()
@@ -65,86 +381,211 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def get_all_commissions_by_key(fiscal_month: str, key_word: str, db: AsyncSession):
-        store_subquery = (
-            select(
-                StoreModel.store_code,
-                StoreModel.store_name,
-                StoreModel.store_type
-            )
-                .where(StoreModel.manage_channel.in_(['ROCN', 'RFCN']))
-                .subquery()
-        )
-        store_alias = aliased(StoreModel, store_subquery)
+    async def batch_approved_commission_by_store_codes(db: AsyncSession, request: BatchApprovedCommission) -> bool:
+        try:
+            # 查询匹配的commission记录
+            fiscal_month = request.fiscal_month
+            status = request.status
+            store_codes = request.store_codes
 
-        # 使用ORM模型模式查询佣金数据，并与门店信息关联
-        result = await db.execute(
-            select(
-                CommissionStoreModel.store_code,
-                store_alias.store_name,
-                CommissionStoreModel.store_type,
-                CommissionStoreModel.fiscal_period,
-                CommissionStoreModel.status,
-                CommissionRuleModel.rule_class,
-                func.sum(CommissionStaffModel.amount).label('amount')
+            result = await db.execute(
+                select(CommissionStoreModel)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.store_code.in_(store_codes))
             )
-                .select_from(CommissionStoreModel)
-                .join(CommissionStaffModel,
-                      (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month) &
-                      (CommissionStoreModel.store_code == CommissionStaffModel.store_code),
-                      isouter=True
-                      )
-                .join(CommissionRuleModel,
-                      CommissionStaffModel.rule_code == CommissionRuleModel.rule_code,
-                      isouter=True
-                      )
-                .join(store_alias,
-                      CommissionStoreModel.store_code == store_alias.store_code,
-                      isouter=True)  # 使用LEFT JOIN
+
+            commissions = result.scalars().all()
+
+            for commission in commissions:
+                commission.status = status
+                commission.updated_at = datetime.now()
+            await db.commit()
+
+            return True
+
+        except Exception as e:
+            await db.rollback()
+            raise e
+
+    @staticmethod
+    async def withdrawn_commission(fiscal_month: str, store_code: str, db: AsyncSession):
+        result = await db.execute(
+            select(CommissionStoreModel)
                 .where(CommissionStoreModel.fiscal_month == fiscal_month)
-                .group_by(
+                .where(CommissionStoreModel.store_code == store_code)
+                .where(CommissionStoreModel.status == 'submitted')
+        )
+        existing_commission = result.scalar_one_or_none()
+        if existing_commission:
+            existing_commission.status = 'saved'
+            existing_commission.updated_at = datetime.now()
+            await db.commit()
+            return True
+        return False
+
+    @staticmethod
+    async def get_all_commissions_by_key(role_code: str, fiscal_month: str, key_word: str, status: str,
+                                         db: AsyncSession):
+        try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 添加关键词过滤条件
+            query = (
+                select(
+                    CommissionStoreModel.store_code,
+                    store_alias.c.store_name,
+                    CommissionStoreModel.store_type,
+                    CommissionStoreModel.fiscal_period,
+                    CommissionStoreModel.status,
+                    CommissionRuleModel.rule_class,
+                    func.sum(CommissionStaffModel.amount).label('amount')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(CommissionStaffModel,
+                          (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month) &
+                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code),
+                          isouter=True)
+                    .join(CommissionRuleDetailModel,
+                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code,
+                          isouter=True)
+                    .join(CommissionRuleModel,
+                          CommissionRuleModel.rule_code == CommissionRuleDetailModel.rule_code,
+                          isouter=True)
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+            )
+
+            # 如果提供了关键词，则添加过滤条件
+            if key_word:
+                query = query.where(
+                    or_(
+                        CommissionStoreModel.store_code.contains(key_word),
+                        store_alias.c.store_name.contains(key_word)
+                    )
+                )
+            if status != 'All':
+                query = query.where(CommissionStoreModel.status == status)
+
+            query = query.group_by(
                 CommissionStoreModel.store_code,
-                store_alias.store_name,
+                store_alias.c.store_name,
                 CommissionStoreModel.fiscal_period,
                 CommissionStoreModel.store_type,
                 CommissionStoreModel.status,
                 CommissionRuleModel.rule_class
-
             )
-        )
 
-        commissions = result.fetchall()
+            result = await db.execute(query)
+            commissions = result.fetchall()
 
-        commission_dict = {}
-        for commission in commissions:
-            store_code = commission.store_code
+            # 使用 defaultdict 简化数据处理逻辑
+            from collections import defaultdict
 
-            if store_code not in commission_dict:
-                commission_dict[store_code] = {
-                    'store_code': store_code,
-                    'store_name': commission.store_name if commission.store_name is not None else '',
-                    'store_type': commission.store_type if commission.store_type is not None else '',
-                    'fiscal_period': commission.fiscal_period if commission.fiscal_period is not None else '',
-                    'status': commission.status if commission.status is not None else '',
-                    'amount_individual': 0.0,
-                    'amount_team': 0.0,
-                    'amount_adjustment': 0.0
-                }
+            commission_dict = defaultdict(lambda: {
+                'store_code': '',
+                'store_name': '',
+                'store_type': '',
+                'fiscal_period': '',
+                'status': '',
+                'amount_individual': 0.0,
+                'amount_team': 0.0,
+                'amount_incentive': 0.0,
+                'amount_adjustment': 0.0
+            })
 
-            rule_class = commission.rule_class
-            amount = float(commission.amount) if commission.amount is not None else 0.0
+            fiscal_periods = set(commission.fiscal_period for commission in commissions if commission.fiscal_period)
 
-            if rule_class == 'individual':
-                commission_dict[store_code]['amount_individual'] = amount
-            elif rule_class == 'team':
-                commission_dict[store_code]['amount_team'] = amount
-            elif rule_class == 'adjustment':
-                commission_dict[store_code]['amount_adjustment'] = amount
+            # 为每个 fiscal_period 获取日期范围
+            date_ranges = {}
+            for fp in fiscal_periods:
+                if fp:
+                    # 分割可能包含多个财月的 fiscal_period
+                    months = [month.strip() for month in fp.split(',')]
 
-        # 转换为列表格式返回
-        formatted_commissions = list(commission_dict.values())
+                    # 查询日期范围
+                    date_query = select(
+                        func.min(DimensionDayWeek.actual_date).label('min_date'),
+                        func.max(DimensionDayWeek.actual_date).label('max_date')
+                    ).where(
+                        DimensionDayWeek.fiscal_month.in_(months)
+                    )
 
-        return formatted_commissions
+                    date_result = await db.execute(date_query)
+                    date_row = date_result.fetchone()
+
+                    if date_row and date_row.min_date and date_row.max_date:
+                        date_ranges[
+                            fp] = f"{date_row.min_date.strftime('%Y-%m-%d')} to {date_row.max_date.strftime('%Y-%m-%d')}"
+                    else:
+                        date_ranges[fp] = "N/A"
+
+            for commission in commissions:
+                store_code = commission.store_code
+
+                # 初始化店铺信息
+                if commission_dict[store_code]['store_code'] == '':
+                    commission_dict[store_code].update({
+                        'store_code': store_code or '',
+                        'store_name': commission.store_name or '',
+                        'store_type': commission.store_type or '',
+                        'fiscal_period': date_ranges.get(commission.fiscal_period, ''),
+                        'status': commission.status or ''
+                    })
+
+                # 根据规则类别累加金额
+                rule_class = commission.rule_class
+                amount = float(commission.amount) if commission.amount is not None else 0.0
+
+                if rule_class == 'individual':
+                    commission_dict[store_code]['amount_individual'] += amount
+                elif rule_class == 'team':
+                    commission_dict[store_code]['amount_team'] += amount
+                elif rule_class == 'incentive':
+                    commission_dict[store_code]['amount_incentive'] += amount
+                elif rule_class == 'adjustment':
+                    commission_dict[store_code]['amount_adjustment'] += amount
+
+            # 转换为列表格式返回
+            formatted_commissions = list(commission_dict.values())
+
+            status_count_query = (
+                select(
+                    CommissionStoreModel.status,
+                    func.count(CommissionStoreModel.store_code).label('count')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(store_alias, CommissionStoreModel.store_code == store_alias.c.store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .group_by(CommissionStoreModel.status)
+            )
+            status_count_result = await db.execute(status_count_query)
+            status_counts = status_count_result.fetchall()
+
+            # 转换为字典格式
+            status_count_dict = {row.status: row.count for row in status_counts}
+
+            field_translations = {
+                "store_code": {"en": "Store Code", "zh": "店铺代码"},
+                "store_name": {"en": "Store Name", "zh": "店铺名称"},
+                "store_type": {"en": "Store Type", "zh": "店铺类型"},
+                "fiscal_period": {"en": "Fiscal Period", "zh": "计算周期"},
+                "status": {"en": "Status", "zh": "状态"},
+                "amount_individual": {"en": "Individual Amount", "zh": "个人提成"},
+                "amount_team": {"en": "Team Amount", "zh": "团队提成"},
+                "amount_incentive": {"en": "Incentive Amount", "zh": "激励金额"},
+                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
+            }
+
+            return {"data": formatted_commissions, "status_counts": status_count_dict,
+                    "field_translations": field_translations}
+
+        except Exception as e:
+            # 记录异常信息（在实际应用中应该使用日志记录器）
+            print(f"Error in get_all_commissions_by_key: {str(e)}")
+            # 抛出异常以便上层处理
+            raise e
 
     @staticmethod
     async def get_commission_by_store_code(db: AsyncSession, id: int):
@@ -288,7 +729,8 @@ class CommissionService:
                     StaffAttendanceModel.actual_attendance,
                     StaffAttendanceModel.expected_attendance,
                     StaffAttendanceModel.salary_coefficient,
-                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.target_value_ratio,
+                    # StaffAttendanceModel.target_value,
                     StaffAttendanceModel.sales_value,
                 ).where(
                     StaffAttendanceModel.store_code == store_code,
@@ -364,11 +806,12 @@ class CommissionService:
             # 7. 为每个员工计算佣金（应用所有适用的规则）
             for staff in staff_attendances:
                 # 检查员工目标值
-                if not staff.target_value or staff.target_value == 0:
+                staff_target_value = store_target_value * staff.target_value_ratio
+                if not staff_target_value or staff_target_value == 0:
                     continue
 
                 # 计算员工达成率
-                staff_achievement_rate = staff.sales_value / staff.target_value * 100
+                staff_achievement_rate = staff.sales_value / staff_target_value * 100
 
                 # 获取适用于该岗位的所有规则代码
                 rule_codes = position_to_rules.get(staff.position, [])
@@ -452,3 +895,52 @@ class CommissionService:
         except Exception as e:
             await db.rollback()
             raise e
+
+    @staticmethod
+    async def update_store_type(db: AsyncSession, fiscal_month: str, store_code: str, store_type: str):
+        result = await db.execute(select(CommissionStoreModel).where(
+            CommissionStoreModel.store_code == store_code,
+            CommissionStoreModel.fiscal_month == fiscal_month
+        ))
+        Commission_store = result.scalar_one_or_none()
+
+        if Commission_store:
+            Commission_store.store_type = store_type
+            Commission_store.updated_at = datetime.utcnow()
+
+        result = await db.execute(select(TargetStoreMain).where(
+            TargetStoreMain.store_code == store_code,
+            TargetStoreMain.fiscal_month == fiscal_month
+        ))
+        Target_store = result.scalar_one_or_none()
+
+        if Target_store:
+            Target_store.store_type = store_type
+            Target_store.updated_at = datetime.utcnow()
+
+        result = await db.execute(select(StoreModel).where(
+            StoreModel.store_code == store_code
+        ))
+        store = result.scalar_one_or_none()
+
+        if store:
+            store.store_type = store_type
+
+        await db.commit()
+        return Commission_store
+
+    @staticmethod
+    async def update_fiscal_period(db: AsyncSession, fiscal_month: str, store_code: str, fiscal_periods: List[str]):
+
+        fiscal_period_str = ','.join(fiscal_periods) if fiscal_periods else ''
+
+        result = await db.execute(select(CommissionStoreModel).where(
+            CommissionStoreModel.store_code == store_code,
+            CommissionStoreModel.fiscal_month == fiscal_month
+        ))
+        Commission_store = result.scalar_one_or_none()
+        if Commission_store:
+            Commission_store.fiscal_period = fiscal_period_str
+            Commission_store.updated_at = datetime.utcnow()
+            await db.commit()
+            return Commission_store

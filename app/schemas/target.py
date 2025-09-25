@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional, List
 from pydantic import field_validator, model_validator
 
@@ -8,7 +8,7 @@ class TargetBase(BaseModel):
     name: str
     value: float
     period: Optional[str] = None
-    status: Optional[str] = "draft"
+    status: Optional[str] = "saved"
     remarks: Optional[str] = None
 
 
@@ -25,8 +25,8 @@ class TargetStoreBase(BaseModel):
     store_code: str
     fiscal_month: str
     target_value: Optional[float] = None
-    staff_status: Optional[str] = "draft"
-    store_status: Optional[str] = "draft"
+    staff_status: Optional[str] = "saved"
+    store_status: Optional[str] = "saved"
     creator_code: Optional[str] = None
 
 
@@ -58,7 +58,7 @@ class TargetStoreWeekCreate(BaseModel):
 
 
 class TargetStoreDailyBase(BaseModel):
-    target_date: datetime
+    target_date: date
     percentage: float
 
 
@@ -66,7 +66,7 @@ class TargetStoreDailyCreate(BaseModel):
     store_code: str
     fiscal_month: str
     days: list[TargetStoreDailyBase]
-    store_status: str = "draft"
+    store_status: str = "saved"
     creator_code: Optional[str] = None
 
 
@@ -75,21 +75,36 @@ class StaffAttendanceBase(BaseModel):
     expected_attendance: float
     position: str
     salary_coefficient: float
-
+    deletable: Optional[bool] = False
 
 class StaffAttendanceCreate(BaseModel):
     store_code: str
     fiscal_month: str
     staffs: List[StaffAttendanceBase]
-    deletable: bool = False
-    staff_status: str = "draft"
+    staff_status: str = "saved"
     creator_code: Optional[str] = None
 
 class Staff_Actual_Attendance(BaseModel):
     staff_code: str
     actual_attendance: float
+    deletable: Optional[bool] = False
 
 class StaffAttendanceUpdate(BaseModel):
     store_code: str
     fiscal_month: str
     staff_actual_attendance: list[Staff_Actual_Attendance]
+    staff_status: str = "saved"
+
+class BatchApprovedTarget(BaseModel):
+    fiscal_month: str
+    store_codes: List[str]
+    store_status:  Optional[str] = None
+    staff_status: Optional[str] = None
+    remarks: Optional[str] = None
+
+
+class WithdrawnTarget(BaseModel):
+    fiscal_month: str
+    store_code: str
+    store_status:  Optional[str] = None
+    staff_status: Optional[str] = None
