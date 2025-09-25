@@ -49,7 +49,7 @@ class CommissionRuleModel(Base):
 class CommissionRuleDetailModel(Base):
     __tablename__ = "commissions_rule_detail"
 
-    rule_detail_code = Column(String(60), primary_key=True, autoincrement=True)
+    rule_detail_code = Column(String(60), primary_key=True)
     rule_code = Column(String(30), nullable=False)  # 关联到 commissions_rule 的 rule_code
     start_value = Column(Float, nullable=False)     # 区间起始值，例如 0.0, 80.0
     end_value = Column(Float, nullable=True)       # 区间结束值，>=140% 时可为 None
