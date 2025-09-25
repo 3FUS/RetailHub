@@ -34,12 +34,6 @@ jobs:
         run: |
           python -m PyInstaller --onefile --hidden-import=aiomysql --name RetailHub main.py
           
-          if (!(Test-Path "dist/RetailHub.exe")) {
-            echo "Error: dist/RetailHub.exe not found"
-            dir "dist"  # 列出dist目录内容
-            exit 1
-          }
-
 
       - name: Debug information
         run: |    
@@ -50,17 +44,17 @@ jobs:
 
       - name: Create installer with NSIS
         run: |
-          if (!(Test-Path "dist/RetailHub.exe")) {
-            echo "Error: dist/RetailHub.exe not found, cannot create installer"
+          if (!(Test-Path "dist\RetailHub.exe")) {
+            echo "Error: dist\RetailHub.exe not found, cannot create installer"
             exit 1
           }
           # 创建安装脚本
           echo 'Name "RetailHub"' > installer.nsi
-          echo 'OutFile "dist/RetailHub-Installer.exe"' >> installer.nsi
+          echo 'OutFile "dist\RetailHub-Installer.exe"' >> installer.nsi
           echo 'InstallDir $PROGRAMFILES\RetailHub' >> installer.nsi
           echo 'Section' >> installer.nsi
           echo '  SetOutPath $INSTDIR' >> installer.nsi
-          echo '  File "dist/RetailHub.exe"' >> installer.nsi
+          echo '  File "dist\RetailHub.exe"' >> installer.nsi
           echo '  WriteUninstaller "$INSTDIR\uninstall.exe"' >> installer.nsi
           echo 'SectionEnd' >> installer.nsi
           echo 'Section "Uninstall"' >> installer.nsi
@@ -68,6 +62,14 @@ jobs:
           echo '  Delete "$INSTDIR\uninstall.exe"' >> installer.nsi
           echo '  RMDir "$INSTDIR"' >> installer.nsi
           echo 'SectionEnd' >> installer.nsi
+          
+          # 显示当前目录和文件信息用于调试
+          echo "Current working directory:"
+          pwd
+          echo "Full path to RetailHub.exe:"
+          $exePath = Resolve-Path "dist\RetailHub.exe"
+          echo $exePath
+          
           & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
 
       - name: Archive installer artifact
