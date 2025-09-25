@@ -1,15 +1,15 @@
-name: Build Windows Installer with PyInstaller
+name: Build main.exe with PyInstaller
 
 on:
   push:
     branches:
-      - main
-  workflow_dispatch:
+      - main  # 当推送到 main 分支时触发
+  workflow_dispatch:  # 允许手动触发
 
 jobs:
   build:
-    runs-on: windows-latest
-    name: Build EXE and Installer for Windows
+    runs-on: windows-latest  # 使用 Windows 环境
+    name: Build EXE for Windows
 
     steps:
       - name: Checkout code
@@ -18,62 +18,19 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.12'
+          python-version: '3.12'  # 指定 Python 版本
 
       - name: Install dependencies
-        run: |    
+        run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Install NSIS
-        run: |
-          choco install nsis -y
-          refreshenv
-
       - name: Build EXE with PyInstaller
         run: |
-          python -m PyInstaller --onefile --hidden-import=aiomysql --name RetailHub main.py
-          
+          python -m PyInstaller --onefile  --hidden-import=aiomysql main.py
 
-      - name: Debug information
-        run: |    
-          echo "Current directory contents:"
-          dir
-          echo "Dist directory contents:"
-          dir "dist"
-
-      - name: Create installer with NSIS
-        run: |
-          if (!(Test-Path "dist\RetailHub.exe")) {
-            echo "Error: dist\RetailHub.exe not found, cannot create installer"
-            exit 1
-          }
-          # 创建安装脚本
-          echo 'Name "RetailHub"' > installer.nsi
-          echo 'OutFile "dist\RetailHub-Installer.exe"' >> installer.nsi
-          echo 'InstallDir $PROGRAMFILES\RetailHub' >> installer.nsi
-          echo 'Section' >> installer.nsi
-          echo '  SetOutPath $INSTDIR' >> installer.nsi
-          echo '  File "dist\RetailHub.exe"' >> installer.nsi
-          echo '  WriteUninstaller "$INSTDIR\uninstall.exe"' >> installer.nsi
-          echo 'SectionEnd' >> installer.nsi
-          echo 'Section "Uninstall"' >> installer.nsi
-          echo '  Delete "$INSTDIR\RetailHub.exe"' >> installer.nsi
-          echo '  Delete "$INSTDIR\uninstall.exe"' >> installer.nsi
-          echo '  RMDir "$INSTDIR"' >> installer.nsi
-          echo 'SectionEnd' >> installer.nsi
-          
-          # 显示当前目录和文件信息用于调试
-          echo "Current working directory:"
-          pwd
-          echo "Full path to RetailHub.exe:"
-          $exePath = Resolve-Path "dist\RetailHub.exe"
-          echo $exePath
-          
-          & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
-
-      - name: Archive installer artifact
+      - name: Archive artifact
         uses: actions/upload-artifact@v4
         with:
-          name: RetailHub-installer
-          path: dist/RetailHub-Installer.exe
+          name: main-exe
+          path: dist/main.exe

@@ -70,7 +70,7 @@ async def init_db():
         await conn.run_sync(BudgetBase.metadata.create_all)
         await conn.run_sync(SalesBase.metadata.create_all)
 
-    print("数据库表创建成功!")
+    print("Database tables created successfully!")
 
 
 if __name__ == "__main__":
