@@ -2,7 +2,7 @@ PyInstaller
 fastapi~=0.112.2
 uvicorn==0.20.0
 sqlalchemy~=2.0.43
-aiomysql
+aiomysql~=0.2.0
 pydantic~=2.11.7
 python-multipart==0.0.7
 cryptography
