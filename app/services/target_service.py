@@ -294,7 +294,7 @@ class TargetStoreService:
         store_alias = store_permission_query.subquery()
 
         query = select(
-            TargetStoreMain.store_code,
+            store_alias.c.store_code,
             store_alias.c.store_name,
             store_alias.c.store_type,
             TargetStoreMain.target_value,
