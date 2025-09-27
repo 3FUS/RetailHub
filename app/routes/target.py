@@ -168,6 +168,7 @@ async def delete_staff_attendance(fiscal_month: str, store_code: str, staff_code
 async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = Depends(get_db),
                              current_user: dict = Depends(get_current_user)):
     try:
+        app_logger.info(f"batch_audit_target {request}")
         await CommissionService.create_commission(db, request.fiscal_month, request.store_codes)
 
         if request.store_status and request.store_status == "approved":
@@ -178,6 +179,7 @@ async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = De
         result = await TargetStoreService.batch_approved_target_by_store_codes(
             db, request
         )
+        app_logger.info(f"batch_audit_target {result}")
         return {"code": 200, "data": result, "msg": f"Successfully target"}
     except ValueError as e:
         app_logger.error(f"batch_audit_target {e}")

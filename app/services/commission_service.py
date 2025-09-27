@@ -709,14 +709,14 @@ class CommissionService:
                 raise ValueError(f"Store {store_code} not found or has no data for {fiscal_month}")
 
             store_type = store_data.store_type
-            store_target_value = store_data.target_value
-            store_sales_value = store_data.sales_value
+            store_target_value = store_data.target_value or 0  # 添加默认值
+            store_sales_value = store_data.sales_value or 0  # 添加默认值
 
             if not store_type:
                 raise ValueError(f"Store {store_code} has no store_type")
 
             # 计算店铺达成率
-            if store_target_value is not None and store_target_value > 0 and store_sales_value is not None:
+            if store_target_value > 0 and store_sales_value is not None:
                 store_achievement_rate = (store_sales_value / store_target_value) * 100
             else:
                 store_achievement_rate = 0
@@ -730,7 +730,6 @@ class CommissionService:
                     StaffAttendanceModel.expected_attendance,
                     StaffAttendanceModel.salary_coefficient,
                     StaffAttendanceModel.target_value_ratio,
-                    # StaffAttendanceModel.target_value,
                     StaffAttendanceModel.sales_value,
                 ).where(
                     StaffAttendanceModel.store_code == store_code,
@@ -807,14 +806,17 @@ class CommissionService:
             for staff in staff_attendances:
                 # 检查员工目标值
                 staff_target_value = store_target_value * (staff.target_value_ratio or 0)
+                # 添加对 None 值的检查
                 if staff_target_value is None or staff_target_value == 0:
                     continue
 
                 # 计算员工达成率
-                if staff_target_value is not None and staff_target_value > 0 and staff.sales_value is not None:
-                    staff_achievement_rate = (staff.sales_value / staff_target_value) * 100
+                staff_sales_value = staff.sales_value or 0  # 添加默认值
+                if staff_target_value > 0 and staff_sales_value is not None:
+                    staff_achievement_rate = (staff_sales_value / staff_target_value) * 100
                 else:
                     staff_achievement_rate = 0
+
                 # 获取适用于该岗位的所有规则代码
                 rule_codes = position_to_rules.get(staff.position, [])
                 if not rule_codes:
@@ -830,7 +832,7 @@ class CommissionService:
                     # 根据 rule_basis 选择合适的达成率和销售额
                     if rule_info.rule_basis == 'individual':
                         target_achievement_rate = staff_achievement_rate
-                        sales_value = staff.sales_value
+                        sales_value = staff_sales_value
                     elif rule_info.rule_basis == 'store':
                         target_achievement_rate = store_achievement_rate
                         sales_value = store_sales_value
@@ -858,20 +860,24 @@ class CommissionService:
 
                     # 计算佣金
                     commission_amount = 0.0
-                    if rule_info.rule_type == 'commission':
-                        commission_amount = sales_value * (matching_detail.value / 100)
-                    elif rule_info.rule_type == 'incentive':
-                        commission_amount = matching_detail.value
+                    rule_detail_value = matching_detail.value or 0  # 添加默认值
 
+                    if rule_info.rule_type == 'commission':
+                        # 确保 sales_value 不为 None
+                        if sales_value is not None:
+                            commission_amount = sales_value * (rule_detail_value / 100)
+                    elif rule_info.rule_type == 'incentive':
+                        commission_amount = rule_detail_value
+
+                    # 考虑出勤率
                     if rule_info.consider_attendance:
                         expected_attendance = staff.expected_attendance or 0
                         actual_attendance = staff.actual_attendance or 0
 
                         if expected_attendance > 0:  # 避免除零错误
-                            commission_amount = commission_amount / expected_attendance * actual_attendance
-                        # else:
-                        #     commission_amount = 0
+                            commission_amount = commission_amount * (actual_attendance / expected_attendance)
 
+                    # 最低保障金额
                     if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
                         commission_amount = rule_info.minimum_guarantee
 
