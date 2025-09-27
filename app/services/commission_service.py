@@ -14,7 +14,7 @@ from sqlalchemy import func, or_, exists
 from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
-
+from app.utils.logger import app_logger
 class CommissionRPTService:
 
     @staticmethod
@@ -262,7 +262,7 @@ class CommissionService:
     @staticmethod
     async def create_commission(db: AsyncSession, fiscal_month: str, store_codes: list):
         created_commissions = []
-
+        app_logger.info(f"Creating commission for fiscal month: {fiscal_month}")
         for store_code in store_codes:
             result = await db.execute(
                 select(CommissionStoreModel)
@@ -292,6 +292,7 @@ class CommissionService:
         for commission in created_commissions:
             await db.refresh(commission)
 
+        app_logger.info(f"Created {len(created_commissions)} commission records")
         return created_commissions
 
     @staticmethod
@@ -715,11 +716,10 @@ class CommissionService:
                 raise ValueError(f"Store {store_code} has no store_type")
 
             # 计算店铺达成率
-            store_achievement_rate = (
-                store_sales_value / store_target_value * 100
-                if store_target_value and store_target_value > 0
-                else 0
-            )
+            if store_target_value is not None and store_target_value > 0 and store_sales_value is not None:
+                store_achievement_rate = (store_sales_value / store_target_value) * 100
+            else:
+                store_achievement_rate = 0
 
             # 2. 获取该店铺所有员工的考勤和岗位信息
             staff_attendances_result = await db.execute(
@@ -806,13 +806,15 @@ class CommissionService:
             # 7. 为每个员工计算佣金（应用所有适用的规则）
             for staff in staff_attendances:
                 # 检查员工目标值
-                staff_target_value = store_target_value * staff.target_value_ratio
-                if not staff_target_value or staff_target_value == 0:
+                staff_target_value = store_target_value * (staff.target_value_ratio or 0)
+                if staff_target_value is None or staff_target_value == 0:
                     continue
 
                 # 计算员工达成率
-                staff_achievement_rate = staff.sales_value / staff_target_value * 100
-
+                if staff_target_value is not None and staff_target_value > 0 and staff.sales_value is not None:
+                    staff_achievement_rate = (staff.sales_value / staff_target_value) * 100
+                else:
+                    staff_achievement_rate = 0
                 # 获取适用于该岗位的所有规则代码
                 rule_codes = position_to_rules.get(staff.position, [])
                 if not rule_codes:
@@ -893,6 +895,7 @@ class CommissionService:
             return True
 
         except Exception as e:
+            app_logger.error(f"Error in calculate_commissions: {e}")
             await db.rollback()
             raise e
 

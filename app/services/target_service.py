@@ -5,17 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
 from app.models.staff import StaffAttendanceModel, StaffModel
-from app.schemas.target import TargetStoreCreate, TargetStoreUpdate, \
+from app.schemas.target import  TargetStoreUpdate, \
     TargetStoreWeekCreate, \
     TargetStoreDailyCreate, StaffAttendanceCreate, BatchApprovedTarget
 from app.models.dimension import DimensionDayWeek, StoreModel
-from app.models.sales import DailySalesStoreModel
 
 from datetime import datetime
 
 # 在 TargetRPTService 类中修改 get_rpt_target_by_store 方法
 from app.utils.permissions import build_store_permission_query
-
+from app.utils.logger import app_logger
 
 class TargetRPTService:
     @staticmethod
@@ -96,7 +95,8 @@ class TargetRPTService:
         except Exception as e:
             # 记录并返回错误信息
             error_msg = f"Error in get_rpt_target_by_store: {str(e)}"
-            print(error_msg)  # 在实际应用中应该使用日志记录
+            #print(error_msg)  # 在实际应用中应该使用日志记录
+            app_logger.error(error_msg)
             # 添加字段名称的中英文翻译
 
             return {
@@ -175,8 +175,8 @@ class TargetRPTService:
         except Exception as e:
             # 记录并返回错误信息
             error_msg = f"Error in get_rpt_target_by_staff: {str(e)}"
-            print(error_msg)  # 在实际应用中应该使用日志记录
-
+            # print(error_msg)  # 在实际应用中应该使用日志记录
+            app_logger.error(error_msg)
             return {
                 "data": [],
                 "field_translations": [],
@@ -373,6 +373,7 @@ class TargetStoreService:
             return True
 
         except Exception as e:
+            app_logger.error(f"batch_approved_target_by_store_codes {e}")
             await db.rollback()
             raise e
 

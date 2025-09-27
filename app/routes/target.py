@@ -10,6 +10,7 @@ from app.services.commission_service import CommissionService
 from app.database import get_db
 from app.core.security import get_current_user
 
+from app.utils.logger import app_logger
 router = APIRouter()
 
 
@@ -179,10 +180,13 @@ async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = De
         )
         return {"code": 200, "data": result, "msg": f"Successfully target"}
     except ValueError as e:
+        app_logger.error(f"batch_audit_target {e}")
         return {"code": 404, "msg": str(e)}
     except SQLAlchemyError as e:
+        app_logger.error(f"batch_audit_target {e}")
         return {"code": 500, "msg": "Database error occurred while processing batch audit"}
     except Exception as e:
+        app_logger.error(f"batch_audit_target {e}")
         return {"code": 500, "msg": f"An error occurred while processing batch audit: {str(e)}"}
 
 
