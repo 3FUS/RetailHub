@@ -40,7 +40,7 @@ from sqlalchemy import create_engine
 import pyodbc
 
 db_config = {
-    'host': '192.168.0.220',
+    'host': 'apchalivpxcdb01',
     'port': 1433,
     'user': 'sa',
     'password': 'Xstore123',
