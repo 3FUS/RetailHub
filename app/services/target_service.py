@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
 from app.models.staff import StaffAttendanceModel, StaffModel
-from app.schemas.target import  TargetStoreUpdate, \
+from app.schemas.target import TargetStoreUpdate, \
     TargetStoreWeekCreate, \
     TargetStoreDailyCreate, StaffAttendanceCreate, BatchApprovedTarget
 from app.models.dimension import DimensionDayWeek, StoreModel
@@ -15,6 +15,7 @@ from datetime import datetime
 # 在 TargetRPTService 类中修改 get_rpt_target_by_store 方法
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
+
 
 class TargetRPTService:
     @staticmethod
@@ -95,7 +96,7 @@ class TargetRPTService:
         except Exception as e:
             # 记录并返回错误信息
             error_msg = f"Error in get_rpt_target_by_store: {str(e)}"
-            #print(error_msg)  # 在实际应用中应该使用日志记录
+            # print(error_msg)  # 在实际应用中应该使用日志记录
             app_logger.error(error_msg)
             # 添加字段名称的中英文翻译
 
@@ -709,87 +710,96 @@ class TargetStoreDailyService:
 class TargetStaffService:
     @staticmethod
     async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str):
-
-        result_store = await db.execute(
-            select(TargetStoreMain.target_value)
-                .where(
-                TargetStoreMain.fiscal_month == fiscal_month,
-                TargetStoreMain.store_code == store_code
-            )
-        )
-        store_target_record = result_store.fetchone()
-        store_target_value = float(
-            store_target_record.target_value) if store_target_record and store_target_record.target_value is not None else 0.0
-
-        result = await db.execute(
-            select(
-                StaffModel.avatar,
-                StaffModel.staff_code,
-                StaffModel.first_name,
-                StaffAttendanceModel.expected_attendance,
-                StaffAttendanceModel.actual_attendance,
-                StaffAttendanceModel.position,
-                StaffAttendanceModel.salary_coefficient,
-                StaffAttendanceModel.target_value_ratio,
-                # StaffAttendanceModel.target_value,
-                StaffAttendanceModel.sales_value,
-                StaffAttendanceModel.deletable
-            )
-                .select_from(
-                StaffModel.__table__.join(
-                    StaffAttendanceModel.__table__,
-                    (StaffModel.staff_code == StaffAttendanceModel.staff_code) &
-                    (StaffAttendanceModel.fiscal_month == fiscal_month),
-                    isouter=True
+        try:
+            result_store = await db.execute(
+                select(TargetStoreMain.target_value)
+                    .where(
+                    TargetStoreMain.fiscal_month == fiscal_month,
+                    TargetStoreMain.store_code == store_code
                 )
             )
-                .where(
-                StaffModel.store_code == store_code,
-                StaffModel.avatar.isnot(None)
+            store_target_record = result_store.fetchone()
+            store_target_value = float(
+                store_target_record.target_value) if store_target_record and store_target_record.target_value is not None else 0.0
+
+            result = await db.execute(
+                select(
+                    StaffModel.avatar,
+                    StaffModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.position.label('staff_position'),  # 从StaffModel获取position
+                    StaffModel.salary_coefficient.label('staff_salary_coefficient'),  # 从StaffModel获取salary_coefficient
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.position.label('attendance_position'),  # 从StaffAttendanceModel获取position
+                    StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
+                    # 从StaffAttendanceModel获取salary_coefficient
+                    StaffAttendanceModel.target_value_ratio,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.deletable
+                )
+                    .select_from(
+                    StaffModel.__table__.join(
+                        StaffAttendanceModel.__table__,
+                        (StaffModel.staff_code == StaffAttendanceModel.staff_code) &
+                        (StaffAttendanceModel.fiscal_month == fiscal_month),
+                        isouter=True
+                    )
+                )
+                    .where(
+                    StaffModel.store_code == store_code,
+                    StaffModel.avatar.isnot(None)
+                )
             )
-        )
-        staff_attendance_data = result.all()
+            staff_attendance_data = result.all()
 
-        # total_target_value = sum(
-        #     float(row.target_value) if row.target_value is not None else 0 for row in staff_attendance_data)
+            # total_target_value = sum(
+            #     float(row.target_value) if row.target_value is not None else 0 for row in staff_attendance_data)
 
-        staff_attendance_list = []
-        for row in staff_attendance_data:
+            staff_attendance_list = []
+            for row in staff_attendance_data:
 
-            target_value = 0.0
-            if store_target_value > 0 and row.target_value_ratio is not None:
-                target_value = round(store_target_value * row.target_value_ratio, 2)  # 保留两位小数
+                position = row.attendance_position if row.attendance_position is not None else row.staff_position
+                salary_coefficient = (
+                    row.attendance_salary_coefficient
+                    if row.attendance_salary_coefficient is not None
+                    else row.staff_salary_coefficient
+                )
 
-            achievement_rate = None
-            if (row.sales_value is not None and
-                    target_value is not None and
-                    target_value > 0):
-                achievement_rate = f"{row.sales_value / target_value :.2%}"
+                target_value = 0.0
+                if store_target_value > 0 and row.target_value_ratio is not None:
+                    target_value = round(store_target_value * row.target_value_ratio, 2)  # 保留两位小数
 
-            # # 在计算 target_value_ratio 之前
-            # target_value_ratio = None
-            # if (target_value is not None and
-            #         total_target_value is not None and
-            #         total_target_value > 0):
-            #     ratio = target_value / total_target_value
-            #     target_value_ratio = f"{ratio:.2%}"
+                achievement_rate = None
+                if (row.sales_value is not None and
+                        target_value is not None and
+                        target_value > 0):
+                    achievement_rate = f"{row.sales_value / target_value :.2%}"
 
-            staff_attendance_list.append({
-                "avatar": row.avatar,
-                "staff_code": row.staff_code,
-                "first_name": row.first_name,
-                "expected_attendance": float(row.expected_attendance) if row.expected_attendance is not None else None,
-                "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else None,
-                "position": row.position,
-                "salary_coefficient": float(row.salary_coefficient) if row.salary_coefficient is not None else None,
-                "target_value": target_value,
-                "sales_value": float(row.sales_value) if row.sales_value is not None else None,
-                "achievement_rate": achievement_rate,
-                "target_value_ratio": f"{row.target_value_ratio:.2%}" if row.target_value_ratio is not None else None,
-                "deletable": row.deletable
-            })
+                staff_attendance_list.append({
+                    "avatar": row.avatar,
+                    "staff_code": row.staff_code,
+                    "first_name": row.first_name,
+                    "expected_attendance": float(
+                        row.expected_attendance) if row.expected_attendance is not None else None,
+                    "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else None,
+                    "position": position,
+                    "salary_coefficient": float(salary_coefficient) if salary_coefficient is not None else None,
+                    "target_value": target_value,
+                    "sales_value": float(row.sales_value) if row.sales_value is not None else None,
+                    "achievement_rate": achievement_rate,
+                    "target_value_ratio": f"{row.target_value_ratio:.2%}" if row.target_value_ratio is not None else None,
+                    "deletable": row.deletable
+                })
 
-        return staff_attendance_list
+            return staff_attendance_list
+
+        except Exception as e:
+            app_logger.error(
+                f"Error in get_staff_attendance: fiscal_month={fiscal_month}, store_code={store_code}, error={str(e)}")
+            # 可以选择抛出异常或返回空列表
+            # return []  # 或者
+            raise e
 
     @staticmethod
     async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate):
@@ -867,3 +877,48 @@ class TargetStaffService:
             await db.delete(staff)
         await db.commit()
         return target_staff
+
+    @staticmethod
+    async def update_staff(db: AsyncSession, target_data: StaffAttendanceCreate):
+        """
+        根据target_data中的staff信息更新StaffModel的position和salary_coefficient
+
+        Args:
+            db: 数据库会话
+            target_data: 包含员工信息的StaffAttendanceCreate对象
+
+        Returns:
+            list: 更新的员工列表
+        """
+        try:
+            updated_staff_list = []
+
+            for staff_data in target_data.staffs:
+                # 查询StaffModel中对应的员工记录
+                result = await db.execute(select(StaffModel).where(
+                    StaffModel.staff_code == staff_data.staff_code,
+                    StaffModel.store_code == target_data.store_code
+                ))
+                staff_model = result.scalar_one_or_none()
+
+                if staff_model:
+                    # 更新StaffModel中的position和salary_coefficient
+                    if hasattr(staff_data, 'position') and staff_data.position is not None:
+                        staff_model.position = staff_data.position
+                    if hasattr(staff_data, 'salary_coefficient') and staff_data.salary_coefficient is not None:
+                        staff_model.salary_coefficient = staff_data.salary_coefficient
+                    updated_staff_list.append(staff_model)
+
+            await db.commit()
+
+            # 刷新所有更新的对象以获取数据库生成的值
+            for staff in updated_staff_list:
+                await db.refresh(staff)
+
+            return updated_staff_list
+
+        except Exception as e:
+            app_logger.error(f"Error in update_staff: {str(e)}")
+            await db.rollback()
+            raise e
+

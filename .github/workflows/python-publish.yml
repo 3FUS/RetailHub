@@ -27,7 +27,7 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          python -m PyInstaller --onefile  --hidden-import=aiomysql main.py
+          python -m PyInstaller --onefile  --hidden-import=aiomysql --hidden-import=pyodbc main.py
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4

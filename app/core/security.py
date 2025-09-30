@@ -5,10 +5,10 @@ from typing import Optional, Union
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.services.access_service import verify_password
-from app.database import get_db
+# from app.database import get_sqlserver_db
 
 # OAuth2配置
 SECRET_KEY = "secret"
@@ -20,11 +20,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="retail_hub_api/token")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """
-    创建访问令牌
-    """
-    to_encode = data.copy()
 
+    to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
     else:
@@ -36,8 +33,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
 
 
 async def get_current_user(
-        token: str = Depends(oauth2_scheme),
-        db: AsyncSession = Depends(get_db)
+        token: str = Depends(oauth2_scheme)
 ) -> dict:
     """
     获取当前用户信息
@@ -58,14 +54,10 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    # 这里可以添加更多用户验证逻辑
-    # 例如查询数据库确认用户存在
-
     return {"user_code": user_code}
 
-
 async def authenticate_user(
-        session: AsyncSession,
+        session: Session,
         user_code: str,
         password: str
 ) -> Optional[dict]:

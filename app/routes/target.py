@@ -30,6 +30,7 @@ async def get_targets(fiscal_month: str, key_word: str = None,
             detail="Database error occurred while fetching targets"
         )
     except Exception as e:
+        app_logger.error(f"get_targets list Exception {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"
@@ -48,6 +49,7 @@ async def create_week_target(TargetStoreWeek: TargetStoreWeekCreate, db: AsyncSe
             detail="Database error occurred while creating week targets"
         )
     except Exception as e:
+        app_logger.error(f"create_week_target Exception {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"
@@ -66,6 +68,7 @@ async def get_week_target(store_code: str, fiscal_month: str, db: AsyncSession =
             detail="Database error occurred while fetching week targets"
         )
     except Exception as e:
+        app_logger.error(f"get_week_target Exception {str(e)}")
         raise HTTPException()
 
 
@@ -80,11 +83,13 @@ async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: Asyn
 
         return {"code": 200, "data": data, "msg": "Success"}
     except SQLAlchemyError as e:
+
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error occurred while creating daily targets"
         )
     except Exception as e:
+        app_logger.error(f"create_daily Exception {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"
@@ -98,11 +103,13 @@ async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession 
         target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month)
         return {"code": 200, "data": target_data}
     except SQLAlchemyError as e:
+        app_logger.error(f"get_daily_target SQLAlchemyError {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error occurred while fetching daily targets"
         )
     except Exception as e:
+        app_logger.error(f"get_daily_target Exception {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"
@@ -115,13 +122,16 @@ async def create_staff_attendance(TargetStaffAttendance: StaffAttendanceCreate,
                                   current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.create_staff_attendance(db, TargetStaffAttendance)
+        await TargetStaffService.update_staff(db, TargetStaffAttendance)
         return {"code": 200, "data": data, "msg": "Success"}
     except SQLAlchemyError as e:
+        app_logger.error(f"create_staff_attendance SQLAlchemyError {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Database error occurred while creating staff attendance targets"
         )
     except Exception as e:
+        app_logger.error(f"create_staff_attendance Exception {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"An error occurred while fetching targets: {str(e)}"

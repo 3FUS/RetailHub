@@ -378,6 +378,7 @@ class CommissionService:
 
         except Exception as e:
             # 发生异常时回滚事务
+            app_logger.error(f"Error in update_commission: {str(e)}")
             await db.rollback()
             raise e
 

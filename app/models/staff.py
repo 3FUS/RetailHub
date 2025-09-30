@@ -43,6 +43,8 @@ class StaffModel(Base):
     last_name = Column(String(80))
     join_date = Column(DateTime)  # 入职日期
     position_code = Column(String(60))  # 职位代码
+    position = Column(String(60))
+    salary_coefficient = Column(Float)
     gender = Column(String(10))  # 性别
     birth_date = Column(DateTime)  # 生日
     suffix = Column(String(10))

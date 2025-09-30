@@ -28,7 +28,7 @@ async def update_commission(attendance_update: StaffAttendanceUpdate,
                                                                            attendance_update.fiscal_month)
             return {"code": 200, "data": data, "msg": "Success"}
         else:
-            app_logger.warning(f"An error occurred while fetching targets: {str(e)}")
+            app_logger.warning(f"An error occurred while fetching targets")
             return {"code": 500, "msg": "An error occurred while fetching targets"}
     except SQLAlchemyError as e:
         app_logger.error(f"An error occurred while fetching targets: {str(e)}")

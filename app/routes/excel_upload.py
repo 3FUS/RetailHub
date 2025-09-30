@@ -305,10 +305,15 @@ async def preview_excel(file: UploadFile = File(...)):
         contents = await file.read()
         df = pd.read_excel(io.BytesIO(contents))
         data_type = identify_excel_type(df)
+        df = df.fillna('')
+
+        for col in df.columns:
+            if df[col].dtype == 'datetime64[ns]':
+                df[col] = df[col].astype(str).replace('NaT', '')
 
         return ExcelPreviewResponse(
             data_type=data_type,
-            preview_data=df.head(10).to_dict('records'),
+            preview_data=df.to_dict('records'),
             total_rows=len(df),
             columns=list(df.columns),
             errors=[]

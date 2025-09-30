@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Numeric, Text, Date
+from sqlalchemy import Column, Integer, String, CHAR, DateTime, Boolean, Numeric, Text, Date
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -120,3 +120,28 @@ class SysMenu(Base):
     parent_id = Column(String(60))  # 父级菜单ID
     sort = Column(Integer)  # 排序
     type = Column(String(32))  # 类型
+
+
+class SysUser(Base):
+    """
+    系统用户模型
+    对应数据库中的sys_user表
+    """
+    __tablename__ = "sys_user"
+
+    id = Column(String(60), primary_key=True)  # 用户ID
+    create_time = Column(DateTime)  # 创建时间
+    create_user = Column(String(60))  # 创建人
+    deleted = Column(CHAR(1), default='0')  # 是否删除（0:未删除，1:已删除）
+    update_time = Column(DateTime)  # 更新时间
+    update_user = Column(String(60))  # 更新人
+    avatar = Column(String(255))  # 头像
+    ding_task_id = Column(String(255))  # 钉钉任务ID
+    email = Column(String(255))  # 邮箱
+    last_login_time = Column(DateTime)  # 最后登录时间
+    login_name = Column(String(255), unique=True, nullable=False)  # 登录名
+    mobile = Column(String(255))  # 手机号
+    password = Column(String(255), nullable=False)  # 密码
+    sex = Column(String(32))  # 性别
+    user_name = Column(String(255))  # 用户名
+    we_chat_id = Column(String(255))  # 微信ID
