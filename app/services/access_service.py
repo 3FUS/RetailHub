@@ -4,8 +4,9 @@ from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 
 from app.utils.logger import app_logger
-
 from app.models.dimension import SysUser
+
+from app.core.jar_pwd_handler import get_password_handler
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="retail_hub_api/token")
 SECRET_KEY = "secret"
@@ -29,6 +30,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     return userid
 
 
+
+
+
 async def verify_password(session: Session, user_code: str, user_password: str) -> bool:
     # 查询用户
     result = session.query(SysUser.password).filter(SysUser.login_name == user_code).first()
@@ -38,8 +42,8 @@ async def verify_password(session: Session, user_code: str, user_password: str) 
         return False
 
     # 获取数据库中的哈希密码
-    # hashed_password = result[0]
-    #
-    # # 使用 bcrypt 验证密码
-    # return bcrypt.checkpw(user_password.encode('utf-8')
-    return True
+    hashed_password = result[0]
+
+    # 使用JAR包中的方法验证密码
+    password_handler = get_password_handler()
+    return password_handler.verify_password(user_password, hashed_password)
