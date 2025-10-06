@@ -171,7 +171,7 @@ class JarPasswordHandler:
 
     def verify_password(self, raw_password: str, encoded_password: str) -> bool:
         """Verify if passwords match"""
-        app_logger.debug(f"Start verifying password, raw password length: {len(raw_password)}, encoded password length: {len(encoded_password)}")
+        app_logger.info(f"Start verifying password, raw password length: {len(raw_password)}, encoded password length: {len(encoded_password)}")
         try:
             if not self.jvm_started and not self.start_jvm():
                 app_logger.warning("JVM startup failed, cannot verify password")
