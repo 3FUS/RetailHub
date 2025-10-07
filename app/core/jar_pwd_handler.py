@@ -101,8 +101,15 @@ class JarPasswordHandler:
             return True
         try:
             # Get JAR package path
-            current_dir = Path(__file__).parent
-            self.jar_path = current_dir / "lib" / "dtv-password.jar"
+            import sys
+            if getattr(sys, 'frozen', False):
+                # 运行在 PyInstaller 打包环境中
+                bundle_dir = sys._MEIPASS
+                self.jar_path = Path(bundle_dir) / "app" / "core" / "lib" / "dtv-password.jar"
+            else:
+                # 运行在开发环境中
+                current_dir = Path(__file__).parent
+                self.jar_path = current_dir / "lib" / "dtv-password.jar"
 
             if not self.jar_path.exists():
                 warning_msg = f"Warning: JAR file does not exist: {self.jar_path}"

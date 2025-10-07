@@ -18,17 +18,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # 指定 Python 版本
+          python-version: '3.11'  # 指定 Python 版本
 
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install --only-binary=JPype1 JPype1 || true
+          pip install --only-binary=JPype1 JPype1
           pip install -r requirements.txt
 
       - name: Build EXE with PyInstaller
         run: |
-          python -m PyInstaller --onefile  --hidden-import=aiomysql --hidden-import=pyodbc main.py
+          python -m PyInstaller --onefile --hidden-import=aiomysql --hidden-import=pyodbc --add-data="app/core/lib;app/core/lib" main.py
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4

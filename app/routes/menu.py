@@ -6,6 +6,7 @@ from app.core.security import get_current_user
 
 router = APIRouter()
 
+from app.database import get_sqlserver_db
 
 @router.get("/list")
 async def get_menus(current_user: dict = Depends(get_current_user)):

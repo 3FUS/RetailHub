@@ -15,6 +15,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
+
 class CommissionRPTService:
 
     @staticmethod
