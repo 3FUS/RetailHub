@@ -32,11 +32,18 @@ async def init_jvm_async():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 启动事件 - 异步初始化JVM
+    # 启动事件
     app_logger.info("Starting application lifespan")
-    jvm_task = asyncio.create_task(init_jvm_async())
 
-    # 不等待JVM初始化完成，让应用先启动
+    async def init_jvm_background():
+        try:
+            await init_jvm_async()
+        except Exception as e:
+            app_logger.error(f"Background JVM initialization failed: {e}")
+
+    # 在后台初始化JVM，不影响应用启动
+    asyncio.create_task(init_jvm_background())
+
     yield  # 应用程序运行期间
 
     # 关闭事件
@@ -47,7 +54,6 @@ async def lifespan(app: FastAPI):
         app_logger.info("JVM资源已释放")
     except Exception as e:
         app_logger.error(f"JVM资源释放失败：{e}")
-
 
 app = FastAPI(lifespan=lifespan)
 # 配置CORS
