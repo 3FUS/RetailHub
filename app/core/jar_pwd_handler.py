@@ -1,5 +1,5 @@
 # /Users/fu/Downloads/XY/TB/RH/app/core/jar_pwd_handler.py
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Java JAR package password processing module
@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 from typing import Optional
 from app.utils.logger import app_logger
+import time
+import threading
 
 
 class JarPasswordHandler:
@@ -220,7 +222,9 @@ class JarPasswordHandler:
         """Start JVM and load JAR package"""
         app_logger.info("Starting JVM and loading JAR package")
         if self.jvm_started and jpype.isJVMStarted():
+            app_logger.info("JVM already started, returning True")
             return True
+
         try:
             # Get JAR package path
             import sys
@@ -242,18 +246,42 @@ class JarPasswordHandler:
             if not jpype.isJVMStarted():
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
-                jpype.startJVM(
-                    jvm_path,
-                    f"-Djava.class.path={self.jar_path}",
-                    convertStrings=False
-                )
+
+                # 添加超时机制
+                def jvm_start_task(result_dict):
+                    try:
+                        jpype.startJVM(
+                            jvm_path,
+                            f"-Djava.class.path={self.jar_path}",
+                            convertStrings=False
+                        )
+                        result_dict['success'] = True
+                    except Exception as e:
+                        result_dict['error'] = e
+
+                result_dict = {}
+                jvm_thread = threading.Thread(target=jvm_start_task, args=(result_dict,))
+                jvm_thread.daemon = True
+                jvm_thread.start()
+                jvm_thread.join(timeout=30)  # 30秒超时
+
+                if jvm_thread.is_alive():
+                    app_logger.error("JVM启动超时")
+                    return False
+
+                if 'error' in result_dict:
+                    error_msg = f"Failed to start JVM: {result_dict['error']}"
+                    app_logger.error(error_msg)
+                    return False
+
                 self.jvm_started = True
                 app_logger.info("JVM started successfully")
 
-                # Initialize password encoder
+                # Initialize password encoder with timeout
                 try:
                     app_logger.info("Initializing password encoder")
                     CustomerPasswordEncoder = jpype.JClass('com.example.report.config.CustomerPasswordEncoder')
+                    app_logger.info("CustomerPasswordEncoder class loaded successfully")
                     self.encoder = CustomerPasswordEncoder()
                     app_logger.info("Password encoder initialized successfully")
                 except Exception as e:
@@ -273,9 +301,14 @@ class JarPasswordHandler:
     def shutdown_jvm(self):
         """Shutdown JVM"""
         if self.jvm_started and jpype.isJVMStarted():
-            jpype.shutdownJVM()
-            self.jvm_started = False
-            app_logger.info("JVM shut down")
+            try:
+                jpype.shutdownJVM()
+                self.jvm_started = False
+                app_logger.info("JVM shut down")
+            except Exception as e:
+                app_logger.error(f"Error shutting down JVM: {e}")
+        else:
+            app_logger.info("JVM not started or already shut down")
 
     def encode_password(self, raw_password: str) -> Optional[str]:
         """Encode password"""
@@ -300,7 +333,8 @@ class JarPasswordHandler:
 
     def verify_password(self, raw_password: str, encoded_password: str) -> bool:
         """Verify if passwords match"""
-        app_logger.info(f"Start verifying password, raw password length: {len(raw_password)}, encoded password length: {len(encoded_password)}")
+        app_logger.info(
+            f"Start verifying password, raw password length: {len(raw_password)}, encoded password length: {len(encoded_password)}")
         try:
             if not self.jvm_started and not self.start_jvm():
                 app_logger.warning("JVM startup failed, cannot verify password")

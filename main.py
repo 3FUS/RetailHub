@@ -12,31 +12,44 @@ from app.database import get_sqlserver_db
 from app.core.jar_pwd_handler import get_password_handler
 from app.utils.logger import app_logger
 from contextlib import asynccontextmanager
+import asyncio
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 启动事件
+
+async def init_jvm_async():
+    """异步初始化JVM"""
+    loop = asyncio.get_event_loop()
     try:
         password_handler = get_password_handler()
-        if password_handler.start_jvm():
+        # 在线程池中运行CPU密集型任务
+        success = await loop.run_in_executor(None, password_handler.start_jvm)
+        if success:
             app_logger.info("JVM initialized successfully")
         else:
             app_logger.error("JVM initialization failed")
     except Exception as e:
         app_logger.error(f"JVM initialization error: {e}")
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动事件 - 异步初始化JVM
+    app_logger.info("Starting application lifespan")
+    jvm_task = asyncio.create_task(init_jvm_async())
+
+    # 不等待JVM初始化完成，让应用先启动
     yield  # 应用程序运行期间
 
     # 关闭事件
     try:
+        app_logger.info("Shutting down JVM")
         password_handler = get_password_handler()
         password_handler.shutdown_jvm()
-        print("JVM资源已释放")
+        app_logger.info("JVM资源已释放")
     except Exception as e:
         app_logger.error(f"JVM资源释放失败：{e}")
 
-app = FastAPI(lifespan=lifespan)
 
+app = FastAPI(lifespan=lifespan)
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
@@ -72,6 +85,24 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     }
 
 
+@app.get("/health")
+async def health_check():
+    """健康检查端点"""
+    try:
+        password_handler = get_password_handler()
+        jvm_status = "started" if password_handler.jvm_started else "not started"
+
+        return {
+            "status": "healthy",
+            "jvm_status": jvm_status,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }
 #
 import asyncio
 from app.models.commission import Base as CommissionBase
