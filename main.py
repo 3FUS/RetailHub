@@ -11,8 +11,31 @@ from app.core.security import authenticate_user, create_access_token, ACCESS_TOK
 from app.database import get_sqlserver_db
 from app.core.jar_pwd_handler import get_password_handler
 from app.utils.logger import app_logger
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动事件
+    try:
+        password_handler = get_password_handler()
+        if password_handler.start_jvm():
+            app_logger.info("JVM initialized successfully")
+        else:
+            app_logger.error("JVM initialization failed")
+    except Exception as e:
+        app_logger.error(f"JVM initialization error: {e}")
+
+    yield  # 应用程序运行期间
+
+    # 关闭事件
+    try:
+        password_handler = get_password_handler()
+        password_handler.shutdown_jvm()
+        print("JVM资源已释放")
+    except Exception as e:
+        app_logger.error(f"JVM资源释放失败：{e}")
+
+app = FastAPI(lifespan=lifespan)
 
 # 配置CORS
 app.add_middleware(
@@ -29,34 +52,6 @@ app.include_router(menu.router, prefix="/menu")
 app.include_router(dimension.router, prefix="/dimension")
 app.include_router(excel_upload.router, prefix="/excel_upload")
 app.include_router(report.router, prefix="/report")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Application startup - initialize JVM"""
-    try:
-        password_handler = get_password_handler()
-        if password_handler.start_jvm():
-            app_logger.info("JVM initialized successfully")
-        else:
-            app_logger.error("JVM initialization failed")
-            # Consider whether to stop the application here
-    except Exception as e:
-        app_logger.error(f"JVM initialization error: {e}")
-        # Handle appropriately based on whether JVM is required
-
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """应用关闭时释放JVM资源"""
-    try:
-        password_handler = get_password_handler()
-        password_handler.shutdown_jvm()
-        print("JVM资源已释放")
-    except Exception as e:
-        app_logger.error(f"JVM资源释放失败：{e}")
-
 
 @app.post("/retail_hub_api/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session=Depends(get_sqlserver_db)):
