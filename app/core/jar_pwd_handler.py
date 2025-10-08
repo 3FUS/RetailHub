@@ -247,26 +247,34 @@ class JarPasswordHandler:
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
 
-                # 添加超时机制
+                # 添加更详细的超时机制和日志
                 def jvm_start_task(result_dict):
                     try:
+                        app_logger.info("Executing jpype.startJVM...")
                         jpype.startJVM(
                             jvm_path,
                             f"-Djava.class.path={self.jar_path}",
                             convertStrings=False
                         )
+                        app_logger.info("jpype.startJVM completed successfully")
                         result_dict['success'] = True
                     except Exception as e:
+                        app_logger.error(f"JVM start exception: {str(e)}")
+                        import traceback
+                        app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
                         result_dict['error'] = e
 
                 result_dict = {}
+                app_logger.info("Creating JVM start thread...")
                 jvm_thread = threading.Thread(target=jvm_start_task, args=(result_dict,))
                 jvm_thread.daemon = True
                 jvm_thread.start()
+                app_logger.info("JVM start thread started, waiting for completion...")
+
                 jvm_thread.join(timeout=30)  # 30秒超时
 
                 if jvm_thread.is_alive():
-                    app_logger.error("JVM启动超时")
+                    app_logger.error("JVM启动超时(30秒)")
                     return False
 
                 if 'error' in result_dict:
@@ -287,6 +295,8 @@ class JarPasswordHandler:
                 except Exception as e:
                     error_msg = f"Failed to initialize password encoder: {e}"
                     app_logger.error(error_msg)
+                    import traceback
+                    app_logger.error(f"Password encoder traceback: {traceback.format_exc()}")
                     return False
             else:
                 app_logger.info("JVM already started")
@@ -296,6 +306,8 @@ class JarPasswordHandler:
         except Exception as e:
             error_msg = f"Failed to start JVM: {e}"
             app_logger.error(error_msg)
+            import traceback
+            app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
             return False
 
     def shutdown_jvm(self):
