@@ -237,9 +237,23 @@ class JarPasswordHandler:
                 current_dir = Path(__file__).parent
                 self.jar_path = current_dir / "lib" / "dtv-password.jar"
 
+            app_logger.info(f"JAR path: {self.jar_path}")
+            app_logger.info(f"JAR exists: {self.jar_path.exists()}")
+
             if not self.jar_path.exists():
                 warning_msg = f"Warning: JAR file does not exist: {self.jar_path}"
                 app_logger.warning(warning_msg)
+                return False
+
+            # 验证JAR文件是否可读
+            try:
+                with open(self.jar_path, 'rb') as f:
+                    magic = f.read(4)
+                    if magic != b'\x50\x4b\x03\x04':  # ZIP文件魔数
+                        app_logger.error(f"Invalid JAR file format: {self.jar_path}")
+                        return False
+            except Exception as e:
+                app_logger.error(f"Cannot read JAR file: {e}")
                 return False
 
             # Start JVM
@@ -247,45 +261,42 @@ class JarPasswordHandler:
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
 
-                # 添加更详细的超时机制和日志
-                def jvm_start_task(result_dict):
-                    try:
-                        app_logger.info("Executing jpype.startJVM...")
-                        jpype.startJVM(
-                            jvm_path,
-                            f"-Djava.class.path={self.jar_path}",
-                            convertStrings=False
-                        )
-                        app_logger.info("jpype.startJVM completed successfully")
-                        result_dict['success'] = True
-                    except Exception as e:
-                        app_logger.error(f"JVM start exception: {str(e)}")
-                        import traceback
-                        app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
-                        result_dict['error'] = e
+                # 添加信号处理以捕获致命错误
+                import signal
+                import sys
 
-                result_dict = {}
-                app_logger.info("Creating JVM start thread...")
-                jvm_thread = threading.Thread(target=jvm_start_task, args=(result_dict,))
-                jvm_thread.daemon = True
-                jvm_thread.start()
-                app_logger.info("JVM start thread started, waiting for completion...")
+                def signal_handler(signum, frame):
+                    app_logger.error(f"Received signal {signum} during JVM startup")
+                    sys.exit(1)
 
-                jvm_thread.join(timeout=30)  # 30秒超时
+                # 注册信号处理器
+                signal.signal(signal.SIGTERM, signal_handler)
+                signal.signal(signal.SIGINT, signal_handler)
 
-                if jvm_thread.is_alive():
-                    app_logger.error("JVM启动超时(30秒)")
+                # 在主线程中直接启动JVM（避免线程问题）
+                try:
+                    app_logger.info("Directly executing jpype.startJVM in main thread...")
+                    jpype.startJVM(
+                        jvm_path,
+                        f"-Djava.class.path={self.jar_path}",
+                        convertStrings=False
+                    )
+                    app_logger.info("jpype.startJVM completed successfully")
+                except Exception as e:
+                    app_logger.error(f"JVM start exception: {str(e)}")
+                    import traceback
+                    app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
                     return False
-
-                if 'error' in result_dict:
-                    error_msg = f"Failed to start JVM: {result_dict['error']}"
-                    app_logger.error(error_msg)
+                except BaseException as e:
+                    app_logger.error(f"JVM start fatal error: {str(e)}")
+                    import traceback
+                    app_logger.error(f"JVM start fatal traceback: {traceback.format_exc()}")
                     return False
 
                 self.jvm_started = True
                 app_logger.info("JVM started successfully")
 
-                # Initialize password encoder with timeout
+                # Initialize password encoder
                 try:
                     app_logger.info("Initializing password encoder")
                     CustomerPasswordEncoder = jpype.JClass('com.example.report.config.CustomerPasswordEncoder')
@@ -308,6 +319,12 @@ class JarPasswordHandler:
             app_logger.error(error_msg)
             import traceback
             app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
+            return False
+        except BaseException as e:
+            error_msg = f"Fatal error during JVM startup: {e}"
+            app_logger.error(error_msg)
+            import traceback
+            app_logger.error(f"Fatal error traceback: {traceback.format_exc()}")
             return False
 
     def shutdown_jvm(self):
