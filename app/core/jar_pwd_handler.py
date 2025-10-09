@@ -261,11 +261,8 @@ class JarPasswordHandler:
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
 
-                # 移除了信号处理相关代码
-
-                # 在主线程中直接启动JVM（避免线程问题）
                 try:
-                    app_logger.info("Directly executing jpype.startJVM...")
+                    app_logger.info("Attempting to start JVM...")
                     jpype.startJVM(
                         jvm_path,
                         f"-Djava.class.path={self.jar_path}",
@@ -281,6 +278,9 @@ class JarPasswordHandler:
                     app_logger.error(f"JVM start fatal error: {str(e)}")
                     import traceback
                     app_logger.error(f"JVM start fatal traceback: {traceback.format_exc()}")
+                    return False
+                except SystemExit as e:
+                    app_logger.error(f"JVM start caused system exit: {e}")
                     return False
 
                 self.jvm_started = True
