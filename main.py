@@ -14,6 +14,7 @@ from app.utils.logger import app_logger
 from contextlib import asynccontextmanager
 import asyncio
 
+
 async def init_jvm_async():
     """异步初始化JVM"""
     loop = asyncio.get_event_loop()
@@ -32,12 +33,20 @@ async def init_jvm_async():
             # 添加更详细的错误信息
             if hasattr(password_handler, 'jvm_started'):
                 app_logger.error(f"JVM started flag: {password_handler.jvm_started}")
+
+            # 如果JVM启动失败，记录更多信息
+            app_logger.error("Detailed JVM status:")
+            app_logger.error(f"  jvm_started: {getattr(password_handler, 'jvm_started', 'N/A')}")
+            app_logger.error(f"  encoder: {getattr(password_handler, 'encoder', 'N/A')}")
+            app_logger.error(f"  jar_path: {getattr(password_handler, 'jar_path', 'N/A')}")
     except asyncio.TimeoutError:
         app_logger.error("JVM initialization timed out")
     except Exception as e:
         app_logger.error(f"JVM initialization error: {e}")
+        app_logger.error(f"JVM initialization error type: {type(e)}")
         import traceback
         app_logger.error(f"JVM initialization traceback: {traceback.format_exc()}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

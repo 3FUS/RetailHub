@@ -60,17 +60,23 @@ jobs:
               $pyinstallerCmd += " --add-data=`"$jreBinServerPath;jre/bin/server`""
             }
 
-            # 移除下面这行，避免打包System32目录
-            # $system32Path = "$env:SystemRoot\System32"
-            # if (Test-Path $system32Path) {
-            #   $pyinstallerCmd += " --add-data=`"$system32Path;system32`""
-            # }
+            # 特别添加VC++运行时库
+            $vcRedistPaths = @(
+              "C:\Windows\System32\msvcr100.dll",
+              "C:\Windows\System32\msvcr120.dll",
+              "C:\Windows\System32\vcruntime140.dll"
+            )
+
+            foreach ($dllPath in $vcRedistPaths) {
+              if (Test-Path $dllPath) {
+                $pyinstallerCmd += " --add-data=`"$dllPath;.`""
+              }
+            }
           }
 
           $pyinstallerCmd += " main.py"
           Write-Host "Running command: $pyinstallerCmd"
           Invoke-Expression $pyinstallerCmd
-      
       
 
       - name: Archive artifact

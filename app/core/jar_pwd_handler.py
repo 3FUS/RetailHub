@@ -234,6 +234,8 @@ class JarPasswordHandler:
         app_logger.error(error_msg)
         raise RuntimeError(error_msg)
 
+    # 在 app/core/jar_pwd_handler.py 中添加更多诊断日志
+
     def start_jvm(self) -> bool:
         """Start JVM and load JAR package"""
         app_logger.info("Starting JVM and loading JAR package")
@@ -278,6 +280,8 @@ class JarPasswordHandler:
                     alt_server_path = Path(bundle_dir) / "java" / "bin" / "server"
                     if alt_server_path.exists():
                         app_logger.info(f"Alternative server path exists: {alt_server_path}")
+                    else:
+                        app_logger.warning("No valid Java server directory found!")
             else:
                 # 运行在开发环境中
                 current_dir = Path(__file__).parent
@@ -331,6 +335,7 @@ class JarPasswordHandler:
 
                 if missing_dlls:
                     app_logger.warning(f"Missing required DLLs: {missing_dlls}")
+                    app_logger.warning("This may cause JVM startup failure!")
 
                 try:
                     app_logger.info("Attempting to start JVM...")
@@ -351,8 +356,10 @@ class JarPasswordHandler:
 
                     # 添加更详细的调试信息
                     app_logger.info(f"Current working directory: {os.getcwd()}")
-                    app_logger.info(f"PATH environment variable: {os.environ.get('PATH', '')[:200]}...")  # 只显示前200个字符
+                    app_logger.info(f"PATH environment variable: {os.environ.get('PATH', '')[:500]}")  # 显示前500个字符
 
+                    # 增强JVM启动的错误捕获
+                    app_logger.info("Calling jpype.startJVM...")
                     jpype.startJVM(*jvm_args, convertStrings=False)
                     app_logger.info("jpype.startJVM completed successfully")
                 except jpype.JVMNotSupportedException as e:
@@ -363,14 +370,17 @@ class JarPasswordHandler:
                     return False
                 except jpype.JVMCreationError as e:
                     app_logger.error(f"JVM creation error: {str(e)}")
+                    app_logger.error(f"JVM creation error type: {type(e)}")
                     return False
                 except Exception as e:
                     app_logger.error(f"JVM start exception: {str(e)}")
+                    app_logger.error(f"JVM start exception type: {type(e)}")
                     import traceback
                     app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
                     return False
                 except BaseException as e:
                     app_logger.error(f"JVM start fatal error: {str(e)}")
+                    app_logger.error(f"JVM start fatal error type: {type(e)}")
                     import traceback
                     app_logger.error(f"JVM start fatal traceback: {traceback.format_exc()}")
                     return False
@@ -392,6 +402,7 @@ class JarPasswordHandler:
                 except Exception as e:
                     error_msg = f"Failed to initialize password encoder: {e}"
                     app_logger.error(error_msg)
+                    app_logger.error(f"Password encoder error type: {type(e)}")
                     import traceback
                     app_logger.error(f"Password encoder traceback: {traceback.format_exc()}")
                     # JVM已启动但编码器初始化失败，仍返回True但记录错误
@@ -403,12 +414,14 @@ class JarPasswordHandler:
         except Exception as e:
             error_msg = f"Failed to start JVM: {e}"
             app_logger.error(error_msg)
+            app_logger.error(f"JVM start error type: {type(e)}")
             import traceback
             app_logger.error(f"JVM start traceback: {traceback.format_exc()}")
             return False
         except BaseException as e:
             error_msg = f"Fatal error during JVM startup: {e}"
             app_logger.error(error_msg)
+            app_logger.error(f"Fatal error type: {type(e)}")
             import traceback
             app_logger.error(f"Fatal error traceback: {traceback.format_exc()}")
             return False
