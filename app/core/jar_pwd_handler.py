@@ -232,6 +232,7 @@ class JarPasswordHandler:
         app_logger.error(error_msg)
         raise RuntimeError(error_msg)
 
+    # 在 start_jvm 方法中替换现有的 JVM 启动部分
     def start_jvm(self) -> bool:
         """Start JVM and load JAR package"""
         app_logger.info("Starting JVM and loading JAR package")
@@ -295,6 +296,15 @@ class JarPasswordHandler:
                         convertStrings=False
                     )
                     app_logger.info("jpype.startJVM completed successfully")
+                except jpype.JVMNotSupportedException as e:
+                    app_logger.error(f"JVM not supported: {str(e)}")
+                    return False
+                except jpype.JVMNotFoundException as e:
+                    app_logger.error(f"JVM not found: {str(e)}")
+                    return False
+                except jpype.JVMCreationError as e:
+                    app_logger.error(f"JVM creation error: {str(e)}")
+                    return False
                 except Exception as e:
                     app_logger.error(f"JVM start exception: {str(e)}")
                     import traceback

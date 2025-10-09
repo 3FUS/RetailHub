@@ -14,7 +14,6 @@ from app.utils.logger import app_logger
 from contextlib import asynccontextmanager
 import asyncio
 
-
 async def init_jvm_async():
     """异步初始化JVM"""
     loop = asyncio.get_event_loop()
@@ -24,19 +23,21 @@ async def init_jvm_async():
         app_logger.info("Starting JVM initialization in thread pool")
         success = await asyncio.wait_for(
             loop.run_in_executor(None, password_handler.start_jvm),
-            timeout=60.0  # 设置60秒超时
+            timeout=120.0  # 增加超时时间到120秒
         )
         if success:
             app_logger.info("JVM initialized successfully")
         else:
             app_logger.error("JVM initialization failed")
+            # 添加更详细的错误信息
+            if hasattr(password_handler, 'jvm_started'):
+                app_logger.error(f"JVM started flag: {password_handler.jvm_started}")
     except asyncio.TimeoutError:
         app_logger.error("JVM initialization timed out")
     except Exception as e:
         app_logger.error(f"JVM initialization error: {e}")
         import traceback
         app_logger.error(f"JVM initialization traceback: {traceback.format_exc()}")
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,7 +56,7 @@ async def lifespan(app: FastAPI):
     try:
         app_logger.info("Waiting for JVM initialization to complete")
         # 等待JVM初始化任务完成，但设置超时
-        await asyncio.wait_for(jvm_task, timeout=30.0)  # 增加超时时间
+        await asyncio.wait_for(jvm_task, timeout=120.0)  # 增加超时时间
 
         app_logger.info("Shutting down JVM")
         password_handler = get_password_handler()
@@ -68,6 +69,7 @@ async def lifespan(app: FastAPI):
         app_logger.warning("等待JVM初始化超时，继续应用关闭过程")
     except Exception as e:
         app_logger.error(f"JVM资源释放失败：{e}")
+
 
 
 app = FastAPI(lifespan=lifespan)
