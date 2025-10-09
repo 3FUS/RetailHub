@@ -43,26 +43,28 @@ class JarPasswordHandler:
         """Find JVM on Windows"""
         app_logger.debug("Searching for JVM on Windows")
 
-        # 1. 首先检查 JAVA_HOME 环境变量
+        # 1. 检查PyInstaller打包环境中的Java路径（优先）
+        if getattr(sys, 'frozen', False):
+            # 在打包环境中查找java目录
+            bundle_dir = sys._MEIPASS
+            bundled_jvm_paths = [
+                os.path.join(bundle_dir, "jre", "bin", "server", "jvm.dll"),
+                os.path.join(bundle_dir, "jre", "bin", "client", "jvm.dll"),
+                os.path.join(bundle_dir, "java", "bin", "server", "jvm.dll"),
+                os.path.join(bundle_dir, "java", "bin", "client", "jvm.dll")
+            ]
+            for path in bundled_jvm_paths:
+                if os.path.exists(path):
+                    app_logger.info(f"Found JVM in PyInstaller bundle: {path}")
+                    return path
+
+        # 2. 检查 JAVA_HOME 环境变量
         java_home = os.environ.get('JAVA_HOME')
         if java_home and os.path.exists(java_home):
             jvm_path = self._get_jvm_path_from_java_home(java_home)
             if jvm_path and os.path.exists(jvm_path):
                 app_logger.info(f"Found JVM via JAVA_HOME: {jvm_path}")
                 return jvm_path
-
-        # 2. 检查PyInstaller打包环境中的Java路径
-        if getattr(sys, 'frozen', False):
-            # 在打包环境中查找java目录
-            bundle_dir = sys._MEIPASS
-            java_paths = [
-                os.path.join(bundle_dir, "java", "bin", "server", "jvm.dll"),
-                os.path.join(bundle_dir, "java", "bin", "client", "jvm.dll")
-            ]
-            for path in java_paths:
-                if os.path.exists(path):
-                    app_logger.info(f"Found JVM in PyInstaller bundle: {path}")
-                    return path
 
         # 3. 通过Windows注册表查找Java安装
         jvm_paths = self._find_jvm_in_registry()
@@ -252,14 +254,30 @@ class JarPasswordHandler:
                 self.jar_path = Path(bundle_dir) / "app" / "core" / "lib" / "dtv-password.jar"
 
                 # 检查PyInstaller打包环境中的Java路径
-                java_bin_path = Path(bundle_dir) / "java" / "bin"
-                java_lib_path = Path(bundle_dir) / "java" / "lib"
-                java_server_path = Path(bundle_dir) / "java" / "bin" / "server"
+                java_root_path = Path(bundle_dir) / "jre"
+                java_bin_path = Path(bundle_dir) / "jre" / "bin"
+                java_lib_path = Path(bundle_dir) / "jre" / "lib"
+                java_server_path = Path(bundle_dir) / "jre" / "bin" / "server"
 
                 app_logger.info(f"Bundle dir: {bundle_dir}")
+                app_logger.info(f"Java root path exists: {java_root_path.exists()}")
                 app_logger.info(f"Java bin path exists: {java_bin_path.exists()}")
                 app_logger.info(f"Java lib path exists: {java_lib_path.exists()}")
                 app_logger.info(f"Java server path exists: {java_server_path.exists()}")
+
+                # 列出关键目录内容
+                if java_bin_path.exists():
+                    bin_files = list(java_bin_path.iterdir())
+                    app_logger.info(f"Files in java/bin: {[f.name for f in bin_files[:10]]}")  # 只显示前10个
+
+                if java_server_path.exists():
+                    server_files = list(java_server_path.iterdir())
+                    app_logger.info(f"Files in java/bin/server: {[f.name for f in server_files]}")
+                else:
+                    # 检查是否有其他可能的server目录
+                    alt_server_path = Path(bundle_dir) / "java" / "bin" / "server"
+                    if alt_server_path.exists():
+                        app_logger.info(f"Alternative server path exists: {alt_server_path}")
             else:
                 # 运行在开发环境中
                 current_dir = Path(__file__).parent
@@ -298,17 +316,26 @@ class JarPasswordHandler:
 
                 app_logger.info(f"JVM path exists: {os.path.exists(jvm_path)}")
 
+                # 检查JVM DLL所在目录
+                jvm_dir = os.path.dirname(jvm_path)
+                if os.path.exists(jvm_dir):
+                    jvm_dir_files = os.listdir(jvm_dir)
+                    app_logger.info(f"Files in JVM directory: {jvm_dir_files[:10]}")  # 只显示前10个
+
                 try:
                     app_logger.info("Attempting to start JVM...")
-                    # 正确构建JVM参数数组
+                    # 构建JVM参数
                     jvm_args = [
                         jvm_path,
                         f"-Djava.class.path={self.jar_path}",
-                        "-Xmx512m",  # 设置最大堆内存
-                        "-Xms256m",  # 设置初始堆内存
-                        "-Djava.awt.headless=true",  # 启用headless模式
-                        "-Djava.library.path=" + os.path.dirname(jvm_path),  # 添加库路径
+                        "-Xmx512m",
+                        "-Xms256m",
+                        "-Djava.awt.headless=true",
                     ]
+
+                    # 只有在不是打包环境或者打包环境中存在相应目录时才添加library.path
+                    if not getattr(sys, 'frozen', False) or os.path.exists(os.path.dirname(jvm_path)):
+                        jvm_args.append("-Djava.library.path=" + os.path.dirname(jvm_path))
 
                     app_logger.info(f"JVM args: {jvm_args}")
                     jpype.startJVM(*jvm_args, convertStrings=False)

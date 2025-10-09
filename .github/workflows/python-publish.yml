@@ -41,26 +41,30 @@ jobs:
           # 构建PyInstaller命令
           $pyinstallerCmd = "python -m PyInstaller --onefile --hidden-import=aiomysql --hidden-import=pyodbc --add-data=`"app/core/lib;app/core/lib`""
 
-          # 添加Java运行时库
+          # 添加完整的Java运行时库
           if ($JAVA_HOME -and (Test-Path $JAVA_HOME)) {
             $jreLibPath = Join-Path $JAVA_HOME "lib"
             $jreBinPath = Join-Path $JAVA_HOME "bin"
             $jreBinServerPath = Join-Path $jreBinPath "server"
 
+            # 添加JRE根目录
+            $pyinstallerCmd += " --add-data=`"$JAVA_HOME;jre`""
+
             if (Test-Path $jreLibPath) {
-              $pyinstallerCmd += " --add-data=`"$jreLibPath;java/lib`""
+              $pyinstallerCmd += " --add-data=`"$jreLibPath;jre/lib`""
             }
             if (Test-Path $jreBinPath) {
-              $pyinstallerCmd += " --add-data=`"$jreBinPath;java/bin`""
+              $pyinstallerCmd += " --add-data=`"$jreBinPath;jre/bin`""
             }
             if (Test-Path $jreBinServerPath) {
-              $pyinstallerCmd += " --add-data=`"$jreBinServerPath;java/bin/server`""
+              $pyinstallerCmd += " --add-data=`"$jreBinServerPath;jre/bin/server`""
             }
           }
 
           $pyinstallerCmd += " main.py"
           Write-Host "Running command: $pyinstallerCmd"
           Invoke-Expression $pyinstallerCmd
+      
       
 
       - name: Archive artifact
