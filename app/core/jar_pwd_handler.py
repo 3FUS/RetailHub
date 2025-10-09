@@ -9,6 +9,7 @@ Author: Demo
 Date: 2024
 """
 import platform
+import sys
 import winreg
 from typing import List
 import jpype
@@ -50,14 +51,27 @@ class JarPasswordHandler:
                 app_logger.info(f"Found JVM via JAVA_HOME: {jvm_path}")
                 return jvm_path
 
-        # 2. 通过Windows注册表查找Java安装
+        # 2. 检查PyInstaller打包环境中的Java路径
+        if getattr(sys, 'frozen', False):
+            # 在打包环境中查找java目录
+            bundle_dir = sys._MEIPASS
+            java_paths = [
+                os.path.join(bundle_dir, "java", "bin", "server", "jvm.dll"),
+                os.path.join(bundle_dir, "java", "bin", "client", "jvm.dll")
+            ]
+            for path in java_paths:
+                if os.path.exists(path):
+                    app_logger.info(f"Found JVM in PyInstaller bundle: {path}")
+                    return path
+
+        # 3. 通过Windows注册表查找Java安装
         jvm_paths = self._find_jvm_in_registry()
         for path in jvm_paths:
             if os.path.exists(path):
                 app_logger.info(f"Found JVM via registry: {path}")
                 return path
 
-        # 3. 查找常见安装目录
+        # 4. 查找常见安装目录
         common_paths = self._get_common_windows_jvm_paths()
         for path in common_paths:
             if os.path.exists(path):
