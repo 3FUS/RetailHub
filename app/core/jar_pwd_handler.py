@@ -261,11 +261,19 @@ class JarPasswordHandler:
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
 
+                # 检查JVM路径是否存在
+                if not os.path.exists(jvm_path):
+                    app_logger.error(f"JVM path does not exist: {jvm_path}")
+                    return False
+
                 try:
                     app_logger.info("Attempting to start JVM...")
+                    # 添加更多JVM启动参数以提高稳定性
                     jpype.startJVM(
                         jvm_path,
                         f"-Djava.class.path={self.jar_path}",
+                        "-Xmx512m",  # 设置最大堆内存
+                        "-Xms256m",  # 设置初始堆内存
                         convertStrings=False
                     )
                     app_logger.info("jpype.startJVM completed successfully")

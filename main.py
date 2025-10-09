@@ -20,17 +20,13 @@ async def init_jvm_async():
     loop = asyncio.get_event_loop()
     try:
         password_handler = get_password_handler()
-        # 设置超时时间，避免无限等待
-        success = await asyncio.wait_for(
-            loop.run_in_executor(None, password_handler.start_jvm),
-            timeout=30.0  # 30秒超时
-        )
+        # 在线程池中运行CPU密集型任务
+        app_logger.info("Starting JVM initialization in thread pool")
+        success = await loop.run_in_executor(None, password_handler.start_jvm)
         if success:
             app_logger.info("JVM initialized successfully")
         else:
             app_logger.error("JVM initialization failed")
-    except asyncio.TimeoutError:
-        app_logger.error("JVM initialization timed out")
     except Exception as e:
         app_logger.error(f"JVM initialization error: {e}")
         import traceback
@@ -42,34 +38,29 @@ async def lifespan(app: FastAPI):
     # 启动事件
     app_logger.info("Starting application lifespan")
 
-    async def init_jvm_background():
-        try:
-            await init_jvm_async()
-        except Exception as e:
-            app_logger.error(f"Background JVM initialization failed: {e}")
-
     # 在后台初始化JVM，不影响应用启动
-    jvm_task = asyncio.create_task(init_jvm_background())
+    jvm_task = asyncio.create_task(init_jvm_async())
 
-    # 等待一段时间确保JVM初始化有机会完成
-    await asyncio.sleep(1)
+    # 等待应用程序完全启动
+    await asyncio.sleep(2)
 
     yield  # 应用程序运行期间
 
     # 关闭事件
     try:
-        # 等待JVM初始化任务完成
-        if not jvm_task.done():
-            await asyncio.wait_for(jvm_task, timeout=5.0)
+        app_logger.info("Waiting for JVM initialization to complete")
+        # 等待JVM初始化任务完成，但设置超时
+        await asyncio.wait_for(jvm_task, timeout=10.0)
 
         app_logger.info("Shutting down JVM")
         password_handler = get_password_handler()
         password_handler.shutdown_jvm()
         app_logger.info("JVM资源已释放")
-    except Exception as e:
-        app_logger.error(f"JVM资源释放失败：{e}")
     except asyncio.TimeoutError:
         app_logger.error("等待JVM初始化超时")
+    except Exception as e:
+        app_logger.error(f"JVM资源释放失败：{e}")
+
 
 app = FastAPI(lifespan=lifespan)
 # 配置CORS

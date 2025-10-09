@@ -28,7 +28,7 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          python -m PyInstaller --onefile --hidden-import=aiomysql --hidden-import=pyodbc --add-data="app/core/lib;app/core/lib" main.py
+          python -m PyInstaller --onefile --hidden-import=aiomysql --hidden-import=pyodbc --add-data="app/core/lib;app/core/lib" --add-data="C:\Program Files\Java\jre1.8.0_421\lib;java\lib" --add-data="C:\Program Files\Java\jre1.8.0_421\bin;java\bin" main.py
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4
