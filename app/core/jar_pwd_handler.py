@@ -241,7 +241,6 @@ class JarPasswordHandler:
 
         try:
             # Get JAR package path
-            import sys
             if getattr(sys, 'frozen', False):
                 # 运行在 PyInstaller 打包环境中
                 bundle_dir = sys._MEIPASS
@@ -288,6 +287,7 @@ class JarPasswordHandler:
                         f"-Djava.class.path={self.jar_path}",
                         "-Xmx512m",  # 设置最大堆内存
                         "-Xms256m",  # 设置初始堆内存
+                        "-Djava.awt.headless=true",  # 启用headless模式
                         convertStrings=False
                     )
                     app_logger.info("jpype.startJVM completed successfully")
@@ -315,16 +315,17 @@ class JarPasswordHandler:
                     app_logger.info("CustomerPasswordEncoder class loaded successfully")
                     self.encoder = CustomerPasswordEncoder()
                     app_logger.info("Password encoder initialized successfully")
+                    return True
                 except Exception as e:
                     error_msg = f"Failed to initialize password encoder: {e}"
                     app_logger.error(error_msg)
                     import traceback
                     app_logger.error(f"Password encoder traceback: {traceback.format_exc()}")
-                    return False
+                    # JVM已启动但编码器初始化失败，仍返回True但记录错误
+                    return True
             else:
                 app_logger.info("JVM already started")
-
-            return True
+                return True
 
         except Exception as e:
             error_msg = f"Failed to start JVM: {e}"
