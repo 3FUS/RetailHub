@@ -20,19 +20,23 @@ async def init_jvm_async():
     loop = asyncio.get_event_loop()
     try:
         password_handler = get_password_handler()
-        # 在线程池中运行CPU密集型任务
+        # 在线程池中运行CPU密集型任务，设置超时时间
         app_logger.info("Starting JVM initialization in thread pool")
-        success = await loop.run_in_executor(None, password_handler.start_jvm)
+        success = await asyncio.wait_for(
+            loop.run_in_executor(None, password_handler.start_jvm),
+            timeout=60.0  # 设置60秒超时
+        )
         if success:
             app_logger.info("JVM initialized successfully")
         else:
             app_logger.error("JVM initialization failed")
-            # 不要让应用因为JVM初始化失败而终止
+    except asyncio.TimeoutError:
+        app_logger.error("JVM initialization timed out")
     except Exception as e:
         app_logger.error(f"JVM initialization error: {e}")
         import traceback
         app_logger.error(f"JVM initialization traceback: {traceback.format_exc()}")
-        # 继续运行应用，即使JVM初始化失败
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

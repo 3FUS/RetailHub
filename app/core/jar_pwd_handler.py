@@ -235,6 +235,10 @@ class JarPasswordHandler:
     def start_jvm(self) -> bool:
         """Start JVM and load JAR package"""
         app_logger.info("Starting JVM and loading JAR package")
+
+        app_logger.info(f"Python architecture: {platform.architecture()}")
+        app_logger.info(f"JAVA_HOME: {os.environ.get('JAVA_HOME')}")
+
         if self.jvm_started and jpype.isJVMStarted():
             app_logger.info("JVM already started, returning True")
             return True
