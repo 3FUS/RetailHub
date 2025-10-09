@@ -322,6 +322,16 @@ class JarPasswordHandler:
                     jvm_dir_files = os.listdir(jvm_dir)
                     app_logger.info(f"Files in JVM directory: {jvm_dir_files[:10]}")  # 只显示前10个
 
+                # 检查关键的依赖DLL是否存在
+                required_dlls = ['jvm.dll', 'msvcr100.dll', 'msvcr120.dll']
+                missing_dlls = []
+                for dll in required_dlls:
+                    if not os.path.exists(os.path.join(jvm_dir, dll)):
+                        missing_dlls.append(dll)
+
+                if missing_dlls:
+                    app_logger.warning(f"Missing required DLLs: {missing_dlls}")
+
                 try:
                     app_logger.info("Attempting to start JVM...")
                     # 构建JVM参数
@@ -338,6 +348,11 @@ class JarPasswordHandler:
                         jvm_args.append("-Djava.library.path=" + os.path.dirname(jvm_path))
 
                     app_logger.info(f"JVM args: {jvm_args}")
+
+                    # 添加更详细的调试信息
+                    app_logger.info(f"Current working directory: {os.getcwd()}")
+                    app_logger.info(f"PATH environment variable: {os.environ.get('PATH', '')[:200]}...")  # 只显示前200个字符
+
                     jpype.startJVM(*jvm_args, convertStrings=False)
                     app_logger.info("jpype.startJVM completed successfully")
                 except jpype.JVMNotSupportedException as e:

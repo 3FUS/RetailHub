@@ -59,12 +59,17 @@ jobs:
             if (Test-Path $jreBinServerPath) {
               $pyinstallerCmd += " --add-data=`"$jreBinServerPath;jre/bin/server`""
             }
+
+            # 添加系统DLL目录
+            $system32Path = "$env:SystemRoot\System32"
+            if (Test-Path $system32Path) {
+              $pyinstallerCmd += " --add-data=`"$system32Path;system32`""
+            }
           }
 
           $pyinstallerCmd += " main.py"
           Write-Host "Running command: $pyinstallerCmd"
           Invoke-Expression $pyinstallerCmd
-      
       
 
       - name: Archive artifact
