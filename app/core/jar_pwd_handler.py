@@ -261,21 +261,11 @@ class JarPasswordHandler:
                 jvm_path = self.find_jvm_path()
                 app_logger.info(f"Using JVM path: {jvm_path}")
 
-                # 添加信号处理以捕获致命错误
-                import signal
-                import sys
-
-                def signal_handler(signum, frame):
-                    app_logger.error(f"Received signal {signum} during JVM startup")
-                    sys.exit(1)
-
-                # 注册信号处理器
-                signal.signal(signal.SIGTERM, signal_handler)
-                signal.signal(signal.SIGINT, signal_handler)
+                # 移除了信号处理相关代码
 
                 # 在主线程中直接启动JVM（避免线程问题）
                 try:
-                    app_logger.info("Directly executing jpype.startJVM in main thread...")
+                    app_logger.info("Directly executing jpype.startJVM...")
                     jpype.startJVM(
                         jvm_path,
                         f"-Djava.class.path={self.jar_path}",
