@@ -37,24 +37,31 @@ jobs:
           # 获取Java安装路径
           $JAVA_HOME = $env:JAVA_HOME
           Write-Host "JAVA_HOME: $JAVA_HOME"
-          
+
           # 构建PyInstaller命令
           $pyinstallerCmd = "python -m PyInstaller --onefile --hidden-import=aiomysql --hidden-import=pyodbc --add-data=`"app/core/lib;app/core/lib`""
-          
-          # 只有当JAVA_HOME存在时才添加Java相关路径
+
+          # 添加Java运行时库
           if ($JAVA_HOME -and (Test-Path $JAVA_HOME)) {
             $jreLibPath = Join-Path $JAVA_HOME "lib"
             $jreBinPath = Join-Path $JAVA_HOME "bin"
+            $jreBinServerPath = Join-Path $jreBinPath "server"
+
             if (Test-Path $jreLibPath) {
               $pyinstallerCmd += " --add-data=`"$jreLibPath;java/lib`""
             }
             if (Test-Path $jreBinPath) {
               $pyinstallerCmd += " --add-data=`"$jreBinPath;java/bin`""
             }
+            if (Test-Path $jreBinServerPath) {
+              $pyinstallerCmd += " --add-data=`"$jreBinServerPath;java/bin/server`""
+            }
           }
-          
+
           $pyinstallerCmd += " main.py"
+          Write-Host "Running command: $pyinstallerCmd"
           Invoke-Expression $pyinstallerCmd
+      
 
       - name: Archive artifact
         uses: actions/upload-artifact@v4

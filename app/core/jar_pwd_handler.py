@@ -232,12 +232,12 @@ class JarPasswordHandler:
         app_logger.error(error_msg)
         raise RuntimeError(error_msg)
 
-    # 在 start_jvm 方法中替换现有的 JVM 启动部分
     def start_jvm(self) -> bool:
         """Start JVM and load JAR package"""
         app_logger.info("Starting JVM and loading JAR package")
 
         app_logger.info(f"Python architecture: {platform.architecture()}")
+        app_logger.info(f"Platform: {platform.system()}")
         app_logger.info(f"JAVA_HOME: {os.environ.get('JAVA_HOME')}")
 
         if self.jvm_started and jpype.isJVMStarted():
@@ -250,6 +250,16 @@ class JarPasswordHandler:
                 # 运行在 PyInstaller 打包环境中
                 bundle_dir = sys._MEIPASS
                 self.jar_path = Path(bundle_dir) / "app" / "core" / "lib" / "dtv-password.jar"
+
+                # 检查PyInstaller打包环境中的Java路径
+                java_bin_path = Path(bundle_dir) / "java" / "bin"
+                java_lib_path = Path(bundle_dir) / "java" / "lib"
+                java_server_path = Path(bundle_dir) / "java" / "bin" / "server"
+
+                app_logger.info(f"Bundle dir: {bundle_dir}")
+                app_logger.info(f"Java bin path exists: {java_bin_path.exists()}")
+                app_logger.info(f"Java lib path exists: {java_lib_path.exists()}")
+                app_logger.info(f"Java server path exists: {java_server_path.exists()}")
             else:
                 # 运行在开发环境中
                 current_dir = Path(__file__).parent
@@ -270,6 +280,8 @@ class JarPasswordHandler:
                     if magic != b'\x50\x4b\x03\x04':  # ZIP文件魔数
                         app_logger.error(f"Invalid JAR file format: {self.jar_path}")
                         return False
+                    else:
+                        app_logger.info("JAR file format verified")
             except Exception as e:
                 app_logger.error(f"Cannot read JAR file: {e}")
                 return False
@@ -284,17 +296,22 @@ class JarPasswordHandler:
                     app_logger.error(f"JVM path does not exist: {jvm_path}")
                     return False
 
+                app_logger.info(f"JVM path exists: {os.path.exists(jvm_path)}")
+
                 try:
                     app_logger.info("Attempting to start JVM...")
-                    # 添加更多JVM启动参数以提高稳定性
-                    jpype.startJVM(
+                    # 正确构建JVM参数数组
+                    jvm_args = [
                         jvm_path,
                         f"-Djava.class.path={self.jar_path}",
                         "-Xmx512m",  # 设置最大堆内存
                         "-Xms256m",  # 设置初始堆内存
                         "-Djava.awt.headless=true",  # 启用headless模式
-                        convertStrings=False
-                    )
+                        "-Djava.library.path=" + os.path.dirname(jvm_path),  # 添加库路径
+                    ]
+
+                    app_logger.info(f"JVM args: {jvm_args}")
+                    jpype.startJVM(*jvm_args, convertStrings=False)
                     app_logger.info("jpype.startJVM completed successfully")
                 except jpype.JVMNotSupportedException as e:
                     app_logger.error(f"JVM not supported: {str(e)}")
