@@ -109,9 +109,10 @@ async def add_adjustment(add_adjustment: CommissionStaffCreate, db: AsyncSession
 
     except SQLAlchemyError as e:
         app_logger.error(f"add_adjustment An error occurred while fetching targets: {str(e)}")
-        return {"code": 500, "msg": "An error occurred while fetching targets"}
+        return {"code": 500, "msg": f"add_adjustment An error occurred while fetching targets: {str(e)}"}
     except Exception as e:
-        return {"code": 500, "msg": "An error occurred while fetching targets"}
+        app_logger.error(f"add_adjustment An error occurred while fetching targets: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred while fetching targets {str(e)}"}
 
 
 @router.post("/batch_Approved")
