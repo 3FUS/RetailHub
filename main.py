@@ -14,74 +14,74 @@ from app.utils.logger import app_logger
 from contextlib import asynccontextmanager
 import asyncio
 
+#
+# async def init_jvm_async():
+#     """异步初始化JVM"""
+#     loop = asyncio.get_event_loop()
+#     try:
+#         password_handler = get_password_handler()
+#         # 在线程池中运行CPU密集型任务，设置超时时间
+#         app_logger.info("Starting JVM initialization in thread pool")
+#         success = await asyncio.wait_for(
+#             loop.run_in_executor(None, password_handler.start_jvm),
+#             timeout=120.0  # 增加超时时间到120秒
+#         )
+#         if success:
+#             app_logger.info("JVM initialized successfully")
+#         else:
+#             app_logger.error("JVM initialization failed")
+#             # 添加更详细的错误信息
+#             if hasattr(password_handler, 'jvm_started'):
+#                 app_logger.error(f"JVM started flag: {password_handler.jvm_started}")
+#
+#             # 如果JVM启动失败，记录更多信息
+#             app_logger.error("Detailed JVM status:")
+#             app_logger.error(f"  jvm_started: {getattr(password_handler, 'jvm_started', 'N/A')}")
+#             app_logger.error(f"  encoder: {getattr(password_handler, 'encoder', 'N/A')}")
+#             app_logger.error(f"  jar_path: {getattr(password_handler, 'jar_path', 'N/A')}")
+#     except asyncio.TimeoutError:
+#         app_logger.error("JVM initialization timed out")
+#     except Exception as e:
+#         app_logger.error(f"JVM initialization error: {e}")
+#         app_logger.error(f"JVM initialization error type: {type(e)}")
+#         import traceback
+#         app_logger.error(f"JVM initialization traceback: {traceback.format_exc()}")
+#
+#
+# @asynccontextmanager
+# async def lifespan(app: FastAPI):
+#     # 启动事件
+#     app_logger.info("Starting application lifespan")
+#
+#     # 在后台初始化JVM，不影响应用启动
+#     jvm_task = asyncio.create_task(init_jvm_async())
+#
+#     # 等待应用程序完全启动
+#     await asyncio.sleep(2)
+#
+#     yield  # 应用程序运行期间
+#
+#     # 关闭事件
+#     try:
+#         app_logger.info("Waiting for JVM initialization to complete")
+#         # 等待JVM初始化任务完成，但设置超时
+#         await asyncio.wait_for(jvm_task, timeout=120.0)  # 增加超时时间
+#
+#         app_logger.info("Shutting down JVM")
+#         password_handler = get_password_handler()
+#         if password_handler.jvm_started:
+#             password_handler.shutdown_jvm()
+#             app_logger.info("JVM资源已释放")
+#         else:
+#             app_logger.info("JVM was not started, no need to shut down")
+#     except asyncio.TimeoutError:
+#         app_logger.warning("等待JVM初始化超时，继续应用关闭过程")
+#     except Exception as e:
+#         app_logger.error(f"JVM资源释放失败：{e}")
 
-async def init_jvm_async():
-    """异步初始化JVM"""
-    loop = asyncio.get_event_loop()
-    try:
-        password_handler = get_password_handler()
-        # 在线程池中运行CPU密集型任务，设置超时时间
-        app_logger.info("Starting JVM initialization in thread pool")
-        success = await asyncio.wait_for(
-            loop.run_in_executor(None, password_handler.start_jvm),
-            timeout=120.0  # 增加超时时间到120秒
-        )
-        if success:
-            app_logger.info("JVM initialized successfully")
-        else:
-            app_logger.error("JVM initialization failed")
-            # 添加更详细的错误信息
-            if hasattr(password_handler, 'jvm_started'):
-                app_logger.error(f"JVM started flag: {password_handler.jvm_started}")
-
-            # 如果JVM启动失败，记录更多信息
-            app_logger.error("Detailed JVM status:")
-            app_logger.error(f"  jvm_started: {getattr(password_handler, 'jvm_started', 'N/A')}")
-            app_logger.error(f"  encoder: {getattr(password_handler, 'encoder', 'N/A')}")
-            app_logger.error(f"  jar_path: {getattr(password_handler, 'jar_path', 'N/A')}")
-    except asyncio.TimeoutError:
-        app_logger.error("JVM initialization timed out")
-    except Exception as e:
-        app_logger.error(f"JVM initialization error: {e}")
-        app_logger.error(f"JVM initialization error type: {type(e)}")
-        import traceback
-        app_logger.error(f"JVM initialization traceback: {traceback.format_exc()}")
 
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # 启动事件
-    app_logger.info("Starting application lifespan")
-
-    # 在后台初始化JVM，不影响应用启动
-    jvm_task = asyncio.create_task(init_jvm_async())
-
-    # 等待应用程序完全启动
-    await asyncio.sleep(2)
-
-    yield  # 应用程序运行期间
-
-    # 关闭事件
-    try:
-        app_logger.info("Waiting for JVM initialization to complete")
-        # 等待JVM初始化任务完成，但设置超时
-        await asyncio.wait_for(jvm_task, timeout=120.0)  # 增加超时时间
-
-        app_logger.info("Shutting down JVM")
-        password_handler = get_password_handler()
-        if password_handler.jvm_started:
-            password_handler.shutdown_jvm()
-            app_logger.info("JVM资源已释放")
-        else:
-            app_logger.info("JVM was not started, no need to shut down")
-    except asyncio.TimeoutError:
-        app_logger.warning("等待JVM初始化超时，继续应用关闭过程")
-    except Exception as e:
-        app_logger.error(f"JVM资源释放失败：{e}")
-
-
-
-app = FastAPI(lifespan=lifespan)
+app = FastAPI()
 # 配置CORS
 app.add_middleware(
     CORSMiddleware,
