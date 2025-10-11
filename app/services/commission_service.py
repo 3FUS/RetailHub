@@ -703,7 +703,6 @@ class CommissionService:
             app_logger.info(f"开始为店铺 {store_code} 在财月 {fiscal_month} 计算佣金")
 
             # 1. 获取店铺类型和数据
-            app_logger.debug(f"正在获取店铺 {store_code} 的基本信息")
             store_result = await db.execute(
                 select(
                     TargetStoreMain.store_type,
