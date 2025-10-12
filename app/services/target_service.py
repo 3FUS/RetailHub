@@ -1,6 +1,6 @@
 from collections import defaultdict
 
-from sqlalchemy import String, func
+from sqlalchemy import String, func,null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -736,15 +736,21 @@ class TargetStaffService:
             )
             store_target_record = result_store.fetchone()
 
-            store_target_value = float(
-                store_target_record.target_value) if store_target_record and store_target_record.target_value is not None else 0.0
-
-            store_sales_value = float(
-                store_target_record.sales_value) if store_target_record and store_target_record.sales_value is not None else 0.0
-
-            staff_status = store_target_record.staff_status
-            store_status = store_target_record.store_status
-            commission_status = store_target_record.commission_status
+            if store_target_record:
+                store_target_value = float(
+                    store_target_record.target_value) if store_target_record.target_value is not None else 0.0
+                store_sales_value = float(
+                    store_target_record.sales_value) if store_target_record.sales_value is not None else 0.0
+                staff_status = store_target_record.staff_status
+                store_status = store_target_record.store_status
+                commission_status = store_target_record.commission_status
+            else:
+                # 当没有找到对应记录时设置默认值
+                store_target_value = 0.0
+                store_sales_value = 0.0
+                staff_status = None
+                store_status = None
+                commission_status = None
 
             # 获取财月的日期范围
             date_range_result = await db.execute(
@@ -760,35 +766,67 @@ class TargetStaffService:
             if date_range and date_range.min_date and date_range.max_date:
                 fiscal_period = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
 
-            result = await db.execute(
-                select(
-                    StaffModel.avatar,
-                    StaffModel.staff_code,
-                    StaffModel.first_name,
-                    StaffModel.position.label('staff_position'),  # 从StaffModel获取position
-                    StaffModel.salary_coefficient.label('staff_salary_coefficient'),  # 从StaffModel获取salary_coefficient
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.actual_attendance,
-                    StaffAttendanceModel.position.label('attendance_position'),  # 从StaffAttendanceModel获取position
-                    StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
-                    # 从StaffAttendanceModel获取salary_coefficient
-                    StaffAttendanceModel.target_value_ratio,
-                    StaffAttendanceModel.sales_value,
-                    StaffAttendanceModel.deletable
-                )
-                    .select_from(
-                    StaffModel.__table__.join(
-                        StaffAttendanceModel.__table__,
-                        (StaffModel.staff_code == StaffAttendanceModel.staff_code) &
-                        (StaffAttendanceModel.fiscal_month == fiscal_month),
-                        isouter=True
-                    )
-                )
+            attendance_check_result = await db.execute(
+                select(func.count()).select_from(StaffAttendanceModel)
                     .where(
-                    StaffModel.store_code == store_code,
-                    StaffModel.avatar.isnot(None)
+                    StaffAttendanceModel.fiscal_month == fiscal_month,
+                    StaffAttendanceModel.store_code == store_code
                 )
             )
+            attendance_exists = attendance_check_result.scalar() > 0
+
+            if attendance_exists:
+                # 有数据存在，使用inner join
+                result = await db.execute(
+                    select(
+                        StaffModel.avatar,
+                        StaffModel.staff_code,
+                        StaffModel.first_name,
+                        StaffModel.state,
+                        StaffModel.position.label('staff_position'),
+                        StaffModel.salary_coefficient.label('staff_salary_coefficient'),
+                        StaffAttendanceModel.expected_attendance,
+                        StaffAttendanceModel.actual_attendance,
+                        StaffAttendanceModel.position.label('attendance_position'),
+                        StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
+                        StaffAttendanceModel.target_value_ratio,
+                        StaffAttendanceModel.sales_value,
+                        StaffAttendanceModel.deletable
+                    )
+                        .select_from(
+                        StaffModel.__table__.join(
+                            StaffAttendanceModel.__table__,
+                            (StaffModel.staff_code == StaffAttendanceModel.staff_code)
+                        )
+                    )
+                        .where(
+                        StaffModel.store_code == store_code,
+                        StaffAttendanceModel.fiscal_month == fiscal_month
+                    )
+                )
+            else:
+                # 没有数据存在，直接查询StaffModel单表
+                result = await db.execute(
+                    select(
+                        StaffModel.avatar,
+                        StaffModel.staff_code,
+                        StaffModel.first_name,
+                        StaffModel.state,
+                        StaffModel.position.label('staff_position'),
+                        StaffModel.salary_coefficient.label('staff_salary_coefficient'),
+                        null().label('expected_attendance'),
+                        null().label('actual_attendance'),
+                        null().label('attendance_position'),
+                        null().label('attendance_salary_coefficient'),
+                        null().label('target_value_ratio'),
+                        null().label('sales_value'),
+                        cast(0, type_=Integer).label('deletable')
+                    )
+                        .where(
+                        StaffModel.store_code == store_code,
+                        StaffModel.state == 'A'
+                    )
+                )
             staff_attendance_data = result.all()
 
             # total_target_value = sum(
