@@ -11,6 +11,7 @@ from app.database import get_db
 from app.core.security import get_current_user
 
 from app.utils.logger import app_logger
+
 router = APIRouter()
 
 
@@ -143,7 +144,7 @@ async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSess
                                current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code)
-        return {"code": 200, "data": data}
+        return {"code": 200, "data": data['data'], "header_info": data['header_info']}
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

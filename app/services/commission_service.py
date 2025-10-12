@@ -16,6 +16,7 @@ from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
 
+
 class CommissionRPTService:
 
     @staticmethod
@@ -777,6 +778,17 @@ class CommissionService:
             positions = list(set(staff.position for staff in staff_attendances))
             app_logger.debug(f"涉及的岗位类型: {positions}")
 
+            position_actual_attendance = {}
+            for staff in staff_attendances:
+                position = staff.position
+                actual_attendance = getattr(staff, 'actual_attendance', 0) or 0
+                if position in position_actual_attendance:
+                    position_actual_attendance[position] += actual_attendance
+                else:
+                    position_actual_attendance[position] = actual_attendance
+
+            app_logger.debug(f"岗位对应的实际勤天数: {position_actual_attendance}")
+
             rule_assignment_result = await db.execute(
                 select(
                     CommissionRuleAssignmentModel.position,
@@ -924,11 +936,20 @@ class CommissionService:
                         actual_attendance = staff.actual_attendance or 0
 
                         if expected_attendance > 0:
-                            attendance_factor = actual_attendance / expected_attendance
-                            commission_amount = commission_amount * attendance_factor
-                            app_logger.debug(
-                                f"考虑出勤率调整: {commission_amount} * ({actual_attendance}/{expected_attendance}) = {commission_amount}")
+                            if rule_info.rule_basis == 'store':
+                                total_attendance = position_actual_attendance[staff.position]
+                                if total_attendance > 0:
+                                    attendance_factor = actual_attendance / total_attendance
+                                    commission_amount = commission_amount * attendance_factor
+                                app_logger.debug(
+                                    f"考虑出勤率调整店提: {commission_amount} * ({actual_attendance}/{total_attendance})")
+                            else:
+                                attendance_factor = actual_attendance / expected_attendance
+                                commission_amount = commission_amount * attendance_factor
+                                app_logger.debug(
+                                    f"考虑出勤率调整incentive: {commission_amount} * ({actual_attendance}/{expected_attendance})")
                         else:
+                            commission_amount = 0
                             app_logger.warning(f"员工 {staff.staff_code} 应出勤为0，不应用出勤率调整")
 
                     # 最低保障金额

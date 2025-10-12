@@ -3,6 +3,8 @@ from collections import defaultdict
 from sqlalchemy import String, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+
+from app.models.commission import CommissionStoreModel
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.target import TargetStoreUpdate, \
@@ -712,15 +714,51 @@ class TargetStaffService:
     async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str):
         try:
             result_store = await db.execute(
-                select(TargetStoreMain.target_value)
+                select(
+                    TargetStoreMain.target_value,
+                    TargetStoreMain.sales_value,
+                    TargetStoreMain.store_status,
+                    TargetStoreMain.staff_status,
+                    CommissionStoreModel.status.label('commission_status')  # 获取佣金状态
+                )
+                    .select_from(
+                    TargetStoreMain.__table__.join(
+                        CommissionStoreModel.__table__,
+                        (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
+                        (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month),
+                        isouter=True  # left join
+                    )
+                )
                     .where(
                     TargetStoreMain.fiscal_month == fiscal_month,
                     TargetStoreMain.store_code == store_code
                 )
             )
             store_target_record = result_store.fetchone()
+
             store_target_value = float(
                 store_target_record.target_value) if store_target_record and store_target_record.target_value is not None else 0.0
+
+            store_sales_value = float(
+                store_target_record.sales_value) if store_target_record and store_target_record.sales_value is not None else 0.0
+
+            staff_status = store_target_record.staff_status
+            store_status = store_target_record.store_status
+            commission_status = store_target_record.commission_status
+
+            # 获取财月的日期范围
+            date_range_result = await db.execute(
+                select(
+                    func.min(DimensionDayWeek.actual_date).label('min_date'),
+                    func.max(DimensionDayWeek.actual_date).label('max_date')
+                )
+                    .where(DimensionDayWeek.fiscal_month == fiscal_month)
+            )
+            date_range = date_range_result.fetchone()
+
+            fiscal_period = ""
+            if date_range and date_range.min_date and date_range.max_date:
+                fiscal_period = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
 
             result = await db.execute(
                 select(
@@ -792,7 +830,17 @@ class TargetStaffService:
                     "deletable": row.deletable
                 })
 
-            return staff_attendance_list
+            return {
+                "data": staff_attendance_list,
+                "header_info": {
+                    "store_target_value": store_target_value,
+                    "store_sales_value": store_sales_value,
+                    "fiscal_period": fiscal_period,  # 新增的财月日期范围
+                    "staff_status": staff_status,
+                    "store_status": store_status,
+                    "commission_status": commission_status
+                }
+            }
 
         except Exception as e:
             app_logger.error(
@@ -921,4 +969,3 @@ class TargetStaffService:
             app_logger.error(f"Error in update_staff: {str(e)}")
             await db.rollback()
             raise e
-
