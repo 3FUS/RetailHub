@@ -9,6 +9,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.core.security import get_current_user
 
 from app.utils.logger import app_logger
+
 router = APIRouter()
 
 
@@ -47,7 +48,8 @@ async def get_commissions_by_key(fiscal_month: str, key_word: str = None, status
         data = await CommissionService.get_all_commissions_by_key(role_code, fiscal_month, key_word, status, db)
         app_logger.info(f"get_commissions_by_key: {role_code} {fiscal_month} {key_word}")
         return {"code": 200, "data": data['data'], "status_counts": data['status_counts'],
-                "field_translations": data['field_translations']}
+                "field_translations": data['field_translations'],
+                "MonthEnd": data['MonthEnd']}
 
     except SQLAlchemyError as e:
         app_logger.error(f"get_commissions_by_key An error occurred while fetching targets: {str(e)}")
@@ -170,3 +172,19 @@ async def up_fiscal_period(request: FiscalPeriodUpdate, db: AsyncSession = Depen
     except Exception as e:
         app_logger.error(f"update_fiscal_period An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": "error update_fiscal_period"}
+
+
+#
+@router.post("/month_end")
+async def add_month_end(fiscal_month: str, db: AsyncSession = Depends(get_db),
+                        current_user: dict = Depends(get_current_user)):
+    try:
+        role_code = current_user['user_code']
+        result = await CommissionService.add_month_end(db, fiscal_month,role_code)
+        return {"code": 200, "data": result, "msg": "Month end record created/updated successfully"}
+    except SQLAlchemyError as e:
+        app_logger.error(f"add_month_end Database error: {str(e)}")
+        return {"code": 500, "msg": "Database error occurred while processing month end"}
+    except Exception as e:
+        app_logger.error(f"add_month_end An error occurred: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred while processing month end: {str(e)}"}

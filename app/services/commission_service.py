@@ -3,7 +3,7 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.commission import CommissionStaffModel, CommissionStoreModel, CommissionRuleModel, \
-    CommissionRuleAssignmentModel, CommissionRuleDetailModel
+    CommissionRuleAssignmentModel, CommissionRuleDetailModel, CommissionMainModel
 from app.models.dimension import StoreModel, DimensionDayWeek, RoleOrgJoin
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.commission import CommissionCreate, CommissionUpdate, CommissionStaffCreate, BatchApprovedCommission
@@ -582,12 +582,14 @@ class CommissionService:
                 "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
             }
 
-            return {"data": formatted_commissions, "status_counts": status_count_dict,
-                    "field_translations": field_translations}
+            return {"data": formatted_commissions,
+                    "status_counts": status_count_dict,
+                    "field_translations": field_translations,
+                    "MonthEnd": 0}
 
         except Exception as e:
             # 记录异常信息（在实际应用中应该使用日志记录器）
-            print(f"Error in get_all_commissions_by_key: {str(e)}")
+            app_logger.error(f"Error in get_all_commissions_by_key: {str(e)}")
             # 抛出异常以便上层处理
             raise e
 
@@ -1038,3 +1040,37 @@ class CommissionService:
             Commission_store.updated_at = datetime.utcnow()
             await db.commit()
             return Commission_store
+
+    @staticmethod
+    async def add_month_end(db: AsyncSession, fiscal_month: str,role_code:str):
+        try:
+            # 查询是否存在相同fiscal_month的记录
+            result = await db.execute(
+                select(CommissionMainModel)
+                    .where(CommissionMainModel.fiscal_month == fiscal_month)
+            )
+            existing_record = result.scalar_one_or_none()
+
+            if existing_record:
+                # 如果记录存在，更新month_end为1
+                existing_record.month_end = 1
+                existing_record.updated_at = datetime.now()
+                month_end_record = existing_record
+            else:
+                # 如果记录不存在，创建新记录
+                month_end_record = CommissionMainModel(
+                    fiscal_month=fiscal_month,
+                    month_end=1,
+                    created_at=datetime.now()
+                )
+                db.add(month_end_record)
+
+            await db.commit()
+            await db.refresh(month_end_record)
+
+            return month_end_record
+
+        except Exception as e:
+            app_logger.error(f"Error in add_month_end: {str(e)}")
+            await db.rollback()
+            raise e

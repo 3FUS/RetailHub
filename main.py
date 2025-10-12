@@ -155,16 +155,16 @@ async def init_db():
     async with engine.begin() as conn:
         # 导入所有模型后创建所有表
         await conn.run_sync(CommissionBase.metadata.create_all)
-        await conn.run_sync(StaffBase.metadata.create_all)
-        await conn.run_sync(TargetBase.metadata.create_all)
-        await conn.run_sync(BudgetBase.metadata.create_all)
-        await conn.run_sync(SalesBase.metadata.create_all)
+        # await conn.run_sync(StaffBase.metadata.create_all)
+        # await conn.run_sync(TargetBase.metadata.create_all)
+        # await conn.run_sync(BudgetBase.metadata.create_all)
+        # await conn.run_sync(SalesBase.metadata.create_all)
 
     print("Database tables created successfully!")
 
 
 if __name__ == "__main__":
-    # asyncio.run(init_db())
+    asyncio.run(init_db())
     import uvicorn
 
     uvicorn.run(app, host="127.0.0.1", port=8002, log_level="info")

@@ -345,7 +345,8 @@ class TargetStoreService:
 
         return {
             "data": formatted_data,
-            "field_translations": field_translations
+            "field_translations": field_translations,
+            "MonthEnd": 0
         }
 
     @staticmethod

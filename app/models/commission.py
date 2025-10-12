@@ -4,6 +4,16 @@ from datetime import datetime
 
 Base = declarative_base()
 
+
+class CommissionMainModel(Base):
+    __tablename__ = "commissions_main"
+    fiscal_month = Column(String(50), primary_key=True)
+    month_end = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.now)
+    created_by = Column(String(50))
+    updated_at = Column(DateTime, default=datetime.now)
+    updated_by = Column(String(50))
+
 class CommissionStoreModel(Base):
     __tablename__ = "commissions_store"
 
@@ -17,6 +27,16 @@ class CommissionStoreModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     remarks = Column(Text)
     version = Column(Integer, default=1)
+    # saved_by = Column(String(30))
+    # saved_at = Column(DateTime, default=datetime.utcnow)
+    # submit_by = Column(String(30))
+    # submit_at = Column(DateTime)
+    # approved_by = Column(String(30))  # 审核人
+    # approved_at = Column(DateTime)  # 审核时间
+    # rejected_by = Column(String(30))
+    # rejected_at = Column(DateTime)
+    # reject_remarks = Column(Text)
+
 
 class CommissionStaffModel(Base):
     __tablename__ = "commissions_staff"

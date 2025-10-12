@@ -23,7 +23,9 @@ async def get_targets(fiscal_month: str, key_word: str = None,
     try:
         role_code = current_user['user_code']
         data = await TargetStoreService.get_all_target_stores_by_key(role_code, fiscal_month, key_word, db)
-        return {"code": 200, "data": data['data'], "field_translations": data['field_translations']}
+        return {"code": 200, "data": data['data'],
+                "field_translations": data['field_translations'],
+                "MonthEnd": data['MonthEnd']}
 
     except SQLAlchemyError as e:
         raise HTTPException(
