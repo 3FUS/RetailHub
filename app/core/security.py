@@ -1,4 +1,3 @@
-# /Users/fu/Downloads/XY/TB/tbcommision/app/core/security.py
 
 from datetime import datetime, timedelta
 from typing import Optional, Union
