@@ -1,7 +1,6 @@
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from starlette import status
+from fastapi.security import OAuth2PasswordRequestForm
 
 from app.routes import target, commission, menu, dimension, excel_upload, report
 
@@ -30,6 +29,7 @@ app.include_router(dimension.router, prefix="/dimension")
 app.include_router(excel_upload.router, prefix="/excel_upload")
 app.include_router(report.router, prefix="/report")
 
+
 @app.post("/retail_hub_api/token")
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), session=Depends(get_sqlserver_db)):
     user = await authenticate_user(session, form_data.username, form_data.password)
@@ -56,7 +56,6 @@ from app.models.target import Base as TargetBase
 from app.models.budget import Base as BudgetBase
 from app.models.sales import Base as SalesBase
 from app.database import engine
-
 
 
 async def init_db():
