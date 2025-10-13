@@ -16,7 +16,8 @@ def build_store_permission_query(role_code: str):
         select(
             StoreModel.store_code,
             StoreModel.store_name,
-            StoreModel.store_type
+            StoreModel.store_type,
+            StoreModel.inactive_flag
         )
             # level_1 权限检查 (manage_channel)
             .where(

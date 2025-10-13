@@ -6,7 +6,8 @@ from jose import JWTError, jwt
 from app.utils.logger import app_logger
 from app.models.dimension import SysUser
 
-from app.core.jar_pwd_handler import get_password_handler
+# from app.core.jar_pwd_handler import get_password_handler
+from app.core.python_ssha2_hasher import Ssha2Hasher
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="retail_hub_api/token")
 SECRET_KEY = "secret"
@@ -32,6 +33,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
 
 
 
+_password_hasher = Ssha2Hasher()
 
 async def verify_password(session: Session, user_code: str, user_password: str) -> bool:
     # 查询用户
@@ -40,10 +42,15 @@ async def verify_password(session: Session, user_code: str, user_password: str) 
     if not result:
         app_logger.warning(f"user not found: {user_code}")
         return False
+    # return True
+    hashed_password = result[0]
 
-    # 获取数据库中的哈希密码
-    return True
-    # hashed_password = result[0]
+    hasher = Ssha2Hasher()
+    # 复用全局 hasher 实例
+    verify_result = _password_hasher.verify(hashed_password, user_password)
+
+    return verify_result
+
     #
     # # 使用JAR包中的方法验证密码
     # password_handler = get_password_handler()

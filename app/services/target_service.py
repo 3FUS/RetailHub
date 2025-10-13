@@ -326,6 +326,7 @@ class TargetStoreService:
             store_alias.c.store_code,
             store_alias.c.store_name,
             store_alias.c.store_type,
+            store_alias.c.inactive_flag,
             TargetStoreMain.target_value,
             TargetStoreMain.store_status,
             TargetStoreMain.staff_status
@@ -357,6 +358,7 @@ class TargetStoreService:
                 "staff_status": row.staff_status
             }
             for row in target_stores
+            if (getattr(row, 'inactive_flag', None) == 0 or row.target_value is not None)
         ]
 
         # 添加字段名称的中英文翻译
