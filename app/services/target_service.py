@@ -1,10 +1,10 @@
 from collections import defaultdict
 
-from sqlalchemy import String, func,null, cast, Integer
+from sqlalchemy import String, func, null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.commission import CommissionStoreModel
+from app.models.commission import CommissionStoreModel, CommissionMainModel
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.target import TargetStoreUpdate, \
@@ -198,7 +198,8 @@ class TargetStoreService:
 
     # 在 TargetStoreService 类中添加以下方法
     @staticmethod
-    async def batch_update_target_value(db: AsyncSession, target_updates: list):
+    async def batch_update_target_value(db: AsyncSession, target_updates: list
+                                        ):
         """
         批量更新 TargetStoreMain 的 target_value
 
@@ -255,7 +256,7 @@ class TargetStoreService:
 
     @staticmethod
     async def update_target_store(db: AsyncSession, store_code: str, fiscal_month: str,
-                                  target_data: TargetStoreUpdate):
+                                  target_data: TargetStoreUpdate, role_code: str = 'system'):
         result = await db.execute(select(TargetStoreMain).where(
             TargetStoreMain.store_code == store_code,
             TargetStoreMain.fiscal_month == fiscal_month))
@@ -282,10 +283,35 @@ class TargetStoreService:
             await db.refresh(target_store)
             return target_store
 
-        for key, value in target_data.dict(exclude_unset=True).items():
+        now = datetime.now()
+        target_dict = target_data.dict(exclude_unset=True)
+
+        # 处理 staff_status 相关字段
+        if 'staff_status' in target_dict:
+            staff_status = target_dict['staff_status']
+            if staff_status == "saved":
+                target_store.staff_saved_by = role_code
+                target_store.staff_saved_at = now
+            elif staff_status == "submitted":
+                target_store.staff_submit_by = role_code
+                target_store.staff_submit_at = now
+
+        # 处理 store_status 相关字段
+        if 'store_status' in target_dict:
+            store_status = target_dict['store_status']
+            if store_status == "saved":
+                target_store.store_saved_by = role_code
+                target_store.store_saved_at = now
+            elif store_status == "submitted":
+                target_store.store_submit_by = role_code
+                target_store.store_submit_at = now
+
+        # 更新其他字段
+        for key, value in target_dict.items():
             setattr(target_store, key, value)
 
-        target_store.updated_at = datetime.utcnow()
+        target_store.updated_at = now
+
         await db.commit()
         await db.refresh(target_store)
         return target_store
@@ -343,14 +369,22 @@ class TargetStoreService:
             "staff_status": {"en": "Staff Status", "zh": "员工目标"}
         }
 
+        main_result = await db.execute(
+            select(CommissionMainModel.month_end)
+                .where(CommissionMainModel.fiscal_month == fiscal_month)
+        )
+        main_record = main_result.fetchone()
+        month_end_value = main_record.month_end if main_record else 0
+
         return {
             "data": formatted_data,
             "field_translations": field_translations,
-            "MonthEnd": 0
+            "MonthEnd": month_end_value
         }
 
     @staticmethod
-    async def batch_approved_target_by_store_codes(db: AsyncSession, request: BatchApprovedTarget) -> bool:
+    async def batch_approved_target_by_store_codes(db: AsyncSession, request: BatchApprovedTarget,
+                                                   role_code: str = 'system') -> bool:
         try:
             # 查询匹配的commission记录
             fiscal_month = request.fiscal_month
@@ -369,8 +403,27 @@ class TargetStoreService:
             for t in targets:
                 if staff_status is not None:
                     t.staff_status = staff_status
+                    if staff_status == "approved":
+                        t.staff_approved_by = role_code
+                        t.staff_approved_at = datetime.now()
+                    elif staff_status == "rejected":
+                        t.staff_rejected_by = role_code
+                        t.staff_rejected_at = datetime.now()
+                        t.staff_reject_remarks = request.remarks
                 if store_status is not None:
                     t.store_status = store_status
+
+                    if store_status == "approved":
+                        t.store_approved_by = role_code
+                        t.store_approved_at = datetime.now()
+                    elif store_status == "rejected":
+                        t.store_rejected_by = role_code
+                        t.store_rejected_at = datetime.now()
+                        t.store_reject_remarks = request.remarks
+                    elif store_status == "submitted":
+                        t.store_submit_by = role_code
+                        t.store_submit_at = datetime.now()
+
                 t.updated_at = datetime.now()
             await db.commit()
 
@@ -558,7 +611,7 @@ class TargetStoreDailyService:
         )
         target_daily = result.all()
 
-        return [
+        data = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
                 "actual_date": row.actual_date.strftime('%Y-%m-%d') if row.actual_date else None,
@@ -569,6 +622,15 @@ class TargetStoreDailyService:
             }
             for row in target_daily
         ]
+
+        main_result = await db.execute(
+            select(CommissionMainModel.month_end)
+                .where(CommissionMainModel.fiscal_month == fiscal_month)
+        )
+        main_record = main_result.fetchone()
+        month_end_value = main_record.month_end if main_record else 0
+
+        return {"data": data, "MonthEnd": month_end_value}
 
     @staticmethod
     async def update_target_monthly_percentage(db: AsyncSession, store_code: str, fiscal_month: str):
@@ -644,7 +706,7 @@ class TargetStoreDailyService:
 
     @staticmethod
     async def create_target_store_daily(db: AsyncSession,
-                                        target_data: TargetStoreDailyCreate):
+                                        target_data: TargetStoreDailyCreate, role_code: str = 'system'):
 
         created_targets = []
         for day_data in target_data.days:
@@ -682,7 +744,7 @@ class TargetStoreDailyService:
             creator_code=target_data.creator_code
         )
         await TargetStoreService.update_target_store(db, target_data.store_code, target_data.fiscal_month,
-                                                     target_store_update)
+                                                     target_store_update, role_code)
         # 刷新所有创建的对象以获取数据库生成的值
         for target in created_targets:
             await db.refresh(target)
@@ -720,7 +782,34 @@ class TargetStaffService:
                     TargetStoreMain.sales_value,
                     TargetStoreMain.store_status,
                     TargetStoreMain.staff_status,
-                    CommissionStoreModel.status.label('commission_status')  # 获取佣金状态
+                    TargetStoreMain.store_saved_by,
+                    TargetStoreMain.store_saved_at,
+                    TargetStoreMain.store_submit_by,
+                    TargetStoreMain.store_submit_at,
+                    TargetStoreMain.store_approved_by,
+                    TargetStoreMain.store_approved_at,
+                    TargetStoreMain.store_rejected_by,
+                    TargetStoreMain.store_rejected_at,
+                    TargetStoreMain.store_reject_remarks,
+                    TargetStoreMain.staff_saved_by,
+                    TargetStoreMain.staff_saved_at,
+                    TargetStoreMain.staff_submit_by,
+                    TargetStoreMain.staff_submit_at,
+                    TargetStoreMain.staff_approved_by,
+                    TargetStoreMain.staff_approved_at,
+                    TargetStoreMain.staff_rejected_by,
+                    TargetStoreMain.staff_rejected_at,
+                    TargetStoreMain.staff_reject_remarks,
+                    CommissionStoreModel.status.label('commission_status'),  # 获取佣金状态
+                    CommissionStoreModel.saved_by,
+                    CommissionStoreModel.saved_at,
+                    CommissionStoreModel.submit_by,
+                    CommissionStoreModel.submit_at,
+                    CommissionStoreModel.approved_by,
+                    CommissionStoreModel.approved_at,
+                    CommissionStoreModel.rejected_by,
+                    CommissionStoreModel.rejected_at,
+                    CommissionStoreModel.reject_remarks
                 )
                     .select_from(
                     TargetStoreMain.__table__.join(
@@ -745,6 +834,39 @@ class TargetStaffService:
                 staff_status = store_target_record.staff_status
                 store_status = store_target_record.store_status
                 commission_status = store_target_record.commission_status
+                commission_status_details = {
+                    'saved_by': store_target_record.saved_by,
+                    'saved_at': store_target_record.saved_at,
+                    'submit_by': store_target_record.submit_by,
+                    'submit_at': store_target_record.submit_at,
+                    'approved_by': store_target_record.approved_by,
+                    'approved_at': store_target_record.approved_at,
+                    'rejected_by': store_target_record.rejected_by,
+                    'rejected_at': store_target_record.rejected_at,
+                    'reject_remarks': store_target_record.reject_remarks
+                }
+                store_status_details = {
+                    'saved_by': store_target_record.store_saved_by,
+                    'saved_at': store_target_record.store_saved_at,
+                    'submit_by': store_target_record.store_submit_by,
+                    'submit_at': store_target_record.store_submit_at,
+                    'approved_by': store_target_record.store_approved_by,
+                    'approved_at': store_target_record.store_approved_at,
+                    'rejected_by': store_target_record.store_rejected_by,
+                    'rejected_at': store_target_record.store_rejected_at,
+                    'reject_remarks': store_target_record.store_reject_remarks
+                }
+                staff_status_details = {
+                    'saved_by': store_target_record.staff_saved_by,
+                    'saved_at': store_target_record.staff_saved_at,
+                    'submit_by': store_target_record.staff_submit_by,
+                    'submit_at': store_target_record.staff_submit_at,
+                    'approved_by': store_target_record.staff_approved_by,
+                    'approved_at': store_target_record.staff_approved_at,
+                    'rejected_by': store_target_record.staff_rejected_by,
+                    'rejected_at': store_target_record.staff_rejected_at,
+                    'reject_remarks': store_target_record.staff_reject_remarks
+                }
             else:
                 # 当没有找到对应记录时设置默认值
                 store_target_value = 0.0
@@ -752,6 +874,9 @@ class TargetStaffService:
                 staff_status = None
                 store_status = None
                 commission_status = None
+                commission_status_details = {}
+                store_status_details = {}
+                staff_status_details = {}
 
             # 获取财月的日期范围
             date_range_result = await db.execute(
@@ -869,6 +994,13 @@ class TargetStaffService:
                     "deletable": row.deletable
                 })
 
+            main_result = await db.execute(
+                select(CommissionMainModel.month_end)
+                    .where(CommissionMainModel.fiscal_month == fiscal_month)
+            )
+            main_record = main_result.fetchone()
+            month_end_value = main_record.month_end if main_record else 0
+
             return {
                 "data": staff_attendance_list,
                 "header_info": {
@@ -876,9 +1008,13 @@ class TargetStaffService:
                     "store_sales_value": store_sales_value,
                     "fiscal_period": fiscal_period,  # 新增的财月日期范围
                     "staff_status": staff_status,
+                    "staff_status_details": staff_status_details,
                     "store_status": store_status,
-                    "commission_status": commission_status
-                }
+                    "store_status_details": store_status_details,
+                    "commission_status": commission_status,
+                    "commission_status_details": commission_status_details
+                },
+                "MonthEnd": month_end_value
             }
 
         except Exception as e:
@@ -889,7 +1025,7 @@ class TargetStaffService:
             raise e
 
     @staticmethod
-    async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate):
+    async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate, user_id: str = 'system'):
 
         created_staff_targets = []
 
@@ -942,10 +1078,10 @@ class TargetStaffService:
             store_code=target_data.store_code,
             fiscal_month=target_data.fiscal_month,
             staff_status=target_data.staff_status,
-            creator_code=target_data.creator_code
+            creator_code=user_id
         )
         await TargetStoreService.update_target_store(db, target_data.store_code, target_data.fiscal_month,
-                                                     target_store_update)
+                                                     target_store_update, user_id)
         # 刷新所有创建的对象以获取数据库生成的值
         for target in created_staff_targets:
             await db.refresh(target)

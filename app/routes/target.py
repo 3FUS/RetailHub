@@ -79,7 +79,8 @@ async def get_week_target(store_code: str, fiscal_month: str, db: AsyncSession =
 async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: AsyncSession = Depends(get_db),
                               current_user: dict = Depends(get_current_user)):
     try:
-        data = await TargetStoreDailyService.create_target_store_daily(db, TargetStoreDaily)
+        role_code = current_user['user_code']
+        data = await TargetStoreDailyService.create_target_store_daily(db, TargetStoreDaily, role_code)
         # if TargetStoreDaily.store_status == "submitted":
         #     await TargetStoreService.update_target_store_daily(db, TargetStoreDaily.store_code,
         #                                                        TargetStoreDaily.fiscal_month)
@@ -104,7 +105,7 @@ async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession 
                            current_user: dict = Depends(get_current_user)):
     try:
         target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month)
-        return {"code": 200, "data": target_data}
+        return {"code": 200, "data": target_data['data'], "MonthEnd": target_data['MonthEnd']}
     except SQLAlchemyError as e:
         app_logger.error(f"get_daily_target SQLAlchemyError {str(e)}")
         raise HTTPException(
@@ -146,7 +147,7 @@ async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSess
                                current_user: dict = Depends(get_current_user)):
     try:
         data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code)
-        return {"code": 200, "data": data['data'], "header_info": data['header_info']}
+        return {"code": 200, "data": data['data'], "header_info": data['header_info'], "MonthEnd": data['MonthEnd']}
     except SQLAlchemyError as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -182,6 +183,7 @@ async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = De
                              current_user: dict = Depends(get_current_user)):
     try:
         app_logger.info(f"batch_audit_target {request}")
+        role_code = current_user['user_code']
         await CommissionService.create_commission(db, request.fiscal_month, request.store_codes)
 
         if request.store_status and request.store_status == "approved":
@@ -190,7 +192,7 @@ async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = De
                                                                                request.fiscal_month)
 
         result = await TargetStoreService.batch_approved_target_by_store_codes(
-            db, request
+            db, request, role_code
         )
         app_logger.info(f"batch_audit_target {result}")
         return {"code": 200, "data": result, "msg": f"Successfully target"}

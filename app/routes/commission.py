@@ -23,8 +23,8 @@ async def update_commission(attendance_update: StaffAttendanceUpdate,
                             db: AsyncSession = Depends(get_db),
                             current_user: dict = Depends(get_current_user)):
     try:
-
-        if await CommissionService.update_commission(db, attendance_update):
+        role_code = current_user['user_code']
+        if await CommissionService.update_commission(db, attendance_update, role_code):
             data = await CommissionService.calculate_commissions_for_store(db, attendance_update.store_code,
                                                                            attendance_update.fiscal_month)
             return {"code": 200, "data": data, "msg": "Success"}
@@ -121,8 +121,9 @@ async def add_adjustment(add_adjustment: CommissionStaffCreate, db: AsyncSession
 async def batch_audit_commission(request: BatchApprovedCommission, db: AsyncSession = Depends(get_db),
                                  current_user: dict = Depends(get_current_user)):
     try:
+        role_code = current_user['user_code']
         result = await CommissionService.batch_approved_commission_by_store_codes(
-            db, request
+            db, request, role_code
         )
         return {"code": 200, "data": result, "msg": f"Successfully {request.status} commissions"}
     except ValueError as e:
@@ -180,7 +181,7 @@ async def add_month_end(fiscal_month: str, db: AsyncSession = Depends(get_db),
                         current_user: dict = Depends(get_current_user)):
     try:
         role_code = current_user['user_code']
-        result = await CommissionService.add_month_end(db, fiscal_month,role_code)
+        result = await CommissionService.add_month_end(db, fiscal_month, role_code)
         return {"code": 200, "data": result, "msg": "Month end record created/updated successfully"}
     except SQLAlchemyError as e:
         app_logger.error(f"add_month_end Database error: {str(e)}")

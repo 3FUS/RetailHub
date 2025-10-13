@@ -10,6 +10,7 @@ from app.database import get_sqlserver_db
 from app.utils.logger import app_logger
 from sqlalchemy import text
 
+
 @router.get("/list")
 async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(get_sqlserver_db)):
     # 记录请求开始的日志
@@ -20,7 +21,7 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
 
     # 实际查询SQL
     query = text("""
-           SELECT a.parent_id,a.parent_id_cn, a.id, a.description, a.menu_url, a.menu_name,a.menu_name_cn, a.type,a.icon
+           SELECT a.parent_id,a.parent_id_cn, a.id, a.description, a.menu_url, a.menu_name,a.menu_name_cn, a.type,a.icon,a.parent_icon
            FROM sys_menu a 
            INNER JOIN sys_role_menu_rel b ON a.id = b.menu_rel_id 
            INNER JOIN sys_user_role_rel c ON b.sys_role_id = c.role_rel_id 
@@ -46,7 +47,7 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
     # 按parent_id分组，只处理两级菜单
     menu_dict = {}
     parent_names = {}  # 用于存储parent_id对应的中文名称
-
+    parent_icons = {}
     for row in results:
         if row.type != 'permission':  # 排除权限类型
             menu_item = {
@@ -60,6 +61,7 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
                 menu_dict[row.parent_id] = []
                 # 存储parent_id对应的中文名称
                 parent_names[row.parent_id] = row.parent_id_cn
+                parent_icons[row.parent_id] = row.parent_icon
             menu_dict[row.parent_id].append(menu_item)
 
     app_logger.debug(f"Constructed menu_dict with {len(menu_dict)} parent nodes")
@@ -69,12 +71,13 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
     for parent_id in menu_dict.keys():
         # 使用parent_id_cn作为根菜单的显示名称
         parent_name = parent_names.get(parent_id, str(parent_id))
+        parent_icon = parent_icons.get(parent_id, str(parent_id))
 
         root_menu = {
             "id": parent_id or "0",  # 使用parent_id作为id
             "name_cn": parent_name,  # 使用parent_id_cn作为中文名称
             "name_en": parent_id,  # 使用parent_id_cn作为英文名称
-            "icon": "report",  # 可以根据需要调整
+            "icon": parent_icon,  # 可以根据需要调整
             "children": []
         }
 

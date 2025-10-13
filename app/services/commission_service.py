@@ -331,7 +331,7 @@ class CommissionService:
         }
 
     @staticmethod
-    async def update_commission(db: AsyncSession, attendance_update) -> bool:
+    async def update_commission(db: AsyncSession, attendance_update,role_code: str) -> bool:
         try:
             # 获取传入的参数
             store_code = attendance_update.store_code
@@ -373,6 +373,13 @@ class CommissionService:
                 existing_store.status = attendance_update.staff_status
                 existing_store.updated_at = datetime.now()
 
+                if attendance_update.staff_status == "saved":
+                    existing_store.saved_by = role_code
+                    existing_store.saved_at = datetime.now()
+                elif attendance_update.staff_status == "submitted":
+                    existing_store.submit_by = role_code
+                    existing_store.submit_at = datetime.now()
+
             # 提交更改
             await db.commit()
             # 返回更新结果
@@ -385,7 +392,8 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def batch_approved_commission_by_store_codes(db: AsyncSession, request: BatchApprovedCommission) -> bool:
+    async def batch_approved_commission_by_store_codes(db: AsyncSession, request: BatchApprovedCommission,
+                                                       role_code: str = 'system') -> bool:
         try:
             # 查询匹配的commission记录
             fiscal_month = request.fiscal_month
@@ -403,6 +411,19 @@ class CommissionService:
             for commission in commissions:
                 commission.status = status
                 commission.updated_at = datetime.now()
+                if request.status == "approved":
+                    commission.approved_by = role_code
+                    commission.approved_at = datetime.now()
+                elif request.status == "rejected":
+                    commission.rejected_by = role_code
+                    commission.rejected_at = datetime.now()
+                    commission.reject_remarks = request.remarks
+                elif request.status == "saved":
+                    commission.saved_by = role_code
+                    commission.saved_at = datetime.now()
+                elif request.status == "submitted":
+                    commission.submit_by = role_code
+                    commission.submit_at = datetime.now()
             await db.commit()
 
             return True
@@ -535,6 +556,7 @@ class CommissionService:
                         'store_name': commission.store_name or '',
                         'store_type': commission.store_type or '',
                         'fiscal_period': date_ranges.get(commission.fiscal_period, ''),
+                        'fiscal_period_value': commission.fiscal_period,
                         'status': commission.status or ''
                     })
 
@@ -582,10 +604,17 @@ class CommissionService:
                 "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
             }
 
+            main_result = await db.execute(
+                select(CommissionMainModel.month_end)
+                    .where(CommissionMainModel.fiscal_month == fiscal_month)
+            )
+            main_record = main_result.fetchone()
+            month_end_value = main_record.month_end if main_record else 0
+
             return {"data": formatted_commissions,
                     "status_counts": status_count_dict,
                     "field_translations": field_translations,
-                    "MonthEnd": 0}
+                    "MonthEnd": month_end_value}
 
         except Exception as e:
             # 记录异常信息（在实际应用中应该使用日志记录器）
@@ -962,6 +991,7 @@ class CommissionService:
 
                     # 只有佣金金额大于0时才保存
                     if commission_amount and commission_amount > 0:
+                        commission_amount = round(commission_amount, 2)
                         app_logger.debug(f"为员工 {staff.staff_code} 创建佣金记录: {commission_amount}")
                         commission_record = CommissionStaffModel(
                             fiscal_month=fiscal_month,
@@ -1042,7 +1072,7 @@ class CommissionService:
             return Commission_store
 
     @staticmethod
-    async def add_month_end(db: AsyncSession, fiscal_month: str,role_code:str):
+    async def add_month_end(db: AsyncSession, fiscal_month: str, role_code: str):
         try:
             # 查询是否存在相同fiscal_month的记录
             result = await db.execute(

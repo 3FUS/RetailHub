@@ -27,15 +27,15 @@ class CommissionStoreModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     remarks = Column(Text)
     version = Column(Integer, default=1)
-    # saved_by = Column(String(30))
-    # saved_at = Column(DateTime, default=datetime.utcnow)
-    # submit_by = Column(String(30))
-    # submit_at = Column(DateTime)
-    # approved_by = Column(String(30))  # 审核人
-    # approved_at = Column(DateTime)  # 审核时间
-    # rejected_by = Column(String(30))
-    # rejected_at = Column(DateTime)
-    # reject_remarks = Column(Text)
+    saved_by = Column(String(30))
+    saved_at = Column(DateTime, default=datetime.utcnow)
+    submit_by = Column(String(30))
+    submit_at = Column(DateTime)
+    approved_by = Column(String(30))  # 审核人
+    approved_at = Column(DateTime)  # 审核时间
+    rejected_by = Column(String(30))
+    rejected_at = Column(DateTime)
+    reject_remarks = Column(Text)
 
 
 class CommissionStaffModel(Base):

@@ -23,8 +23,25 @@ class TargetStoreMain(Base):
     creator_code = Column(String(30))
     updated_by = Column(String(30))  # 修改人
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    approved_by = Column(String(30))  # 审核人
-    approved_at = Column(DateTime)  # 审核时间
+    store_saved_by = Column(String(30))
+    store_saved_at = Column(DateTime, default=datetime.utcnow)
+    store_submit_by = Column(String(30))
+    store_submit_at = Column(DateTime)
+    store_approved_by = Column(String(30))  # 审核人
+    store_approved_at = Column(DateTime)  # 审核时间
+    store_rejected_by = Column(String(30))
+    store_rejected_at = Column(DateTime)
+    store_reject_remarks = Column(Text)
+    staff_saved_by = Column(String(30))
+    staff_saved_at = Column(DateTime, default=datetime.utcnow)
+    staff_submit_by = Column(String(30))
+    staff_submit_at = Column(DateTime)
+    staff_approved_by = Column(String(30))  # 审核人
+    staff_approved_at = Column(DateTime)  # 审核时间
+    staff_rejected_by = Column(String(30))
+    staff_rejected_at = Column(DateTime)
+    staff_reject_remarks = Column(Text)
+
 
 
 class TargetStoreWeek(Base):
