@@ -21,7 +21,7 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
 
     # 实际查询SQL
     query = text("""
-           SELECT a.parent_id,a.parent_id_cn, a.id, a.description, a.menu_url, a.menu_name,a.menu_name_cn, a.type,a.icon,a.parent_icon
+           SELECT distinct a.parent_id,a.parent_id_cn, a.id, a.description, a.menu_url, a.menu_name,a.menu_name_cn, a.type,a.icon,a.parent_icon
            FROM sys_menu a 
            INNER JOIN sys_role_menu_rel b ON a.id = b.menu_rel_id 
            INNER JOIN sys_user_role_rel c ON b.sys_role_id = c.role_rel_id 

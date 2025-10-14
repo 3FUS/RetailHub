@@ -41,7 +41,7 @@ class ECSalesModel(Base):
     __tablename__ = "ec_sales"
 
     order_id = Column(String(60), primary_key=True)  # 订单号
-    is_return = Column(Boolean)  # 是否退货
+    is_return = Column(Boolean, primary_key=True)  # 是否退货
     recipient_name = Column(String(60))  # 收件人姓名
     order_source = Column(String(30))  # 订单来源
     payment_method = Column(String(30))  # 支付方式

@@ -1,4 +1,3 @@
-from collections import defaultdict
 
 from sqlalchemy import String, func, null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -13,8 +12,6 @@ from app.schemas.target import TargetStoreUpdate, \
 from app.models.dimension import DimensionDayWeek, StoreModel
 
 from datetime import datetime
-
-# 在 TargetRPTService 类中修改 get_rpt_target_by_store 方法
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
 
@@ -488,7 +485,8 @@ class TargetStoreWeekService:
             select(
                 TargetStoreWeek.week_number,
                 TargetStoreWeek.percentage,
-                TargetStoreWeek.target_value
+                TargetStoreWeek.target_value,
+                TargetStoreWeek.sales_value_ly
             ).where(
                 TargetStoreWeek.store_code == store_code,
                 TargetStoreWeek.fiscal_month == fiscal_month
@@ -500,7 +498,8 @@ class TargetStoreWeekService:
             select(
                 TargetStoreWeek.week_number,
                 TargetStoreWeek.percentage,
-                TargetStoreWeek.target_value
+                TargetStoreWeek.target_value,
+                TargetStoreWeek.sales_value_ly
             ).where(
                 TargetStoreWeek.store_code == store_code,
                 TargetStoreWeek.fiscal_month == fiscal_month_ly
@@ -510,8 +509,9 @@ class TargetStoreWeekService:
         current_list = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
-                "percentage": float(row.percentage) if row.percentage is not None else None,
-                "target_value": float(row.target_value) if row.target_value is not None else None
+                "percentage": row.percentage if row.percentage is not None else None,
+                "target_value": row.target_value if row.target_value is not None else None,
+                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None
             }
             for row in current_weeks
         ]
@@ -519,8 +519,8 @@ class TargetStoreWeekService:
         last_list = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
-                "percentage": float(row.percentage) if row.percentage is not None else None,
-                "target_value": float(row.target_value) if row.target_value is not None else None
+                "percentage": row.percentage if row.percentage is not None else None,
+                "target_value": row.target_value if row.target_value is not None else None
             }
             for row in last_weeks
         ]
@@ -589,6 +589,7 @@ class TargetStoreDailyService:
                 DimensionDayWeek.actual_date,
                 TargetStoreDaily.percentage,
                 TargetStoreDaily.target_value,
+                TargetStoreDaily.sales_value_ly,
                 target_last_year.c.percentage.label('percentage_ly'),
                 target_last_year.c.target_value.label('target_value_ly')
             )
@@ -617,10 +618,11 @@ class TargetStoreDailyService:
             {
                 "week_number": row.week_number if row.week_number is not None else None,
                 "actual_date": row.actual_date.strftime('%Y-%m-%d') if row.actual_date else None,
-                "percentage": float(row.percentage) if row.percentage is not None else None,
-                "target_value": float(row.target_value) if row.target_value is not None else None,
-                "percentage_ly": float(row.percentage_ly) if row.percentage_ly is not None else None,
-                "target_value_ly": float(row.target_value_ly) if row.target_value_ly is not None else None
+                "percentage": row.percentage if row.percentage is not None else None,
+                "target_value": row.target_value if row.target_value is not None else None,
+                "percentage_ly": row.percentage_ly if row.percentage_ly is not None else None,
+                "target_value_ly": row.target_value_ly if row.target_value_ly is not None else None,
+                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None
             }
             for row in target_daily
         ]
