@@ -1053,6 +1053,27 @@ class TargetStaffService:
         # 计算总权重
         total_weight = sum(weights)
 
+        ratios = []
+        if total_weight > 0:
+            for i in range(len(weights)):
+                ratio = round(weights[i] / total_weight, 4)
+                ratios.append(ratio)
+
+            # 调整最后一个员工的比例以确保总和为1
+            if ratios:
+                ratio_sum = sum(ratios[:-1])
+                ratios[-1] = round(1.0 - ratio_sum, 4)
+        else:
+            # 如果总权重为0，则平均分配
+            count = len(target_data.staffs)
+            if count > 0:
+                equal_ratio = round(1.0 / count, 4)
+                ratios = [equal_ratio for _ in range(count)]
+                # 调整最后一个确保总和为1
+                if ratios:
+                    ratio_sum = sum(ratios[:-1])
+                    ratios[-1] = round(1.0 - ratio_sum, 4)
+
         for i, staff_data in enumerate(target_data.staffs):
             result = await db.execute(select(StaffAttendanceModel).where(
                 StaffAttendanceModel.staff_code == staff_data.staff_code,
@@ -1062,8 +1083,8 @@ class TargetStaffService:
             existing_target = result.scalar_one_or_none()
 
             # 计算当前员工的target_value_ratio
-            target_value_ratio = weights[i] / total_weight if total_weight > 0 else 0
-
+            # target_value_ratio = weights[i] / total_weight if total_weight > 0 else 0
+            target_value_ratio = ratios[i] if ratios else 0
             if existing_target:
                 # 如果存在，更新记录
                 for key, value in staff_data.dict().items():
