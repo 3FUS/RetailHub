@@ -1033,15 +1033,27 @@ class TargetStaffService:
 
         created_staff_targets = []
 
-        total_weight = 0
+        total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in target_data.staffs)
+        total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in target_data.staffs)
+        #
+        weights = []
         for staff_data in target_data.staffs:
             expected_attendance = staff_data.expected_attendance or 0
             salary_coefficient = staff_data.salary_coefficient or 0
-            weight = expected_attendance * salary_coefficient
-            total_weight += weight
 
-        for staff_data in target_data.staffs:
+            if total_expected_attendance > 0 and total_salary_coefficient > 0:
+                expected_attendance_ratio = expected_attendance / total_expected_attendance
+                salary_coefficient_ratio = salary_coefficient / total_salary_coefficient
+                weight = expected_attendance_ratio * salary_coefficient_ratio
+            else:
+                weight = 0
 
+            weights.append(weight)
+
+        # 计算总权重
+        total_weight = sum(weights)
+
+        for i, staff_data in enumerate(target_data.staffs):
             result = await db.execute(select(StaffAttendanceModel).where(
                 StaffAttendanceModel.staff_code == staff_data.staff_code,
                 StaffAttendanceModel.store_code == target_data.store_code,
@@ -1049,10 +1061,8 @@ class TargetStaffService:
             ))
             existing_target = result.scalar_one_or_none()
 
-            expected_attendance = staff_data.expected_attendance or 0
-            salary_coefficient = staff_data.salary_coefficient or 0
-            staff_weight = expected_attendance * salary_coefficient
-            target_value_ratio = (staff_weight / total_weight) if total_weight > 0 else 0
+            # 计算当前员工的target_value_ratio
+            target_value_ratio = weights[i] / total_weight if total_weight > 0 else 0
 
             if existing_target:
                 # 如果存在，更新记录
@@ -1060,7 +1070,7 @@ class TargetStaffService:
                     if key not in ['store_code', 'fiscal_month', 'staff_code']:  # 不更新主键
                         setattr(existing_target, key, value)
                 existing_target.target_value_ratio = target_value_ratio
-                existing_target.updated_at = datetime.utcnow()
+                existing_target.updated_at = datetime.now()
                 created_staff_targets.append(existing_target)
             else:
                 target_staff_attendance = StaffAttendanceModel(
@@ -1071,7 +1081,7 @@ class TargetStaffService:
                     position=staff_data.position,
                     salary_coefficient=staff_data.salary_coefficient,
                     target_value_ratio=target_value_ratio,
-                    creator_code=target_data.creator_code
+                    creator_code=user_id
                 )
                 db.add(target_staff_attendance)
                 created_staff_targets.append(target_staff_attendance)
