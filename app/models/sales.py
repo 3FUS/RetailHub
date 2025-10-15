@@ -46,7 +46,7 @@ class ECSalesModel(Base):
     order_source = Column(String(30))  # 订单来源
     payment_method = Column(String(30))  # 支付方式
     order_status = Column(String(30))  # 订单状态
-    quantity = Column(Integer)  # 数量
+    quantity = Column(Integer, primary_key=True)  # 数量
     product_code = Column(String(30))  # 商品编码
     product_sku = Column(String(30), primary_key=True)  # 商品SKU编码
     product_name = Column(String(80))  # 商品名称

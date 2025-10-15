@@ -1,4 +1,3 @@
-
 from sqlalchemy import String, func, null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -473,20 +472,14 @@ class TargetStoreWeekService:
     @staticmethod
     async def get_target_store_week(db: AsyncSession, store_code: str, fiscal_month: str):
 
-        if fiscal_month:
-            try:
-                year, month = fiscal_month.split('-')
-                last_year = int(year) - 1
-                fiscal_month_ly = f"{last_year}-{month}"
-            except (ValueError, IndexError):
-                fiscal_month_ly = None
-
         result_current = await db.execute(
             select(
                 TargetStoreWeek.week_number,
                 TargetStoreWeek.percentage,
                 TargetStoreWeek.target_value,
-                TargetStoreWeek.sales_value_ly
+                TargetStoreWeek.sales_value_ly,
+                TargetStoreWeek.sales_value_ly_percentage
+
             ).where(
                 TargetStoreWeek.store_code == store_code,
                 TargetStoreWeek.fiscal_month == fiscal_month
@@ -494,39 +487,22 @@ class TargetStoreWeekService:
         )
         current_weeks = result_current.all()
 
-        result_last = await db.execute(
-            select(
-                TargetStoreWeek.week_number,
-                TargetStoreWeek.percentage,
-                TargetStoreWeek.target_value,
-                TargetStoreWeek.sales_value_ly
-            ).where(
-                TargetStoreWeek.store_code == store_code,
-                TargetStoreWeek.fiscal_month == fiscal_month_ly
-            )
-        )
-        last_weeks = result_last.all()
+
         current_list = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
                 "percentage": row.percentage if row.percentage is not None else None,
                 "target_value": row.target_value if row.target_value is not None else None,
-                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None
+                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None,
+                "sales_value_ly_percentage": row.sales_value_ly_percentage if row.sales_value_ly_percentage is not None else None
             }
             for row in current_weeks
         ]
 
-        last_list = [
-            {
-                "week_number": row.week_number if row.week_number is not None else None,
-                "percentage": row.percentage if row.percentage is not None else None,
-                "target_value": row.target_value if row.target_value is not None else None
-            }
-            for row in last_weeks
-        ]
+
         return {
             "current_year": current_list,
-            "last_year": last_list
+            "last_year": []
         }
 
     @staticmethod
@@ -574,14 +550,7 @@ class TargetStoreWeekService:
 class TargetStoreDailyService:
     @staticmethod
     async def get_target_store_daily(db: AsyncSession, store_code: str, fiscal_month: str):
-        if fiscal_month:
-            try:
-                year, month = fiscal_month.split('-')
-                last_year = int(year) - 1
-                fiscal_month_ly = f"{last_year}-{month}"
-            except (ValueError, IndexError):
-                fiscal_month_ly = None
-        target_last_year = TargetStoreDaily.__table__.alias('target_last_year')
+
         result = await db.execute(
             select(
                 DimensionDayWeek.day_number,
@@ -590,8 +559,7 @@ class TargetStoreDailyService:
                 TargetStoreDaily.percentage,
                 TargetStoreDaily.target_value,
                 TargetStoreDaily.sales_value_ly,
-                target_last_year.c.percentage.label('percentage_ly'),
-                target_last_year.c.target_value.label('target_value_ly')
+                TargetStoreDaily.sales_value_ly_percentage
             )
                 .select_from(
                 DimensionDayWeek.__table__.join(
@@ -599,12 +567,6 @@ class TargetStoreDailyService:
                     (DimensionDayWeek.fiscal_month == TargetStoreDaily.fiscal_month) &
                     (DimensionDayWeek.actual_date == TargetStoreDaily.target_date) &
                     (TargetStoreDaily.store_code == store_code),
-                    isouter=True
-                ).join(
-                    target_last_year,
-                    (DimensionDayWeek.actual_date_ly == target_last_year.c.target_date) &
-                    (target_last_year.c.store_code == store_code) &
-                    (target_last_year.c.fiscal_month == fiscal_month_ly),
                     isouter=True
                 )
             )
@@ -620,8 +582,7 @@ class TargetStoreDailyService:
                 "actual_date": row.actual_date.strftime('%Y-%m-%d') if row.actual_date else None,
                 "percentage": row.percentage if row.percentage is not None else None,
                 "target_value": row.target_value if row.target_value is not None else None,
-                "percentage_ly": row.percentage_ly if row.percentage_ly is not None else None,
-                "target_value_ly": row.target_value_ly if row.target_value_ly is not None else None,
+                "sales_value_ly_percentage": row.sales_value_ly_percentage if row.sales_value_ly_percentage is not None else None,
                 "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None
             }
             for row in target_daily

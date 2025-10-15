@@ -43,7 +43,6 @@ class TargetStoreMain(Base):
     staff_reject_remarks = Column(Text)
 
 
-
 class TargetStoreWeek(Base):
     """
     门店周目标类
@@ -57,6 +56,7 @@ class TargetStoreWeek(Base):
     percentage = Column(Float, nullable=False)  # 每周目标占比
     target_value = Column(Float)  # 每周目标数值
     sales_value_ly = Column(Float)
+    sales_value_ly_percentage = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -76,6 +76,7 @@ class TargetStoreDaily(Base):
     monthly_percentage = Column(Float)
     target_value = Column(Float)  # 每日目标数值
     sales_value_ly = Column(Float)
+    sales_value_ly_percentage = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

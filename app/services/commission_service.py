@@ -331,7 +331,7 @@ class CommissionService:
         }
 
     @staticmethod
-    async def update_commission(db: AsyncSession, attendance_update,role_code: str) -> bool:
+    async def update_commission(db: AsyncSession, attendance_update, role_code: str) -> bool:
         try:
             # 获取传入的参数
             store_code = attendance_update.store_code
@@ -883,13 +883,13 @@ class CommissionService:
                 staff_target_value = store_target_value * (staff.target_value_ratio or 0)
                 app_logger.debug(f"员工 {staff.staff_code} 目标值: {staff_target_value}")
 
-                if staff_target_value is None or staff_target_value == 0:
-                    app_logger.warning(f"员工 {staff.staff_code} 目标值为空或为0，跳过计算")
-                    continue
+                # if staff_target_value is None or staff_target_value == 0:
+                #     app_logger.warning(f"员工 {staff.staff_code} 目标值为空或为0，跳过计算")
+                #     continue
 
                 # 计算员工达成率
                 staff_sales_value = staff.sales_value or 0
-                if staff_target_value > 0 and staff_sales_value is not None:
+                if staff_sales_value is not None and staff_target_value > 0:
                     staff_achievement_rate = (staff_sales_value / staff_target_value) * 100
                 else:
                     staff_achievement_rate = 0
