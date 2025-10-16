@@ -26,6 +26,8 @@ class CommissionStoreModel(Base):
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     remarks = Column(Text)
+    merged_store_codes = Column(String(255))
+    merged_flag = Column(Boolean, default=False)
     version = Column(Integer, default=1)
     saved_by = Column(String(30))
     saved_at = Column(DateTime, default=datetime.utcnow)

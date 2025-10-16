@@ -143,10 +143,11 @@ async def create_staff_attendance(TargetStaffAttendance: StaffAttendanceCreate,
 
 
 @router.get("/get_staff_attendance")
-async def get_staff_attendance(fiscal_month: str, store_code: str, db: AsyncSession = Depends(get_db),
-                               current_user: dict = Depends(get_current_user)):
+async def get_staff_attendance_details(fiscal_month: str, store_code: str, db: AsyncSession = Depends(get_db),
+                                       module: str = "target",
+                                       current_user: dict = Depends(get_current_user)):
     try:
-        data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code)
+        data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code, module)
         return {"code": 200, "data": data['data'], "header_info": data['header_info'], "MonthEnd": data['MonthEnd']}
     except SQLAlchemyError as e:
         raise HTTPException(

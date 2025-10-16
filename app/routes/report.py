@@ -7,6 +7,7 @@ from app.database import get_db
 from app.services.target_service import TargetRPTService
 from app.services.commission_service import CommissionRPTService
 from app.services.budget_service import BudgetService
+from app.core.security import get_current_user
 
 router = APIRouter()
 
@@ -22,7 +23,8 @@ async def get_report_data(
         format: str = Query("json", description="返回格式: json 或 excel"),
         # page: int = Query(1, description="页码，从1开始", ge=1),
         # page_size: int = Query(20, description="每页记录数", ge=1, le=1000),
-        session: AsyncSession = Depends(get_db)
+        session: AsyncSession = Depends(get_db),
+        current_user: dict = Depends(get_current_user)
 ):
     """
     获取报表数据，支持target、commission和budget
@@ -35,9 +37,11 @@ async def get_report_data(
     # 根据报表类型获取数据
     report_data = {}
 
+    role_code = current_user['user_code']
+
     if report_type == "target_by_store":
         report_data["target_by_store"] = await TargetRPTService.get_rpt_target_by_store(session, financial_month,
-                                                                                        keyword)
+                                                                                        keyword, role_code)
 
     if report_type == "target_by_staff":
         report_data["target_by_staff"] = await TargetRPTService.get_rpt_target_by_staff(session, financial_month,

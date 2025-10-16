@@ -260,6 +260,31 @@ class CommissionRPTService:
             raise e
 
 
+class CommissionUtil:
+    @staticmethod
+    async def get_month_end_value(db: AsyncSession, fiscal_month: str) -> int:
+        """
+        获取指定财月的月结状态
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财月
+
+        Returns:
+            int: 月结状态值 (0: 未月结, 1: 已月结)
+        """
+        try:
+            result = await db.execute(
+                select(CommissionMainModel.month_end)
+                    .where(CommissionMainModel.fiscal_month == fiscal_month)
+            )
+            record = result.fetchone()
+            return record.month_end if record and record.month_end else 0
+        except Exception as e:
+            app_logger.error(f"Error getting month end value for {fiscal_month}: {str(e)}")
+            return 0
+
+
 class CommissionService:
     @staticmethod
     async def create_commission(db: AsyncSession, fiscal_month: str, store_codes: list):
@@ -479,7 +504,8 @@ class CommissionService:
                           isouter=True)
                     .join(store_alias,
                           CommissionStoreModel.store_code == store_alias.c.store_code)
-                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month,
+                           CommissionStoreModel.merged_flag == 0)
             )
 
             # 如果提供了关键词，则添加过滤条件
@@ -604,12 +630,7 @@ class CommissionService:
                 "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
             }
 
-            main_result = await db.execute(
-                select(CommissionMainModel.month_end)
-                    .where(CommissionMainModel.fiscal_month == fiscal_month)
-            )
-            main_record = main_result.fetchone()
-            month_end_value = main_record.month_end if main_record else 0
+            month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
 
             return {"data": formatted_commissions,
                     "status_counts": status_count_dict,
@@ -734,6 +755,23 @@ class CommissionService:
         try:
             app_logger.info(f"开始为店铺 {store_code} 在财月 {fiscal_month} 计算佣金")
 
+            commission_store_result = await db.execute(
+                select(CommissionStoreModel.merged_store_codes, CommissionStoreModel.merged_flag,
+                       CommissionStoreModel.store_type)
+                    .where(
+                    CommissionStoreModel.store_code == store_code,
+                    CommissionStoreModel.fiscal_month == fiscal_month
+                )
+            )
+            commission_store_record = commission_store_result.fetchone()
+
+            if commission_store_record and commission_store_record.merged_store_codes:
+                merged_code = commission_store_record.merged_store_codes.split(',')
+                merged_codes = [code.strip() for code in merged_code]
+            else:
+                merged_codes = [store_code]
+                # store_codes_to_calculate.extend([code.strip() for code in merged_codes])
+            app_logger.info(f"开始为店铺 {merged_codes} 在财月 {fiscal_month} 计算佣金")
             # 1. 获取店铺类型和数据
             store_result = await db.execute(
                 select(
@@ -741,21 +779,28 @@ class CommissionService:
                     TargetStoreMain.target_value,
                     TargetStoreMain.sales_value,
                 ).where(
-                    TargetStoreMain.store_code == store_code,
+                    TargetStoreMain.store_code.in_(merged_codes),
                     TargetStoreMain.fiscal_month == fiscal_month
                 )
             )
-            store_data = store_result.fetchone()
+            store_data_list = store_result.fetchall()
 
-            if not store_data:
-                app_logger.warning(f"店铺 {store_code} 在财月 {fiscal_month} 没有找到数据")
-                raise ValueError(f"Store {store_code} not found or has no data for {fiscal_month}")
+            if not store_data_list:
+                app_logger.warning(f"门店列表 {merged_codes} 在财月 {fiscal_month} 没有找到数据")
+                raise ValueError(f"Stores {merged_codes} not found or have no data for {fiscal_month}")
 
-            store_type = store_data.store_type
-            store_target_value = store_data.target_value or 0
-            store_sales_value = store_data.sales_value or 0
+            # 3. 计算合并后的总目标值和销售额
+            store_target_value = 0
+            store_sales_value = 0
 
-            app_logger.debug(f"店铺 {store_code} 类型: {store_type}, 目标值: {store_target_value}, 销售额: {store_sales_value}")
+            for store_data in store_data_list:
+                store_target_value += store_data.target_value or 0
+                store_sales_value += store_data.sales_value or 0
+
+            store_type = commission_store_record.store_type
+
+            app_logger.debug(
+                f"店铺 {store_code} -> {merged_codes} 类型: {store_type}, 目标值: {store_target_value}, 销售额: {store_sales_value}")
 
             if not store_type:
                 app_logger.warning(f"店铺 {store_code} 缺少店铺类型信息")
@@ -781,7 +826,7 @@ class CommissionService:
                     StaffAttendanceModel.target_value_ratio,
                     StaffAttendanceModel.sales_value,
                 ).where(
-                    StaffAttendanceModel.store_code == store_code,
+                    StaffAttendanceModel.store_code.in_(merged_codes),
                     StaffAttendanceModel.fiscal_month == fiscal_month
                 )
             )

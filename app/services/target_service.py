@@ -11,13 +11,15 @@ from app.schemas.target import TargetStoreUpdate, \
 from app.models.dimension import DimensionDayWeek, StoreModel
 
 from datetime import datetime
+
+from app.services.commission_service import CommissionUtil
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
 
 
 class TargetRPTService:
     @staticmethod
-    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str):
+    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
         """
         获取门店目标报表数据
 
@@ -31,13 +33,15 @@ class TargetRPTService:
         """
 
         try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
             # 执行SQL查询逻辑
             query = select(
                 TargetStoreDaily.target_date.label('date'),
                 TargetStoreMain.fiscal_month,
                 (DimensionDayWeek.finance_year + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
                 TargetStoreMain.store_code,
-                StoreModel.store_name,
+                store_alias.c.store_name,
                 (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
@@ -45,8 +49,8 @@ class TargetRPTService:
                     (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
                     (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
                 ).join(
-                    StoreModel.__table__,
-                    StoreModel.store_code == TargetStoreMain.store_code
+                    store_alias,
+                    store_alias.c.store_code == TargetStoreMain.store_code
                 ).join(
                     DimensionDayWeek.__table__,
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
@@ -59,7 +63,7 @@ class TargetRPTService:
             if key_word:
                 query = query.where(
                     TargetStoreMain.store_code.contains(key_word) |
-                    StoreModel.store_name.contains(key_word)
+                    store_alias.c.store_name.contains(key_word)
                 )
 
             result = await db.execute(query)
@@ -367,12 +371,7 @@ class TargetStoreService:
             "staff_status": {"en": "Staff Status", "zh": "员工目标"}
         }
 
-        main_result = await db.execute(
-            select(CommissionMainModel.month_end)
-                .where(CommissionMainModel.fiscal_month == fiscal_month)
-        )
-        main_record = main_result.fetchone()
-        month_end_value = main_record.month_end if main_record else 0
+        month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
 
         return {
             "data": formatted_data,
@@ -487,7 +486,6 @@ class TargetStoreWeekService:
         )
         current_weeks = result_current.all()
 
-
         current_list = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
@@ -498,7 +496,6 @@ class TargetStoreWeekService:
             }
             for row in current_weeks
         ]
-
 
         return {
             "current_year": current_list,
@@ -588,12 +585,7 @@ class TargetStoreDailyService:
             for row in target_daily
         ]
 
-        main_result = await db.execute(
-            select(CommissionMainModel.month_end)
-                .where(CommissionMainModel.fiscal_month == fiscal_month)
-        )
-        main_record = main_result.fetchone()
-        month_end_value = main_record.month_end if main_record else 0
+        month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
 
         return {"data": data, "MonthEnd": month_end_value}
 
@@ -739,135 +731,62 @@ class TargetStoreDailyService:
 
 class TargetStaffService:
     @staticmethod
-    async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str):
+    async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, module: str = "target"):
         try:
-            result_store = await db.execute(
-                select(
-                    TargetStoreMain.target_value,
-                    TargetStoreMain.sales_value,
-                    TargetStoreMain.store_status,
-                    TargetStoreMain.staff_status,
-                    TargetStoreMain.store_saved_by,
-                    TargetStoreMain.store_saved_at,
-                    TargetStoreMain.store_submit_by,
-                    TargetStoreMain.store_submit_at,
-                    TargetStoreMain.store_approved_by,
-                    TargetStoreMain.store_approved_at,
-                    TargetStoreMain.store_rejected_by,
-                    TargetStoreMain.store_rejected_at,
-                    TargetStoreMain.store_reject_remarks,
-                    TargetStoreMain.staff_saved_by,
-                    TargetStoreMain.staff_saved_at,
-                    TargetStoreMain.staff_submit_by,
-                    TargetStoreMain.staff_submit_at,
-                    TargetStoreMain.staff_approved_by,
-                    TargetStoreMain.staff_approved_at,
-                    TargetStoreMain.staff_rejected_by,
-                    TargetStoreMain.staff_rejected_at,
-                    TargetStoreMain.staff_reject_remarks,
-                    CommissionStoreModel.status.label('commission_status'),  # 获取佣金状态
-                    CommissionStoreModel.saved_by,
-                    CommissionStoreModel.saved_at,
-                    CommissionStoreModel.submit_by,
-                    CommissionStoreModel.submit_at,
-                    CommissionStoreModel.approved_by,
-                    CommissionStoreModel.approved_at,
-                    CommissionStoreModel.rejected_by,
-                    CommissionStoreModel.rejected_at,
-                    CommissionStoreModel.reject_remarks
-                )
-                    .select_from(
-                    TargetStoreMain.__table__.join(
-                        CommissionStoreModel.__table__,
-                        (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
-                        (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month),
-                        isouter=True  # left join
+            app_logger.info(f"Starting get_staff_attendance for fiscal_month={fiscal_month}, store_code={store_code}")
+
+            # Step 1: 获取门店目标与佣金相关信息
+            store_target_record = await TargetStaffService._fetch_store_target_data(db, fiscal_month, store_code)
+
+            # Step 2: 提取门店相关基础信息
+            store_target_value, store_sales_value, staff_status, store_status, commission_status, \
+            commission_status_details, store_status_details, staff_status_details = \
+                TargetStaffService._extract_store_info(store_target_record)
+
+            app_logger.debug(
+                f"get_staff_attendance Store target value: {store_target_value}, sales value: {store_sales_value}")
+
+            # Step 3: 获取财月时间范围
+            fiscal_period = await TargetStaffService._fetch_fiscal_period(db, fiscal_month)
+
+            merged_codes = [store_code]
+
+            if store_target_record and module == "commission":
+                if store_target_record.merged_store_codes:
+                    merged_code = store_target_record.merged_store_codes.split(',')
+                    merged_codes = [code.strip() for code in merged_code]
+
+                result_merged = await db.execute(
+                    select(
+                        func.sum(TargetStoreMain.target_value).label('total_target_value'),
+                        func.sum(TargetStoreMain.sales_value).label('total_sales_value')
+                    )
+                        .where(
+                        TargetStoreMain.fiscal_month == fiscal_month,
+                        TargetStoreMain.store_code.in_(merged_codes)
                     )
                 )
-                    .where(
-                    TargetStoreMain.fiscal_month == fiscal_month,
-                    TargetStoreMain.store_code == store_code
-                )
-            )
-            store_target_record = result_store.fetchone()
+                merged_data = result_merged.fetchone()
 
-            if store_target_record:
                 store_target_value = float(
-                    store_target_record.target_value) if store_target_record.target_value is not None else 0.0
+                    merged_data.total_target_value) if merged_data.total_target_value is not None else 0.0
                 store_sales_value = float(
-                    store_target_record.sales_value) if store_target_record.sales_value is not None else 0.0
-                staff_status = store_target_record.staff_status
-                store_status = store_target_record.store_status
-                commission_status = store_target_record.commission_status
-                commission_status_details = {
-                    'saved_by': store_target_record.saved_by,
-                    'saved_at': store_target_record.saved_at,
-                    'submit_by': store_target_record.submit_by,
-                    'submit_at': store_target_record.submit_at,
-                    'approved_by': store_target_record.approved_by,
-                    'approved_at': store_target_record.approved_at,
-                    'rejected_by': store_target_record.rejected_by,
-                    'rejected_at': store_target_record.rejected_at,
-                    'reject_remarks': store_target_record.reject_remarks
-                }
-                store_status_details = {
-                    'saved_by': store_target_record.store_saved_by,
-                    'saved_at': store_target_record.store_saved_at,
-                    'submit_by': store_target_record.store_submit_by,
-                    'submit_at': store_target_record.store_submit_at,
-                    'approved_by': store_target_record.store_approved_by,
-                    'approved_at': store_target_record.store_approved_at,
-                    'rejected_by': store_target_record.store_rejected_by,
-                    'rejected_at': store_target_record.store_rejected_at,
-                    'reject_remarks': store_target_record.store_reject_remarks
-                }
-                staff_status_details = {
-                    'saved_by': store_target_record.staff_saved_by,
-                    'saved_at': store_target_record.staff_saved_at,
-                    'submit_by': store_target_record.staff_submit_by,
-                    'submit_at': store_target_record.staff_submit_at,
-                    'approved_by': store_target_record.staff_approved_by,
-                    'approved_at': store_target_record.staff_approved_at,
-                    'rejected_by': store_target_record.staff_rejected_by,
-                    'rejected_at': store_target_record.staff_rejected_at,
-                    'reject_remarks': store_target_record.staff_reject_remarks
-                }
-            else:
-                # 当没有找到对应记录时设置默认值
-                store_target_value = 0.0
-                store_sales_value = 0.0
-                staff_status = None
-                store_status = None
-                commission_status = None
-                commission_status_details = {}
-                store_status_details = {}
-                staff_status_details = {}
+                    merged_data.total_sales_value) if merged_data.total_sales_value is not None else 0.0
 
-            # 获取财月的日期范围
-            date_range_result = await db.execute(
-                select(
-                    func.min(DimensionDayWeek.actual_date).label('min_date'),
-                    func.max(DimensionDayWeek.actual_date).label('max_date')
-                )
-                    .where(DimensionDayWeek.fiscal_month == fiscal_month)
-            )
-            date_range = date_range_result.fetchone()
-
-            fiscal_period = ""
-            if date_range and date_range.min_date and date_range.max_date:
-                fiscal_period = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
-
+            app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
                 select(func.count()).select_from(StaffAttendanceModel)
                     .where(
                     StaffAttendanceModel.fiscal_month == fiscal_month,
-                    StaffAttendanceModel.store_code == store_code
+                    StaffAttendanceModel.store_code.in_(merged_codes)
                 )
             )
             attendance_exists = attendance_check_result.scalar() > 0
+            app_logger.debug(f"Staff attendance data exists: {attendance_exists}")
 
             if attendance_exists:
                 # 有数据存在，使用inner join
+                app_logger.debug("Querying staff attendance with inner join")
                 result = await db.execute(
                     select(
                         StaffModel.avatar,
@@ -891,12 +810,13 @@ class TargetStaffService:
                         )
                     )
                         .where(
-                        StaffModel.store_code == store_code,
+                        StaffModel.store_code.in_(merged_codes),
                         StaffAttendanceModel.fiscal_month == fiscal_month
                     )
                 )
             else:
                 # 没有数据存在，直接查询StaffModel单表
+                app_logger.debug("Querying staff model data only")
                 result = await db.execute(
                     select(
                         StaffModel.avatar,
@@ -914,11 +834,12 @@ class TargetStaffService:
                         cast(0, type_=Integer).label('deletable')
                     )
                         .where(
-                        StaffModel.store_code == store_code,
+                        StaffModel.store_code.in_(merged_codes),
                         StaffModel.state == 'A'
                     )
                 )
             staff_attendance_data = result.all()
+            app_logger.debug(f"Retrieved {len(staff_attendance_data)} staff records")
 
             # total_target_value = sum(
             #     float(row.target_value) if row.target_value is not None else 0 for row in staff_attendance_data)
@@ -959,14 +880,10 @@ class TargetStaffService:
                     "deletable": row.deletable
                 })
 
-            main_result = await db.execute(
-                select(CommissionMainModel.month_end)
-                    .where(CommissionMainModel.fiscal_month == fiscal_month)
-            )
-            main_record = main_result.fetchone()
-            month_end_value = main_record.month_end if main_record else 0
+            # 获取月结状态
+            month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
 
-            return {
+            result_data = {
                 "data": staff_attendance_list,
                 "header_info": {
                     "store_target_value": store_target_value,
@@ -982,12 +899,143 @@ class TargetStaffService:
                 "MonthEnd": month_end_value
             }
 
+            app_logger.info(
+                f"Successfully completed get_staff_attendance for fiscal_month={fiscal_month}, store_code={store_code}")
+            return result_data
+
         except Exception as e:
             app_logger.error(
                 f"Error in get_staff_attendance: fiscal_month={fiscal_month}, store_code={store_code}, error={str(e)}")
             # 可以选择抛出异常或返回空列表
             # return []  # 或者
             raise e
+
+    @staticmethod
+    async def _fetch_store_target_data(db: AsyncSession, fiscal_month: str, store_code: str):
+        """获取门店的目标和佣金相关信息"""
+        result_store = await db.execute(
+            select(
+                TargetStoreMain.target_value,
+                TargetStoreMain.sales_value,
+                TargetStoreMain.store_status,
+                TargetStoreMain.staff_status,
+                TargetStoreMain.store_saved_by,
+                TargetStoreMain.store_saved_at,
+                TargetStoreMain.store_submit_by,
+                TargetStoreMain.store_submit_at,
+                TargetStoreMain.store_approved_by,
+                TargetStoreMain.store_approved_at,
+                TargetStoreMain.store_rejected_by,
+                TargetStoreMain.store_rejected_at,
+                TargetStoreMain.store_reject_remarks,
+                TargetStoreMain.staff_saved_by,
+                TargetStoreMain.staff_saved_at,
+                TargetStoreMain.staff_submit_by,
+                TargetStoreMain.staff_submit_at,
+                TargetStoreMain.staff_approved_by,
+                TargetStoreMain.staff_approved_at,
+                TargetStoreMain.staff_rejected_by,
+                TargetStoreMain.staff_rejected_at,
+                TargetStoreMain.staff_reject_remarks,
+                CommissionStoreModel.status.label('commission_status'),
+                CommissionStoreModel.saved_by,
+                CommissionStoreModel.saved_at,
+                CommissionStoreModel.submit_by,
+                CommissionStoreModel.submit_at,
+                CommissionStoreModel.approved_by,
+                CommissionStoreModel.approved_at,
+                CommissionStoreModel.rejected_by,
+                CommissionStoreModel.rejected_at,
+                CommissionStoreModel.reject_remarks,
+                CommissionStoreModel.merged_store_codes,
+                CommissionStoreModel.merged_flag,
+                CommissionStoreModel.fiscal_period
+            )
+                .select_from(
+                TargetStoreMain.__table__.join(
+                    CommissionStoreModel.__table__,
+                    (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
+                    (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month),
+                    isouter=True
+                )
+            )
+                .where(
+                TargetStoreMain.fiscal_month == fiscal_month,
+                TargetStoreMain.store_code == store_code
+            )
+        )
+        return result_store.fetchone()
+
+    @staticmethod
+    def _extract_store_info(store_target_record):
+        """从门店记录中提取关键信息"""
+        if store_target_record:
+            store_target_value = float(store_target_record.target_value) if store_target_record.target_value else 0.0
+            store_sales_value = float(store_target_record.sales_value) if store_target_record.sales_value else 0.0
+            staff_status = store_target_record.staff_status
+            store_status = store_target_record.store_status
+            commission_status = store_target_record.commission_status
+
+            commission_status_details = {
+                'saved_by': store_target_record.saved_by,
+                'saved_at': store_target_record.saved_at,
+                'submit_by': store_target_record.submit_by,
+                'submit_at': store_target_record.submit_at,
+                'approved_by': store_target_record.approved_by,
+                'approved_at': store_target_record.approved_at,
+                'rejected_by': store_target_record.rejected_by,
+                'rejected_at': store_target_record.rejected_at,
+                'reject_remarks': store_target_record.reject_remarks
+            }
+            store_status_details = {
+                'saved_by': store_target_record.store_saved_by,
+                'saved_at': store_target_record.store_saved_at,
+                'submit_by': store_target_record.store_submit_by,
+                'submit_at': store_target_record.store_submit_at,
+                'approved_by': store_target_record.store_approved_by,
+                'approved_at': store_target_record.store_approved_at,
+                'rejected_by': store_target_record.store_rejected_by,
+                'rejected_at': store_target_record.store_rejected_at,
+                'reject_remarks': store_target_record.store_reject_remarks
+            }
+            staff_status_details = {
+                'saved_by': store_target_record.staff_saved_by,
+                'saved_at': store_target_record.staff_saved_at,
+                'submit_by': store_target_record.staff_submit_by,
+                'submit_at': store_target_record.staff_submit_at,
+                'approved_by': store_target_record.staff_approved_by,
+                'approved_at': store_target_record.staff_approved_at,
+                'rejected_by': store_target_record.staff_rejected_by,
+                'rejected_at': store_target_record.staff_rejected_at,
+                'reject_remarks': store_target_record.staff_reject_remarks
+            }
+        else:
+            store_target_value = 0.0
+            store_sales_value = 0.0
+            staff_status = None
+            store_status = None
+            commission_status = None
+            commission_status_details = {}
+            store_status_details = {}
+            staff_status_details = {}
+
+        return (store_target_value, store_sales_value, staff_status, store_status,
+                commission_status, commission_status_details, store_status_details, staff_status_details)
+
+    @staticmethod
+    async def _fetch_fiscal_period(db: AsyncSession, fiscal_month: str) -> str:
+        """获取指定财月的时间区间"""
+        date_range_result = await db.execute(
+            select(
+                func.min(DimensionDayWeek.actual_date).label('min_date'),
+                func.max(DimensionDayWeek.actual_date).label('max_date')
+            )
+                .where(DimensionDayWeek.fiscal_month == fiscal_month)
+        )
+        date_range = date_range_result.fetchone()
+        if date_range and date_range.min_date and date_range.max_date:
+            return f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
+        return ""
 
     @staticmethod
     async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate, user_id: str = 'system'):
