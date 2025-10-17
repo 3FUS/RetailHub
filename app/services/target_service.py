@@ -750,11 +750,15 @@ class TargetStaffService:
             fiscal_period = await TargetStaffService._fetch_fiscal_period(db, fiscal_month)
 
             merged_codes = [store_code]
-
+            merged_months = [fiscal_month]
             if store_target_record and module == "commission":
                 if store_target_record.merged_store_codes:
                     merged_code = store_target_record.merged_store_codes.split(',')
                     merged_codes = [code.strip() for code in merged_code]
+
+                if store_target_record.fiscal_period and store_target_record.fiscal_period != fiscal_month:
+                    merged_month = store_target_record.fiscal_period.split(',')
+                    merged_months = [code.strip() for code in merged_month]
 
                 result_merged = await db.execute(
                     select(
@@ -762,7 +766,7 @@ class TargetStaffService:
                         func.sum(TargetStoreMain.sales_value).label('total_sales_value')
                     )
                         .where(
-                        TargetStoreMain.fiscal_month == fiscal_month,
+                        TargetStoreMain.fiscal_month.in_(merged_months),
                         TargetStoreMain.store_code.in_(merged_codes)
                     )
                 )
@@ -777,7 +781,7 @@ class TargetStaffService:
             attendance_check_result = await db.execute(
                 select(func.count()).select_from(StaffAttendanceModel)
                     .where(
-                    StaffAttendanceModel.fiscal_month == fiscal_month,
+                    StaffAttendanceModel.fiscal_month.in_(merged_months),
                     StaffAttendanceModel.store_code.in_(merged_codes)
                 )
             )
@@ -786,7 +790,7 @@ class TargetStaffService:
 
             if attendance_exists:
                 # 有数据存在，使用inner join
-                app_logger.debug("Querying staff attendance with inner join")
+                app_logger.debug(f'Querying staff attendance with inner join {merged_codes}, {merged_months}')
                 result = await db.execute(
                     select(
                         StaffModel.avatar,
@@ -800,8 +804,10 @@ class TargetStaffService:
                         StaffAttendanceModel.position.label('attendance_position'),
                         StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
                         StaffAttendanceModel.target_value_ratio,
+                        StaffAttendanceModel.target_value,
                         StaffAttendanceModel.sales_value,
-                        StaffAttendanceModel.deletable
+                        StaffAttendanceModel.deletable,
+                        StaffAttendanceModel.fiscal_month
                     )
                         .select_from(
                         StaffModel.__table__.join(
@@ -810,8 +816,8 @@ class TargetStaffService:
                         )
                     )
                         .where(
-                        StaffModel.store_code.in_(merged_codes),
-                        StaffAttendanceModel.fiscal_month == fiscal_month
+                        StaffAttendanceModel.store_code.in_(merged_codes),
+                        StaffAttendanceModel.fiscal_month.in_(merged_months)
                     )
                 )
             else:
@@ -830,8 +836,10 @@ class TargetStaffService:
                         null().label('attendance_position'),
                         null().label('attendance_salary_coefficient'),
                         null().label('target_value_ratio'),
+                        null().label('target_value'),
                         null().label('sales_value'),
-                        cast(0, type_=Integer).label('deletable')
+                        cast(0, type_=Integer).label('deletable'),
+                        cast(fiscal_month, type_=String).label('fiscal_month')
                     )
                         .where(
                         StaffModel.store_code.in_(merged_codes),
@@ -844,8 +852,9 @@ class TargetStaffService:
             # total_target_value = sum(
             #     float(row.target_value) if row.target_value is not None else 0 for row in staff_attendance_data)
 
-            staff_attendance_list = []
+            staff_attendance_dict = {}
             for row in staff_attendance_data:
+                staff_code = row.staff_code
 
                 position = row.attendance_position if row.attendance_position is not None else row.staff_position
                 salary_coefficient = (
@@ -854,31 +863,49 @@ class TargetStaffService:
                     else row.staff_salary_coefficient
                 )
 
-                target_value = 0.0
-                if store_target_value > 0 and row.target_value_ratio is not None:
-                    target_value = round(store_target_value * row.target_value_ratio, 2)  # 保留两位小数
+                if staff_code not in staff_attendance_dict:
+                    staff_attendance_dict[staff_code] = {
+                        "avatar": row.avatar,
+                        "staff_code": staff_code,
+                        "first_name": row.first_name,
+                        "expected_attendance": float(
+                            row.expected_attendance) if row.expected_attendance is not None else 0.0,
+                        "target_value": float(row.target_value) if row.target_value is not None else 0.0,
+                        "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
+                        "target_value_ratio": row.target_value_ratio,
+                        "deletable": row.deletable
+                    }
+                else:
+                    staff_attendance_dict[staff_code]["expected_attendance"] += float(
+                        row.expected_attendance) if row.expected_attendance is not None else 0.0
+                    staff_attendance_dict[staff_code]["sales_value"] += float(
+                        row.sales_value) if row.sales_value is not None else 0.0
+                    staff_attendance_dict[staff_code]["target_value"] += float(
+                        row.target_value) if row.target_value is not None else 0.0
 
+                if row.fiscal_month == fiscal_month:
+                    staff_attendance_dict[staff_code]["actual_attendance"] = float(
+                        row.actual_attendance) if row.actual_attendance is not None else None
+                    staff_attendance_dict[staff_code]["position"] = position
+                    staff_attendance_dict[staff_code]["salary_coefficient"] = float(
+                        salary_coefficient) if salary_coefficient is not None else None
+
+            # 计算每个员工的目标值和达成率
+            for staff_code, staff_info in staff_attendance_dict.items():
+
+                # 使用汇总后的数据计算达成率
                 achievement_rate = None
-                if (row.sales_value is not None and
-                        target_value is not None and
-                        target_value > 0):
-                    achievement_rate = f"{row.sales_value / target_value :.2%}"
+                if (staff_info["sales_value"] is not None and
+                        staff_info['target_value'] is not None and
+                        staff_info['target_value'] > 0):
+                    achievement_rate = f"{staff_info['sales_value'] / staff_info['target_value']:.2%}"
 
-                staff_attendance_list.append({
-                    "avatar": row.avatar,
-                    "staff_code": row.staff_code,
-                    "first_name": row.first_name,
-                    "expected_attendance": float(
-                        row.expected_attendance) if row.expected_attendance is not None else None,
-                    "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else None,
-                    "position": position,
-                    "salary_coefficient": float(salary_coefficient) if salary_coefficient is not None else None,
-                    "target_value": target_value,
-                    "sales_value": float(row.sales_value) if row.sales_value is not None else None,
-                    "achievement_rate": achievement_rate,
-                    "target_value_ratio": f"{row.target_value_ratio:.2%}" if row.target_value_ratio is not None else None,
-                    "deletable": row.deletable
-                })
+                staff_info["achievement_rate"] = achievement_rate
+                staff_info["target_value_ratio"] = f"{staff_info['target_value_ratio']:.4%}" if staff_info[
+                                                                                                    "target_value_ratio"] is not None else None
+
+            # 转换为列表格式
+            staff_attendance_list = list(staff_attendance_dict.values())
 
             # 获取月结状态
             month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
@@ -1042,6 +1069,17 @@ class TargetStaffService:
 
         created_staff_targets = []
 
+        result_store = await db.execute(
+            select(TargetStoreMain.target_value)
+                .where(
+                TargetStoreMain.store_code == target_data.store_code,
+                TargetStoreMain.fiscal_month == target_data.fiscal_month
+            )
+        )
+        store_target_record = result_store.fetchone()
+        store_target_value = float(
+            store_target_record.target_value) if store_target_record and store_target_record.target_value else 0.0
+
         total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in target_data.staffs)
         total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in target_data.staffs)
         #
@@ -1065,23 +1103,23 @@ class TargetStaffService:
         ratios = []
         if total_weight > 0:
             for i in range(len(weights)):
-                ratio = round(weights[i] / total_weight, 4)
+                ratio = round(weights[i] / total_weight, 6)
                 ratios.append(ratio)
 
             # 调整最后一个员工的比例以确保总和为1
             if ratios:
                 ratio_sum = sum(ratios[:-1])
-                ratios[-1] = round(1.0 - ratio_sum, 4)
+                ratios[-1] = round(1.0 - ratio_sum, 6)
         else:
             # 如果总权重为0，则平均分配
             count = len(target_data.staffs)
             if count > 0:
-                equal_ratio = round(1.0 / count, 4)
+                equal_ratio = round(1.0 / count, 6)
                 ratios = [equal_ratio for _ in range(count)]
                 # 调整最后一个确保总和为1
                 if ratios:
                     ratio_sum = sum(ratios[:-1])
-                    ratios[-1] = round(1.0 - ratio_sum, 4)
+                    ratios[-1] = round(1.0 - ratio_sum, 6)
 
         for i, staff_data in enumerate(target_data.staffs):
             result = await db.execute(select(StaffAttendanceModel).where(
@@ -1094,12 +1132,16 @@ class TargetStaffService:
             # 计算当前员工的target_value_ratio
             # target_value_ratio = weights[i] / total_weight if total_weight > 0 else 0
             target_value_ratio = ratios[i] if ratios else 0
+
+            staff_target_value = round(store_target_value * target_value_ratio, 2) if store_target_value > 0 else 0.0
+
             if existing_target:
                 # 如果存在，更新记录
                 for key, value in staff_data.dict().items():
                     if key not in ['store_code', 'fiscal_month', 'staff_code']:  # 不更新主键
                         setattr(existing_target, key, value)
                 existing_target.target_value_ratio = target_value_ratio
+                existing_target.target_value = staff_target_value
                 existing_target.updated_at = datetime.now()
                 created_staff_targets.append(existing_target)
             else:
@@ -1111,6 +1153,7 @@ class TargetStaffService:
                     position=staff_data.position,
                     salary_coefficient=staff_data.salary_coefficient,
                     target_value_ratio=target_value_ratio,
+                    target_value=staff_target_value,
                     creator_code=user_id
                 )
                 db.add(target_staff_attendance)

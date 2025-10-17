@@ -757,7 +757,7 @@ class CommissionService:
 
             commission_store_result = await db.execute(
                 select(CommissionStoreModel.merged_store_codes, CommissionStoreModel.merged_flag,
-                       CommissionStoreModel.store_type)
+                       CommissionStoreModel.store_type, CommissionStoreModel.fiscal_period)
                     .where(
                     CommissionStoreModel.store_code == store_code,
                     CommissionStoreModel.fiscal_month == fiscal_month
@@ -770,8 +770,14 @@ class CommissionService:
                 merged_codes = [code.strip() for code in merged_code]
             else:
                 merged_codes = [store_code]
-                # store_codes_to_calculate.extend([code.strip() for code in merged_codes])
-            app_logger.info(f"开始为店铺 {merged_codes} 在财月 {fiscal_month} 计算佣金")
+
+            if fiscal_month != commission_store_record.fiscal_period:
+                month_code = commission_store_record.fiscal_period.split(',')
+                month_codes = [code.strip() for code in month_code]
+            else:
+                month_codes = [fiscal_month]
+
+            app_logger.info(f"开始为店铺 {merged_codes} 在财月 {month_codes} 计算佣金")
             # 1. 获取店铺类型和数据
             store_result = await db.execute(
                 select(
@@ -780,7 +786,7 @@ class CommissionService:
                     TargetStoreMain.sales_value,
                 ).where(
                     TargetStoreMain.store_code.in_(merged_codes),
-                    TargetStoreMain.fiscal_month == fiscal_month
+                    TargetStoreMain.fiscal_month.in_(month_codes)
                 )
             )
             store_data_list = store_result.fetchall()
@@ -824,17 +830,19 @@ class CommissionService:
                     StaffAttendanceModel.expected_attendance,
                     StaffAttendanceModel.salary_coefficient,
                     StaffAttendanceModel.target_value_ratio,
+                    StaffAttendanceModel.target_value,
                     StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.fiscal_month
                 ).where(
                     StaffAttendanceModel.store_code.in_(merged_codes),
-                    StaffAttendanceModel.fiscal_month == fiscal_month
+                    StaffAttendanceModel.fiscal_month.in_(month_codes)
                 )
             )
             staff_attendances = staff_attendances_result.all()
             app_logger.info(f"找到 {len(staff_attendances)} 名员工需要计算佣金")
 
             # 3. 删除该店铺该财月的所有现有佣金记录
-            app_logger.debug(f"删除店铺 {store_code} 在财月 {fiscal_month} 的现有佣金记录")
+            app_logger.debug(f"删除店铺 {store_code} 在财月 {month_codes} 的现有佣金记录")
             delete_result = await db.execute(
                 delete(CommissionStaffModel)
                     .where(
@@ -918,40 +926,72 @@ class CommissionService:
 
             app_logger.debug(f"获取到的规则信息: {rules_info}")
 
+            # 预处理员工数据，合并同一员工在不同月份的数据
+            processed_staff_attendances = {}
+            for staff in staff_attendances:
+                staff_code = staff.staff_code
+
+                if staff_code not in processed_staff_attendances:
+                    # 初始化员工数据，使用第一个遇到的记录作为基础
+                    processed_staff_attendances[staff_code] = {
+                        'staff_code': staff.staff_code,
+                        'position': staff.position,
+                        'actual_attendance': staff.actual_attendance or 0,
+                        'expected_attendance': staff.expected_attendance or 0,
+                        'salary_coefficient': staff.salary_coefficient,
+                        'target_value_ratio': staff.target_value_ratio,
+                        'target_value': staff.target_value or 0,
+                        'sales_value': staff.sales_value or 0,
+                        'fiscal_months': [staff.fiscal_month]
+                    }
+                else:
+                    # 累加数值型字段
+                    existing_staff = processed_staff_attendances[staff_code]
+                    existing_staff['actual_attendance'] += staff.actual_attendance or 0
+                    existing_staff['expected_attendance'] += staff.expected_attendance or 0
+                    existing_staff['sales_value'] += staff.sales_value or 0
+                    existing_staff['target_value'] += staff.target_value or 0
+                    existing_staff['fiscal_months'].append(staff.fiscal_month)
+
+            # 转换为列表格式
+            staff_attendances = list(processed_staff_attendances.values())
+            app_logger.info(f"预处理后有 {len(staff_attendances)} 名唯一员工需要计算佣金")
+
             commission_records = []
 
             # 7. 为每个员工计算佣金（应用所有适用的规则）
             for staff in staff_attendances:
-                app_logger.debug(f"正在为员工 {staff.staff_code} 计算佣金")
+                app_logger.debug(f"正在为员工 {staff['staff_code']} 计算佣金")
 
                 # 检查员工目标值
-                staff_target_value = store_target_value * (staff.target_value_ratio or 0)
-                app_logger.debug(f"员工 {staff.staff_code} 目标值: {staff_target_value}")
+                # staff_target_value = store_target_value * (staff.target_value_ratio or 0)
+                staff_target_value = staff['target_value']
+                app_logger.debug(f"员工 {staff['staff_code']} 目标值: {staff_target_value}")
 
                 # if staff_target_value is None or staff_target_value == 0:
-                #     app_logger.warning(f"员工 {staff.staff_code} 目标值为空或为0，跳过计算")
+                #     app_logger.warning(f"员工 {staff['staff_code']} 目标值为空或为0，跳过计算")
                 #     continue
 
                 # 计算员工达成率
-                staff_sales_value = staff.sales_value or 0
+                staff_sales_value = staff['sales_value'] or 0
                 if staff_sales_value is not None and staff_target_value > 0:
                     staff_achievement_rate = (staff_sales_value / staff_target_value) * 100
                 else:
                     staff_achievement_rate = 0
 
-                app_logger.debug(f"员工 {staff.staff_code} 达成率: {staff_achievement_rate}%")
+                app_logger.debug(f"员工 {staff['staff_code']} 达成率: {staff_achievement_rate}%")
 
                 # 获取适用于该岗位的所有规则代码
-                rule_codes = position_to_rules.get(staff.position, [])
-                app_logger.debug(f"员工 {staff.staff_code} 岗位 {staff.position} 适用的规则: {rule_codes}")
+                rule_codes = position_to_rules.get(staff['position'], [])
+                app_logger.debug(f"员工 {staff['staff_code']} 岗位 {staff['position']} 适用的规则: {rule_codes}")
 
                 if not rule_codes:
-                    app_logger.warning(f"员工 {staff.staff_code} 没有适用的规则，跳过计算")
+                    app_logger.warning(f"员工 {staff['staff_code']} 没有适用的规则，跳过计算")
                     continue
 
                 # 为每个适用的规则计算佣金
                 for rule_code in rule_codes:
-                    app_logger.debug(f"正在应用规则 {rule_code} 计算员工 {staff.staff_code} 的佣金")
+                    app_logger.debug(f"正在应用规则 {rule_code} 计算员工 {staff['staff_code']} 的佣金")
 
                     # 获取规则信息
                     rule_info = rules_info.get(rule_code)
@@ -1008,12 +1048,12 @@ class CommissionService:
 
                     # 考虑出勤率
                     if rule_info.consider_attendance:
-                        expected_attendance = staff.expected_attendance or 0
-                        actual_attendance = staff.actual_attendance or 0
+                        expected_attendance = staff['expected_attendance'] or 0
+                        actual_attendance = staff['actual_attendance'] or 0
 
                         if expected_attendance > 0:
                             if rule_info.rule_basis == 'store':
-                                total_attendance = position_actual_attendance[staff.position]
+                                total_attendance = position_actual_attendance[staff['position']]
                                 if total_attendance > 0:
                                     attendance_factor = actual_attendance / total_attendance
                                     commission_amount = commission_amount * attendance_factor
@@ -1026,7 +1066,7 @@ class CommissionService:
                                     f"考虑出勤率调整incentive: {commission_amount} * ({actual_attendance}/{expected_attendance})")
                         else:
                             commission_amount = 0
-                            app_logger.warning(f"员工 {staff.staff_code} 应出勤为0，不应用出勤率调整")
+                            app_logger.warning(f"员工 {staff['staff_code']} 应出勤为0，不应用出勤率调整")
 
                     # 最低保障金额
                     if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
@@ -1037,17 +1077,17 @@ class CommissionService:
                     # 只有佣金金额大于0时才保存
                     if commission_amount and commission_amount > 0:
                         commission_amount = round(commission_amount, 2)
-                        app_logger.debug(f"为员工 {staff.staff_code} 创建佣金记录: {commission_amount}")
+                        app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
                         commission_record = CommissionStaffModel(
                             fiscal_month=fiscal_month,
-                            staff_code=staff.staff_code,
+                            staff_code=staff['staff_code'],
                             store_code=store_code,
                             amount=commission_amount,
                             rule_detail_code=matching_detail.rule_detail_code
                         )
                         commission_records.append(commission_record)
                     else:
-                        app_logger.debug(f"员工 {staff.staff_code} 计算的佣金金额为0或负数，跳过记录")
+                        app_logger.debug(f"员工 {staff['staff_code']} 计算的佣金金额为0或负数，跳过记录")
 
             # 8. 批量添加佣金记录
             if commission_records:
