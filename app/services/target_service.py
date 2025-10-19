@@ -1214,6 +1214,8 @@ class TargetStaffService:
                         "first_name": row.first_name,
                         "expected_attendance": float(
                             row.expected_attendance) if row.expected_attendance is not None else 0.0,
+                        "actual_attendance": float(
+                            row.actual_attendance) if row.actual_attendance is not None else 0.0,
                         "target_value": float(row.target_value) if row.target_value is not None else 0.0,
                         "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
@@ -1249,8 +1251,6 @@ class TargetStaffService:
                         staff_info['target_value'] > 0):
                     achievement_rate = f"{staff_info['sales_value'] / staff_info['target_value']:.2%}"
 
-                if staff_info['target_value'] is None and staff_info['target_value'] == 0:
-                    pass
                 staff_info["achievement_rate"] = achievement_rate
                 staff_info["target_value_ratio"] = f"{staff_info['target_value_ratio']:.4%}" if staff_info[
                                                                                                     "target_value_ratio"] is not None else None
