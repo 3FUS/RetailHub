@@ -329,7 +329,28 @@ class ExcelImportService:
                     store_sales_summary[store_key] += sales_value_ec
                 else:
                     store_sales_summary[store_key] = sales_value_ec
-            # 提交员工考勤更新
+
+            # 更新门店目标表中的电商销售数据
+            for (store_code, fiscal_month), total_sales_value_ec in store_sales_summary.items():
+                # 查询现有的门店目标记录
+                query = select(TargetStoreMain).where(
+                    TargetStoreMain.store_code == store_code,
+                    TargetStoreMain.fiscal_month == fiscal_month
+                )
+                result = await db.execute(query)
+                target_store_record = result.scalar_one_or_none()
+
+                if target_store_record:
+                    # 更新电商销售金额和总销售金额
+                    target_store_record.sales_value_ec = total_sales_value_ec
+                    # 总销售金额 = 线下销售金额 + 电商销售金额
+                    sales_value_store = target_store_record.sales_value_store or 0.0
+                    target_store_record.sales_value = sales_value_store + total_sales_value_ec
+                else:
+                    app_logger.warning(
+                        f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")
+
+            # 提交员工考勤更新和门店目标更新
             if ec_sales_summary:
                 await db.commit()
 

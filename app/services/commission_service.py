@@ -1237,6 +1237,7 @@ class CommissionService:
 
                     # 只有佣金金额大于0时才保存
                     if commission_amount and commission_amount > 0:
+                        commission_amount = round(commission_amount / 10) * 10
                         commission_amount = round(commission_amount, 2)
                         app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
                         commission_record = CommissionStaffModel(

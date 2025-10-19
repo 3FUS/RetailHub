@@ -1,3 +1,4 @@
+from collections import defaultdict
 from sqlalchemy import String, func, null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -39,9 +40,11 @@ class TargetRPTService:
             query = select(
                 TargetStoreDaily.target_date.label('date'),
                 TargetStoreMain.fiscal_month,
-                (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
+                (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label(
+                    'fiscal_week'),
                 TargetStoreMain.store_code,
                 store_alias.c.store_name,
+                store_alias.c.Location_ID,
                 (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
@@ -78,6 +81,7 @@ class TargetRPTService:
                     "fiscal_month": row.fiscal_month,
                     "fiscal_week": row.fiscal_week,
                     "store_code": row.store_code,
+                    "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
                     "target_date_value": float(row.target_date_value) if row.target_date_value is not None else 0.0
                 })
@@ -87,6 +91,7 @@ class TargetRPTService:
                 "fiscal_month": {"en": "Fiscal Month (ID)", "zh": "财月"},
                 "fiscal_week": {"en": "Fiscal Week (ID)", "zh": "财周"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
+                "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
                 "store_name": {"en": "Location short Name", "zh": "店铺名称"},
                 "target_date_value": {"en": "Commission Target Local", "zh": "日期目标值"}
             }
@@ -341,47 +346,49 @@ class TargetRPTService:
             result = await db.execute(query)
             target_data = result.all()
 
-            # 构建结果数据 - 转换为横向格式
-            store_data = {}
-            dates = set()
+            # 按日期分组数据并构建横向表结构（参考 get_budget_data 的实现方式）
+            date_groups = defaultdict(dict)
+            store_codes = set()
+            store_names = {}
 
             for row in target_data:
+                date_str = row.date.strftime('%Y%m%d') if row.date else None
                 store_code = row.store_code
                 store_name = row.store_name
-                date_str = row.date.strftime('%Y%m%d') if row.date else None
                 target_value = float(row.target_date_value) if row.target_date_value is not None else 0.0
 
                 if date_str:
-                    dates.add(date_str)
+                    date_groups[date_str][store_code] = target_value
+                    store_codes.add(store_code)
+                    if store_code not in store_names:
+                        store_names[store_code] = store_name
 
-                if store_code not in store_data:
-                    store_data[store_code] = {
-                        "store": f"{store_code}({store_name})" if store_name else store_code
-                    }
-
-                if date_str:
-                    store_data[store_code][date_str] = target_value
-
-            # 确保所有日期列都存在
-            sorted_dates = sorted(list(dates))
+            # 构建结果数据 - 转换为横向格式
+            sorted_store_codes = sorted(list(store_codes))
             formatted_data = []
-            for store_code, store_info in store_data.items():
-                row_data = {"store": store_info["store"]}
-                for date_str in sorted_dates:
-                    row_data[date_str] = store_info.get(date_str, 0.0)
+
+            # 为每个门店构建一行数据
+            for store_code in sorted_store_codes:
+                store_name = store_names.get(store_code, "")
+                row_data = {"store": f"{store_code}({store_name})" if store_name else store_code}
+
+                # 为每个日期添加目标值
+                for date_str in sorted(date_groups.keys()):
+                    row_data[date_str] = date_groups[date_str].get(store_code, 0.0)
+
                 formatted_data.append(row_data)
 
             # 构建字段翻译
             field_translations = {
                 "store": {"en": "Store", "zh": "店铺"}
             }
-            for date_str in sorted_dates:
+            for date_str in sorted(date_groups.keys()):
                 field_translations[date_str] = {"en": date_str, "zh": date_str}
 
             return {
                 "data": formatted_data,
                 "field_translations": field_translations,
-                "dates": sorted_dates  # 额外返回日期列表，便于前端处理
+                "dates": sorted(list(date_groups.keys()))  # 返回排序后的日期列表
             }
         except Exception as e:
             error_msg = f"Error in get_rpt_target_date_horizontal_version: {str(e)}"
@@ -1215,14 +1222,19 @@ class TargetStaffService:
                 else:
                     staff_attendance_dict[staff_code]["expected_attendance"] += float(
                         row.expected_attendance) if row.expected_attendance is not None else 0.0
+
+                    staff_attendance_dict[staff_code]["actual_attendance"] += float(
+                        row.actual_attendance) if row.actual_attendance is not None else 0.0
+
                     staff_attendance_dict[staff_code]["sales_value"] += float(
                         row.sales_value) if row.sales_value is not None else 0.0
+
                     staff_attendance_dict[staff_code]["target_value"] += float(
                         row.target_value) if row.target_value is not None else 0.0
 
                 if row.fiscal_month == fiscal_month:
-                    staff_attendance_dict[staff_code]["actual_attendance"] = float(
-                        row.actual_attendance) if row.actual_attendance is not None else None
+                    # staff_attendance_dict[staff_code]["actual_attendance"] = float(
+                    #     row.actual_attendance) if row.actual_attendance is not None else None
                     staff_attendance_dict[staff_code]["position"] = position
                     staff_attendance_dict[staff_code]["salary_coefficient"] = float(
                         salary_coefficient) if salary_coefficient is not None else None

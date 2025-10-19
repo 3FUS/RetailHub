@@ -17,6 +17,8 @@ class TargetStoreMain(Base):
     store_type = Column(String(50))
     target_value = Column(Float)
     sales_value = Column(Float)
+    sales_value_ec = Column(Float)
+    sales_value_store = Column(Float)  # 线下门店销售金额
     store_status = Column(String(20), default="draft")  # draft, submitted, approved, rejected
     staff_status = Column(String(20), default="draft")
     created_at = Column(DateTime, default=datetime.utcnow)

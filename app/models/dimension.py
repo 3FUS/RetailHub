@@ -32,6 +32,7 @@ class StoreModel(Base):
     store_code = Column(String(30), primary_key=True)  # 门店代码
     store_name = Column(String(255), nullable=False)  # 门店名称
     store_nameCHS = Column(String(255))  # 中文门店名称
+    Location_ID = Column(String(30))
     country = Column(String(30))  # 国家
     state = Column(String(30))  # 省
     City = Column(String(50))  # 城市
@@ -69,6 +70,7 @@ class StoreModel(Base):
     update_user = Column(String(60))
     update_time = Column(DateTime)
 
+
 class RoleOrgJoin(Base):
     """
     角色与组织关联模型
@@ -76,12 +78,13 @@ class RoleOrgJoin(Base):
     """
     __tablename__ = "role_org_join"
 
-    role_code = Column(String(60),  primary_key=True)
+    role_code = Column(String(60), primary_key=True)
     org_level = Column(String(60), primary_key=True)
     org_level_value = Column(String(60), primary_key=True)
     update_time = Column(DateTime, nullable=True, default=None)
     update_user = Column(String(120), nullable=True, default=None)
     TS_ID = Column(DateTime, nullable=True, default=datetime.utcnow)
+
 
 class StoreTypeModel(Base):
     """
