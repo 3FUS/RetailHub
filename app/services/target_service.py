@@ -39,7 +39,7 @@ class TargetRPTService:
             query = select(
                 TargetStoreDaily.target_date.label('date'),
                 TargetStoreMain.fiscal_month,
-                (DimensionDayWeek.finance_year + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
+                (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
                 TargetStoreMain.store_code,
                 store_alias.c.store_name,
                 (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
@@ -84,8 +84,8 @@ class TargetRPTService:
 
             field_translations = {
                 "date": {"en": "Date (Number)", "zh": "日期"},
-                "fiscal_month": {"en": "Fiscal week (ID)", "zh": "财周"},
-                "fiscal_week": {"en": "Fiscal Month (ID)", "zh": "财月"},
+                "fiscal_month": {"en": "Fiscal Month (ID)", "zh": "财月"},
+                "fiscal_week": {"en": "Fiscal Week (ID)", "zh": "财周"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
                 "store_name": {"en": "Location short Name", "zh": "店铺名称"},
                 "target_date_value": {"en": "Commission Target Local", "zh": "日期目标值"}
@@ -105,6 +105,290 @@ class TargetRPTService:
             return {
                 "data": [],
                 "field_translations": [],
+                "error": error_msg
+            }
+
+    @staticmethod
+    async def get_rpt_target_percentage_version(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+
+        try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 执行SQL查询逻辑
+            query = select(
+                TargetStoreDaily.target_date.label('date'),
+                TargetStoreMain.store_code.label('store_code'),
+                store_alias.c.store_name.label('store_name'),
+                (DimensionDayWeek.finance_year + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
+                DimensionDayWeek.week_number.label('week_number'),
+                TargetStoreWeek.percentage.label('week_percentage'),
+                TargetStoreWeek.target_value.label('week_target_value'),
+                TargetStoreDaily.percentage.label('day_percentage'),
+                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('day_target_value')
+            ).select_from(
+                TargetStoreMain.__table__.join(
+                    TargetStoreDaily.__table__,
+                    (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
+                    (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    store_alias,
+                    store_alias.c.store_code == TargetStoreMain.store_code
+                ).join(
+                    DimensionDayWeek.__table__,
+                    DimensionDayWeek.actual_date == TargetStoreDaily.target_date
+                ).join(
+                    TargetStoreWeek.__table__,
+                    (TargetStoreWeek.store_code == TargetStoreMain.store_code) &
+                    (TargetStoreWeek.fiscal_month == TargetStoreMain.fiscal_month) &
+                    (TargetStoreWeek.week_number == DimensionDayWeek.week_number)
+                )
+            ).where(
+                TargetStoreMain.fiscal_month == fiscal_month
+            ).order_by(TargetStoreDaily.target_date, TargetStoreMain.store_code)
+
+            # 如果有关键字过滤条件
+            if key_word:
+                query = query.where(
+                    TargetStoreMain.store_code.contains(key_word) |
+                    store_alias.c.store_name.contains(key_word)
+                )
+
+            result = await db.execute(query)
+            target_data = result.all()
+
+            # 构建结果数据
+            formatted_data = []
+            for row in target_data:
+                formatted_data.append({
+                    "date": row.date.strftime('%Y%m%d') if row.date else None,
+                    "location_code": row.store_code,
+                    "location_id": row.store_code,
+                    "location_name": row.store_name,
+                    "fiscal_week": row.fiscal_week,
+                    "week": row.week_number,
+                    "week_percentage": float(row.week_percentage) if row.week_percentage is not None else 0.0,
+                    "week_value": float(row.week_target_value) if row.week_target_value is not None else 0.0,
+                    "day_percentage": float(row.day_percentage) if row.day_percentage is not None else 0.0,
+                    "day_value": float(row.day_target_value) if row.day_target_value is not None else 0.0
+                })
+
+            field_translations = {
+                "date": {"en": "Date", "zh": "日期"},
+                "location_code": {"en": "Location Code", "zh": "店铺代码"},
+                "location_id": {"en": "Location ID", "zh": "店铺ID"},
+                "location_name": {"en": "Location Name", "zh": "店铺名称"},
+                "fiscal_week": {"en": "Fiscal Week", "zh": "财周"},
+                "week": {"en": "Week", "zh": "周"},
+                "week_percentage": {"en": "Week Percentage", "zh": "周百分比"},
+                "week_value": {"en": "Week Value", "zh": "周目标值"},
+                "day_percentage": {"en": "Day Percentage", "zh": "日百分比"},
+                "day_value": {"en": "Day Value", "zh": "日目标值"}
+            }
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations
+            }
+        except Exception as e:
+            error_msg = f"Error in get_rpt_target_percentage_version: {str(e)}"
+            app_logger.error(error_msg)
+            return {
+                "data": [],
+                "field_translations": {},
+                "error": error_msg
+            }
+
+    @staticmethod
+    async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+        """
+        获取门店目标报表数据 - BI版本
+        格式: Date (Number)	Fiscal Week (ID)	Fiscal Month (ID)	Location Code	Location ID	Location Short Name	Commission Target Local
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财月
+            key_word: 查询关键字（门店代码或名称）
+            role_code: 角色代码
+
+        Returns:
+            dict: 报表数据
+        """
+        try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 执行SQL查询逻辑
+            query = select(
+                TargetStoreDaily.target_date.label('date'),
+                TargetStoreMain.fiscal_month.label('fiscal_month'),
+                (DimensionDayWeek.finance_year + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
+                TargetStoreMain.store_code.label('store_code'),
+                store_alias.c.store_name.label('store_name'),
+                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+            ).select_from(
+                TargetStoreMain.__table__.join(
+                    TargetStoreDaily.__table__,
+                    (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
+                    (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    store_alias,
+                    store_alias.c.store_code == TargetStoreMain.store_code
+                ).join(
+                    DimensionDayWeek.__table__,
+                    DimensionDayWeek.actual_date == TargetStoreDaily.target_date
+                )
+            ).where(
+                TargetStoreMain.fiscal_month == fiscal_month
+            ).order_by(TargetStoreDaily.target_date, TargetStoreMain.store_code)
+
+            # 如果有关键字过滤条件
+            if key_word:
+                query = query.where(
+                    TargetStoreMain.store_code.contains(key_word) |
+                    store_alias.c.store_name.contains(key_word)
+                )
+
+            result = await db.execute(query)
+            target_data = result.all()
+
+            # 构建结果数据
+            formatted_data = []
+            for row in target_data:
+                formatted_data.append({
+                    "date_number": row.date.strftime('%Y%m%d') if row.date else None,
+                    "fiscal_week_id": row.fiscal_week,
+                    "fiscal_month_id": row.fiscal_month,
+                    "location_code": row.store_code,
+                    "location_id": row.store_code,
+                    "location_short_name": row.store_name,
+                    "commission_target_local": float(
+                        row.target_date_value) if row.target_date_value is not None else 0.0
+                })
+
+            field_translations = {
+                "date_number": {"en": "Date (Number)", "zh": "日期"},
+                "fiscal_week_id": {"en": "Fiscal Week (ID)", "zh": "财周"},
+                "fiscal_month_id": {"en": "Fiscal Month (ID)", "zh": "财月"},
+                "location_code": {"en": "Location Code", "zh": "店铺代码"},
+                "location_id": {"en": "Location ID", "zh": "店铺ID"},
+                "location_short_name": {"en": "Location Short Name", "zh": "店铺名称"},
+                "commission_target_local": {"en": "Commission Target Local", "zh": "佣金目标"}
+            }
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations
+            }
+        except Exception as e:
+            error_msg = f"Error in get_rpt_target_bi_version: {str(e)}"
+            app_logger.error(error_msg)
+            return {
+                "data": [],
+                "field_translations": {},
+                "error": error_msg
+            }
+
+    @staticmethod
+    async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str,
+                                                     role_code: str):
+        """
+        获取门店目标报表数据 - 日期横向版本
+        格式: Store	20250803	20250804	20250805	20250806	20250807	20250808	20250809	20250810
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财月
+            key_word: 查询关键字（门店代码或名称）
+            role_code: 角色代码
+
+        Returns:
+            dict: 报表数据
+        """
+        try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 执行SQL查询逻辑
+            query = select(
+                TargetStoreDaily.target_date.label('date'),
+                TargetStoreMain.store_code.label('store_code'),
+                store_alias.c.store_name.label('store_name'),
+                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+            ).select_from(
+                TargetStoreMain.__table__.join(
+                    TargetStoreDaily.__table__,
+                    (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
+                    (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    store_alias,
+                    store_alias.c.store_code == TargetStoreMain.store_code
+                ).join(
+                    DimensionDayWeek.__table__,
+                    DimensionDayWeek.actual_date == TargetStoreDaily.target_date
+                )
+            ).where(
+                TargetStoreMain.fiscal_month == fiscal_month
+            ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
+
+            # 如果有关键字过滤条件
+            if key_word:
+                query = query.where(
+                    TargetStoreMain.store_code.contains(key_word) |
+                    store_alias.c.store_name.contains(key_word)
+                )
+
+            result = await db.execute(query)
+            target_data = result.all()
+
+            # 构建结果数据 - 转换为横向格式
+            store_data = {}
+            dates = set()
+
+            for row in target_data:
+                store_code = row.store_code
+                store_name = row.store_name
+                date_str = row.date.strftime('%Y%m%d') if row.date else None
+                target_value = float(row.target_date_value) if row.target_date_value is not None else 0.0
+
+                if date_str:
+                    dates.add(date_str)
+
+                if store_code not in store_data:
+                    store_data[store_code] = {
+                        "store": f"{store_code}({store_name})" if store_name else store_code
+                    }
+
+                if date_str:
+                    store_data[store_code][date_str] = target_value
+
+            # 确保所有日期列都存在
+            sorted_dates = sorted(list(dates))
+            formatted_data = []
+            for store_code, store_info in store_data.items():
+                row_data = {"store": store_info["store"]}
+                for date_str in sorted_dates:
+                    row_data[date_str] = store_info.get(date_str, 0.0)
+                formatted_data.append(row_data)
+
+            # 构建字段翻译
+            field_translations = {
+                "store": {"en": "Store", "zh": "店铺"}
+            }
+            for date_str in sorted_dates:
+                field_translations[date_str] = {"en": date_str, "zh": date_str}
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations,
+                "dates": sorted_dates  # 额外返回日期列表，便于前端处理
+            }
+        except Exception as e:
+            error_msg = f"Error in get_rpt_target_date_horizontal_version: {str(e)}"
+            app_logger.error(error_msg)
+            return {
+                "data": [],
+                "field_translations": {},
                 "error": error_msg
             }
 
@@ -376,7 +660,8 @@ class TargetStoreService:
         return {
             "data": formatted_data,
             "field_translations": field_translations,
-            "MonthEnd": month_end_value
+            "MonthEnd": month_end_value,
+            "fiscal_month": fiscal_month
         }
 
     @staticmethod
@@ -729,6 +1014,58 @@ class TargetStoreDailyService:
         return target_store_daily
 
 
+# 在 target_service.py 中添加以下工具类
+class StaffTargetCalculator:
+    @staticmethod
+    def calculate_staff_targets(store_target_value: float, ratios: list) -> list:
+        """
+        根据门店目标值和员工比例计算每个员工的目标值
+
+        Args:
+            store_target_value: 门店目标值
+            ratios: 员工比例列表
+
+        Returns:
+            list: 员工目标值列表
+        """
+        if store_target_value <= 0 or not ratios:
+            return [0] * len(ratios) if ratios else []
+
+        # 计算每个员工的初始目标值（整数）
+        staff_target_values = []
+        for ratio in ratios:
+            staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
+            staff_target_values.append(int(staff_target_value))
+
+        # 计算总和与门店目标值的差异
+        total_staff_target = sum(staff_target_values)
+        difference = int(store_target_value) - total_staff_target
+
+        # 找到目标值最大的员工索引，将差异加到该员工身上
+        if difference != 0 and staff_target_values:
+            max_target_index = staff_target_values.index(max(staff_target_values))
+            staff_target_values[max_target_index] += difference
+
+        return staff_target_values
+
+    @staticmethod
+    def calculate_staff_target_from_ratio(store_target_value: float, ratio: float) -> int:
+        """
+        根据门店目标值和单个员工比例计算员工目标值
+
+        Args:
+            store_target_value: 门店目标值
+            ratio: 员工比例
+
+        Returns:
+            int: 员工目标值
+        """
+        if store_target_value <= 0 or ratio <= 0:
+            return 0
+
+        return int(round(store_target_value * ratio, 0))
+
+
 class TargetStaffService:
     @staticmethod
     async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, module: str = "target"):
@@ -900,6 +1237,8 @@ class TargetStaffService:
                         staff_info['target_value'] > 0):
                     achievement_rate = f"{staff_info['sales_value'] / staff_info['target_value']:.2%}"
 
+                if staff_info['target_value'] is None and staff_info['target_value'] == 0:
+                    pass
                 staff_info["achievement_rate"] = achievement_rate
                 staff_info["target_value_ratio"] = f"{staff_info['target_value_ratio']:.4%}" if staff_info[
                                                                                                     "target_value_ratio"] is not None else None
@@ -1100,6 +1439,9 @@ class TargetStaffService:
         # 计算总权重
         total_weight = sum(weights)
 
+        if total_weight <= 0:
+            return []
+
         ratios = []
         if total_weight > 0:
             for i in range(len(weights)):
@@ -1108,18 +1450,10 @@ class TargetStaffService:
 
             # 调整最后一个员工的比例以确保总和为1
             if ratios:
-                ratio_sum = sum(ratios[:-1])
-                ratios[-1] = round(1.0 - ratio_sum, 6)
-        else:
-            # 如果总权重为0，则平均分配
-            count = len(target_data.staffs)
-            if count > 0:
-                equal_ratio = round(1.0 / count, 6)
-                ratios = [equal_ratio for _ in range(count)]
-                # 调整最后一个确保总和为1
-                if ratios:
-                    ratio_sum = sum(ratios[:-1])
-                    ratios[-1] = round(1.0 - ratio_sum, 6)
+                ratio_sum = sum(ratios[1:])  # 除第一个员工外的所有比例之和
+                ratios[0] = round(1.0 - ratio_sum, 6)
+
+        staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
 
         for i, staff_data in enumerate(target_data.staffs):
             result = await db.execute(select(StaffAttendanceModel).where(
@@ -1129,11 +1463,8 @@ class TargetStaffService:
             ))
             existing_target = result.scalar_one_or_none()
 
-            # 计算当前员工的target_value_ratio
-            # target_value_ratio = weights[i] / total_weight if total_weight > 0 else 0
             target_value_ratio = ratios[i] if ratios else 0
-
-            staff_target_value = round(store_target_value * target_value_ratio, 2) if store_target_value > 0 else 0.0
+            staff_target_value = staff_target_values[i]
 
             if existing_target:
                 # 如果存在，更新记录

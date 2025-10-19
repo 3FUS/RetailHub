@@ -13,8 +13,10 @@ from app.database import get_db
 from app.models.dimension import DimensionDayWeek
 from app.models.sales import ECSalesModel
 from app.models.staff import StaffAttendanceModel
+from app.models.target import TargetStoreMain
 from app.services.budget_service import BudgetService
-from app.services.target_service import TargetStoreService
+from app.services.target_service import TargetStoreService, StaffTargetCalculator
+from app.utils.logger import app_logger
 
 router = APIRouter(prefix="/excel", tags=["excel"])
 
@@ -95,12 +97,60 @@ class ExcelImportService:
 
         updated_targets = await TargetStoreService.batch_update_target_value(db, target_updates)
 
+        await ExcelImportService._recalculate_staff_targets(db, target_updates)
+
         return ImportResult(
             success=True,
             message="成功导入目标数据",
             data_type="target",
             rows_processed=len(updated_targets)
         )
+
+    @staticmethod
+    async def _recalculate_staff_targets(db: AsyncSession, target_updates: list):
+        """
+        当门店目标值更新后，重新计算相关员工的目标值
+        """
+        for update_data in target_updates:
+            store_code = update_data.get('store_code')
+            fiscal_month = update_data.get('fiscal_month')
+            store_target_value = update_data.get('target_value')
+
+            # 获取该门店该财月的所有员工考勤记录
+            result = await db.execute(
+                select(StaffAttendanceModel)
+                    .where(
+                    StaffAttendanceModel.store_code == store_code,
+                    StaffAttendanceModel.fiscal_month == fiscal_month
+                )
+            )
+            staff_attendances = result.scalars().all()
+
+            if not staff_attendances:
+                continue
+
+            # 提取所有员工的比例
+            ratios = [attendance.target_value_ratio for attendance in staff_attendances if
+                      attendance.target_value_ratio is not None]
+
+            # 如果没有比例数据，跳过计算
+            if not ratios:
+                continue
+
+            # 使用工具类计算新的员工目标值
+            new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
+
+            # 更新每个员工的目标值
+            for i, attendance in enumerate(staff_attendances):
+                if i < len(new_staff_targets):
+                    attendance.target_value = new_staff_targets[i]
+                    attendance.updated_at = datetime.now()
+
+            await db.commit()
+
+            # 刷新对象
+            for attendance in staff_attendances:
+                await db.refresh(attendance)
 
     @staticmethod
     async def import_budget_data(df: pd.DataFrame, db: AsyncSession) -> ImportResult:
@@ -252,6 +302,9 @@ class ExcelImportService:
             await db.commit()
 
             updated_attendances = 0
+
+            store_sales_summary = {}
+
             for (staff_code, store_code, fiscal_month), sales_value_ec in ec_sales_summary.items():
                 # 更新或创建员工考勤记录
                 query = select(StaffAttendanceModel).where(
@@ -268,8 +321,14 @@ class ExcelImportService:
                     attendance_record.sales_value = (attendance_record.sales_value_store or 0) + sales_value_ec
                     updated_attendances += 1
                 else:
-                    pass
+                    app_logger.warning(
+                        f"未找到员工考勤记录，将创建新的记录: staff_code={staff_code}, store_code={store_code}, fiscal_month={fiscal_month}")
 
+                store_key = (store_code, fiscal_month)
+                if store_key in store_sales_summary:
+                    store_sales_summary[store_key] += sales_value_ec
+                else:
+                    store_sales_summary[store_key] = sales_value_ec
             # 提交员工考勤更新
             if ec_sales_summary:
                 await db.commit()

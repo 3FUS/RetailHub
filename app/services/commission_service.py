@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -365,6 +365,17 @@ class CommissionService:
 
             updated_count = 0
 
+            result = await db.execute(
+                select(CommissionStoreModel.merged_store_codes)
+                    .where(CommissionStoreModel.store_code == store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+            )
+            commission_store = result.fetchone()
+
+            if commission_store:
+                merged_code = commission_store.merged_store_codes.split(',')
+                merged_codes = [code.strip() for code in merged_code]
+
             # 遍历所有需要更新的员工
             for staff_attendance in staff_attendances:
                 staff_code = staff_attendance.staff_code
@@ -385,6 +396,23 @@ class CommissionService:
                     staff_record.actual_attendance = actual_attendance
                     staff_record.updated_at = datetime.now()
                     updated_count += 1
+                else:
+                    if merged_codes:
+                        for merged_store_code in merged_codes:
+                            if merged_store_code != store_code:
+                                result = await db.execute(
+                                    select(StaffAttendanceModel)
+                                        .where(StaffAttendanceModel.staff_code == staff_code)
+                                        .where(StaffAttendanceModel.store_code == merged_store_code)
+                                        .where(StaffAttendanceModel.fiscal_month == fiscal_month)
+                                )
+                                merged_staff_record = result.scalar_one_or_none()
+
+                                if merged_staff_record:
+                                    merged_staff_record.actual_attendance = actual_attendance
+                                    merged_staff_record.updated_at = datetime.now()
+                                    updated_count += 1
+                                    break  # 找到并更新后退出循环
 
             result_store = await db.execute(
                 select(CommissionStoreModel)
@@ -542,6 +570,7 @@ class CommissionService:
                 'status': '',
                 'amount_individual': 0.0,
                 'amount_team': 0.0,
+                'amount_operational': 0.0,
                 'amount_incentive': 0.0,
                 'amount_adjustment': 0.0
             })
@@ -598,6 +627,8 @@ class CommissionService:
                     commission_dict[store_code]['amount_incentive'] += amount
                 elif rule_class == 'adjustment':
                     commission_dict[store_code]['amount_adjustment'] += amount
+                elif rule_class == 'operational':
+                    commission_dict[store_code]['amount_operational'] += amount
 
             # 转换为列表格式返回
             formatted_commissions = list(commission_dict.values())
@@ -625,9 +656,10 @@ class CommissionService:
                 "fiscal_period": {"en": "Fiscal Period", "zh": "计算周期"},
                 "status": {"en": "Status", "zh": "状态"},
                 "amount_individual": {"en": "Individual Amount", "zh": "个人提成"},
-                "amount_team": {"en": "Team Amount", "zh": "团队提成"},
-                "amount_incentive": {"en": "Incentive Amount", "zh": "激励金额"},
-                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
+                "amount_team": {"en": "Team Amount", "zh": "团队分摊"},
+                "amount_operational": {"en": "Operational Bonus", "zh": "运营奖金"},
+                "amount_incentive": {"en": "Incentive Amount", "zh": "激励奖金"},
+                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整奖金"}
             }
 
             month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
@@ -635,7 +667,8 @@ class CommissionService:
             return {"data": formatted_commissions,
                     "status_counts": status_count_dict,
                     "field_translations": field_translations,
-                    "MonthEnd": month_end_value}
+                    "MonthEnd": month_end_value,
+                    "fiscal_month": fiscal_month}
 
         except Exception as e:
             # 记录异常信息（在实际应用中应该使用日志记录器）
@@ -644,7 +677,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def get_commission_by_store_code(db: AsyncSession, id: int):
+    async def get_commission_by_store_code(db: AsyncSession,  store_code: str, fiscal_month: str):
         pass
 
     @staticmethod
@@ -724,6 +757,110 @@ class CommissionService:
             app_logger.error(f"Error in create_add_adjustment: {str(e)}")
             # 抛出异常以便上层处理
             raise e
+
+    @staticmethod
+    def calculate_discount_factor(achievement_rate: float) -> float:
+        """
+        根据达成率计算折扣因子
+
+        Args:
+            achievement_rate: 达成率
+
+        Returns:
+            float: 折扣因子
+        """
+        if achievement_rate < 80:
+            return 0.75
+        elif achievement_rate < 100:
+            return 0.85
+        return 1.0
+
+    @staticmethod
+    async def process_position_attendance_stats(staff_attendances: list) -> Dict[str, Dict[str, float]]:
+        """
+        处理各岗位的出勤统计数据
+
+        Args:
+            staff_attendances: 员工出勤数据列表
+
+        Returns:
+            Dict: 岗位出勤统计数据
+        """
+        position_stats = {}
+
+        for staff in staff_attendances:
+            position = staff['position']
+            actual_attendance = staff.get('actual_attendance', 0)
+            target_value = staff['target_value']
+            sales_value = staff['sales_value'] or 0
+
+            # 计算员工达成率
+            achievement_rate = 0
+            if sales_value is not None and target_value > 0:
+                achievement_rate = (sales_value / target_value) * 100
+
+            # 计算折扣因子
+            discount_factor = CommissionService.calculate_discount_factor(achievement_rate)
+
+            # 累计各岗位实际出勤(考虑折扣)
+            if position not in position_stats:
+                position_stats[position] = {
+                    'total_attendance': 0,
+                    'staff_count': 0
+                }
+
+            position_stats[position]['total_attendance'] += actual_attendance * discount_factor
+            position_stats[position]['staff_count'] += 1
+
+        return position_stats
+
+    @staticmethod
+    def apply_attendance_adjustment(commission_amount: float, staff: dict,
+                                    rule_info, position_stats: dict) -> float:
+        """
+        应用出勤率调整
+
+        Args:
+            commission_amount: 原始佣金金额
+            staff: 员工数据
+            rule_info: 规则信息
+            position_stats: 岗位统计信息
+
+        Returns:
+            float: 调整后的佣金金额
+        """
+        expected_attendance = staff['expected_attendance'] or 0
+        actual_attendance = staff['actual_attendance'] or 0
+
+        if expected_attendance <= 0:
+            return 0  # 应出勤为0，不发放佣金
+
+        if not rule_info.consider_attendance:
+            return commission_amount  # 不考虑出勤率
+
+        position = staff['position']
+        position_stat = position_stats.get(position, {})
+
+        if rule_info.consider_attendance == 1:
+            # 团队分摊模式
+            total_attendance = position_stat.get('total_attendance', 0)
+            if total_attendance > 0:
+                # 重新计算当前员工的折扣因子
+                target_value = staff['target_value']
+                sales_value = staff['sales_value'] or 0
+                achievement_rate = 0
+                if sales_value is not None and target_value > 0:
+                    achievement_rate = (sales_value / target_value) * 100
+                discount_factor = CommissionService.calculate_discount_factor(achievement_rate)
+
+                attendance_factor = (actual_attendance * discount_factor) / total_attendance
+                return commission_amount * attendance_factor
+        else:
+            # 个人出勤模式
+            attendance_factor = actual_attendance / expected_attendance
+            return commission_amount * attendance_factor
+
+        return commission_amount
 
     @staticmethod
     async def audit_commission(db: AsyncSession, id: int) -> dict:
@@ -862,17 +999,6 @@ class CommissionService:
             positions = list(set(staff.position for staff in staff_attendances))
             app_logger.debug(f"涉及的岗位类型: {positions}")
 
-            position_actual_attendance = {}
-            for staff in staff_attendances:
-                position = staff.position
-                actual_attendance = getattr(staff, 'actual_attendance', 0) or 0
-                if position in position_actual_attendance:
-                    position_actual_attendance[position] += actual_attendance
-                else:
-                    position_actual_attendance[position] = actual_attendance
-
-            app_logger.debug(f"岗位对应的实际勤天数: {position_actual_attendance}")
-
             rule_assignment_result = await db.execute(
                 select(
                     CommissionRuleAssignmentModel.position,
@@ -957,6 +1083,10 @@ class CommissionService:
             staff_attendances = list(processed_staff_attendances.values())
             app_logger.info(f"预处理后有 {len(staff_attendances)} 名唯一员工需要计算佣金")
 
+            # 处理岗位出勤统计数据
+            position_stats = await CommissionService.process_position_attendance_stats(staff_attendances)
+            app_logger.debug(f"岗位出勤统计数据: {position_stats}")
+
             commission_records = []
 
             # 7. 为每个员工计算佣金（应用所有适用的规则）
@@ -964,13 +1094,8 @@ class CommissionService:
                 app_logger.debug(f"正在为员工 {staff['staff_code']} 计算佣金")
 
                 # 检查员工目标值
-                # staff_target_value = store_target_value * (staff.target_value_ratio or 0)
                 staff_target_value = staff['target_value']
                 app_logger.debug(f"员工 {staff['staff_code']} 目标值: {staff_target_value}")
-
-                # if staff_target_value is None or staff_target_value == 0:
-                #     app_logger.warning(f"员工 {staff['staff_code']} 目标值为空或为0，跳过计算")
-                #     continue
 
                 # 计算员工达成率
                 staff_sales_value = staff['sales_value'] or 0
@@ -1048,25 +1173,10 @@ class CommissionService:
 
                     # 考虑出勤率
                     if rule_info.consider_attendance:
-                        expected_attendance = staff['expected_attendance'] or 0
-                        actual_attendance = staff['actual_attendance'] or 0
-
-                        if expected_attendance > 0:
-                            if rule_info.rule_basis == 'store':
-                                total_attendance = position_actual_attendance[staff['position']]
-                                if total_attendance > 0:
-                                    attendance_factor = actual_attendance / total_attendance
-                                    commission_amount = commission_amount * attendance_factor
-                                app_logger.debug(
-                                    f"考虑出勤率调整店提: {commission_amount} * ({actual_attendance}/{total_attendance})")
-                            else:
-                                attendance_factor = actual_attendance / expected_attendance
-                                commission_amount = commission_amount * attendance_factor
-                                app_logger.debug(
-                                    f"考虑出勤率调整incentive: {commission_amount} * ({actual_attendance}/{expected_attendance})")
-                        else:
-                            commission_amount = 0
-                            app_logger.warning(f"员工 {staff['staff_code']} 应出勤为0，不应用出勤率调整")
+                        commission_amount = CommissionService.apply_attendance_adjustment(
+                            commission_amount, staff, rule_info, position_stats
+                        )
+                        app_logger.debug(f"应用出勤调整后金额: {commission_amount}")
 
                     # 最低保障金额
                     if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
