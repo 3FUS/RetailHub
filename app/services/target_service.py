@@ -1090,8 +1090,6 @@ class TargetStaffService:
             app_logger.debug(
                 f"get_staff_attendance Store target value: {store_target_value}, sales value: {store_sales_value}")
 
-            # Step 3: 获取财月时间范围
-            fiscal_period = await TargetStaffService._fetch_fiscal_period(db, fiscal_month)
 
             merged_codes = [store_code]
             merged_months = [fiscal_month]
@@ -1120,6 +1118,8 @@ class TargetStaffService:
                     merged_data.total_target_value) if merged_data.total_target_value is not None else 0.0
                 store_sales_value = float(
                     merged_data.total_sales_value) if merged_data.total_sales_value is not None else 0.0
+
+            fiscal_period = await TargetStaffService._fetch_fiscal_period(db, merged_months if module == "commission" else [fiscal_month])
 
             app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
@@ -1401,14 +1401,14 @@ class TargetStaffService:
                 commission_status, commission_status_details, store_status_details, staff_status_details)
 
     @staticmethod
-    async def _fetch_fiscal_period(db: AsyncSession, fiscal_month: str) -> str:
+    async def _fetch_fiscal_period(db: AsyncSession, fiscal_month: list) -> str:
         """获取指定财月的时间区间"""
         date_range_result = await db.execute(
             select(
                 func.min(DimensionDayWeek.actual_date).label('min_date'),
                 func.max(DimensionDayWeek.actual_date).label('max_date')
             )
-                .where(DimensionDayWeek.fiscal_month == fiscal_month)
+                .where(DimensionDayWeek.fiscal_month.in_(fiscal_month))
         )
         date_range = date_range_result.fetchone()
         if date_range and date_range.min_date and date_range.max_date:
