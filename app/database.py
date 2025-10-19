@@ -19,7 +19,7 @@ async def get_db():
     """获取MySQL数据库会话"""
     async_session = SessionLocal()
     try:
-        app_logger.debug("Acquiring MySQL database session")
+        # app_logger.debug("Acquiring MySQL database session")
         yield async_session
     except SQLAlchemyError as e:
         app_logger.error(f"MySQL database operation error: {e}")
@@ -30,7 +30,7 @@ async def get_db():
     finally:
         try:
             await async_session.close()
-            app_logger.debug("MySQL database session closed")
+            # app_logger.debug("MySQL database session closed")
         except Exception as e:
             app_logger.error(f"Error closing MySQL session: {e}")
 
@@ -81,7 +81,7 @@ async def get_sqlserver_db():
     """获取SQL Server数据库会话"""
     ms_session = SQLServerSessionLocal()
     try:
-        app_logger.debug("Acquiring SQL Server database session")
+        # app_logger.debug("Acquiring SQL Server database session")
         yield ms_session
     except SQLAlchemyError as e:
         app_logger.error(f"SQL Server database operation error: {e}")
@@ -92,6 +92,6 @@ async def get_sqlserver_db():
     finally:
         try:
             ms_session.close()
-            app_logger.debug("SQL Server database session closed")
+            # app_logger.debug("SQL Server database session closed")
         except Exception as e:
             app_logger.error(f"Error closing SQL Server session: {e}")

@@ -358,6 +358,11 @@ class CommissionService:
     @staticmethod
     async def update_commission(db: AsyncSession, attendance_update, role_code: str) -> bool:
         try:
+            app_logger.info(f"Starting update_commission for store {attendance_update.store_code}, "
+                            f"fiscal_month {attendance_update.fiscal_month}")
+            app_logger.debug(f"Attendance update data: {attendance_update}")
+            app_logger.debug(f"Role code: {role_code}")
+
             # 获取传入的参数
             store_code = attendance_update.store_code
             fiscal_month = attendance_update.fiscal_month
@@ -365,23 +370,36 @@ class CommissionService:
 
             updated_count = 0
 
+            # 初始化 merged_codes 为默认空列表
+            merged_codes = []
+            app_logger.debug(f"Querying CommissionStoreModel for store {store_code}, fiscal_month {fiscal_month}")
+
             result = await db.execute(
                 select(CommissionStoreModel.merged_store_codes)
                     .where(CommissionStoreModel.store_code == store_code)
                     .where(CommissionStoreModel.fiscal_month == fiscal_month)
             )
             commission_store = result.fetchone()
+            app_logger.debug(f"CommissionStore query result: {commission_store}")
 
-            if commission_store:
+            # 安全地处理 merged_store_codes
+            if commission_store and commission_store.merged_store_codes:
                 merged_code = commission_store.merged_store_codes.split(',')
                 merged_codes = [code.strip() for code in merged_code]
+                app_logger.debug(f"Merged codes found: {merged_codes}")
+            else:
+                app_logger.debug("No merged codes found")
 
             # 遍历所有需要更新的员工
-            for staff_attendance in staff_attendances:
+            app_logger.info(f"Processing {len(staff_attendances)} staff attendances")
+            for idx, staff_attendance in enumerate(staff_attendances):
                 staff_code = staff_attendance.staff_code
                 actual_attendance = staff_attendance.actual_attendance
+                app_logger.debug(f"Processing staff [{idx + 1}/{len(staff_attendances)}]: {staff_code}, "
+                                 f"actual_attendance: {actual_attendance}")
 
                 # 查询现有的员工考勤记录
+                app_logger.debug(f"Querying StaffAttendanceModel for staff {staff_code}, store {store_code}")
                 result = await db.execute(
                     select(StaffAttendanceModel)
                         .where(StaffAttendanceModel.staff_code == staff_code)
@@ -390,16 +408,24 @@ class CommissionService:
                 )
 
                 staff_record = result.scalar_one_or_none()
+                app_logger.debug(f"Staff record found: {staff_record is not None}")
 
                 # 如果找到记录，则更新实际出勤字段
                 if staff_record:
+                    app_logger.debug(
+                        f"Updating staff {staff_code} attendance from {staff_record.actual_attendance} to {actual_attendance}")
                     staff_record.actual_attendance = actual_attendance
                     staff_record.updated_at = datetime.now()
                     updated_count += 1
+                    app_logger.debug(f"Updated staff {staff_code} successfully")
                 else:
+                    app_logger.debug(f"No direct staff record found for {staff_code} in {store_code}")
+                    # 只有当 merged_codes 存在且不为空时才执行
                     if merged_codes:
+                        app_logger.debug(f"Checking merged stores: {merged_codes}")
                         for merged_store_code in merged_codes:
                             if merged_store_code != store_code:
+                                app_logger.debug(f"Checking merged store: {merged_store_code}")
                                 result = await db.execute(
                                     select(StaffAttendanceModel)
                                         .where(StaffAttendanceModel.staff_code == staff_code)
@@ -407,13 +433,26 @@ class CommissionService:
                                         .where(StaffAttendanceModel.fiscal_month == fiscal_month)
                                 )
                                 merged_staff_record = result.scalar_one_or_none()
+                                app_logger.debug(
+                                    f"Merged staff record found in {merged_store_code}: {merged_staff_record is not None}")
 
                                 if merged_staff_record:
+                                    app_logger.debug(
+                                        f"Updating merged staff {staff_code} attendance from {merged_staff_record.actual_attendance} to {actual_attendance}")
                                     merged_staff_record.actual_attendance = actual_attendance
                                     merged_staff_record.updated_at = datetime.now()
                                     updated_count += 1
+                                    app_logger.debug(
+                                        f"Updated merged staff {staff_code} in {merged_store_code} successfully")
                                     break  # 找到并更新后退出循环
+                            else:
+                                app_logger.debug(f"Skipping same store code: {merged_store_code}")
+                    else:
+                        app_logger.debug("No merged codes to check")
 
+            app_logger.info(f"Total updated staff records: {updated_count}")
+
+            app_logger.debug(f"Querying CommissionStoreModel for status update")
             result_store = await db.execute(
                 select(CommissionStoreModel)
                     .where(CommissionStoreModel.fiscal_month == fiscal_month)
@@ -421,26 +460,38 @@ class CommissionService:
             )
 
             existing_store = result_store.scalar_one_or_none()
+            app_logger.debug(f"Existing store record for status update: {existing_store is not None}")
 
             if existing_store:
-                existing_store.status = attendance_update.staff_status
+                old_status = existing_store.status
+                new_status = attendance_update.staff_status
+                app_logger.debug(f"Updating store status from '{old_status}' to '{new_status}'")
+                existing_store.status = new_status
                 existing_store.updated_at = datetime.now()
 
                 if attendance_update.staff_status == "saved":
                     existing_store.saved_by = role_code
                     existing_store.saved_at = datetime.now()
+                    app_logger.debug(f"Set saved_by to {role_code}")
                 elif attendance_update.staff_status == "submitted":
                     existing_store.submit_by = role_code
                     existing_store.submit_at = datetime.now()
+                    app_logger.debug(f"Set submit_by to {role_code}")
+                app_logger.debug(f"Store status updated successfully")
+            else:
+                app_logger.warning(
+                    f"No CommissionStoreModel record found for store {store_code}, fiscal_month {fiscal_month}")
 
             # 提交更改
+            app_logger.info("Committing changes to database")
             await db.commit()
+            app_logger.info("Successfully committed changes")
             # 返回更新结果
             return True
 
         except Exception as e:
             # 发生异常时回滚事务
-            app_logger.error(f"Error in update_commission: {str(e)}")
+            app_logger.error(f"Error in update_commission: {str(e)}", exc_info=True)
             await db.rollback()
             raise e
 
