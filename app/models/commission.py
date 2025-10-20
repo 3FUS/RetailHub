@@ -63,7 +63,7 @@ class CommissionRuleModel(Base):
     # 规则分类 - 团队、个人、人工调整、Incentive等
     rule_class = Column(String(30))  # 'individual', 'team', 'adjustment', 'incentive'
     minimum_guarantee = Column(Float, default=0.0)  # 保底金额字段
-    consider_attendance = Column(Boolean, default=False)  # 是否考虑出勤比例
+    consider_attendance = Column(Integer, default=0)  # 是否考虑出勤比例
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

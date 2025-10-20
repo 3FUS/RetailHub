@@ -728,7 +728,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def get_commission_by_store_code(db: AsyncSession,  store_code: str, fiscal_month: str):
+    async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str):
         pass
 
     @staticmethod
@@ -903,7 +903,7 @@ class CommissionService:
             app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 应出勤为0或负数，不发放佣金")
             return 0  # 应出勤为0，不发放佣金
 
-        if not rule_info.consider_attendance:
+        if not rule_info.consider_attendance or actual_attendance == 0:
             app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 不考虑出勤率，返回原始佣金金额: {commission_amount}")
             return commission_amount  # 不考虑出勤率
 
@@ -1256,11 +1256,13 @@ class CommissionService:
                         app_logger.debug(f"激励金额: {commission_amount}")
 
                     # 考虑出勤率
-                    if rule_info.consider_attendance:
+                    if rule_info.consider_attendance and rule_info.consider_attendance > 0:
                         commission_amount = CommissionService.apply_attendance_adjustment(
                             commission_amount, staff, rule_info, position_stats
                         )
                         app_logger.debug(f"应用出勤调整后金额: {commission_amount}")
+                    else:
+                        app_logger.debug(f"未考虑出勤率")
 
                     # 最低保障金额
                     if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
