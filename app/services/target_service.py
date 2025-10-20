@@ -815,11 +815,7 @@ class TargetStoreWeekService:
         # 遍历所有传入的数据
         for week_data in target_data.weeks:
             # 检查记录是否已存在
-            result = await db.execute(select(TargetStoreWeek).where(
-                TargetStoreWeek.store_code == target_data.store_code,
-                TargetStoreWeek.fiscal_month == target_data.fiscal_month,
-                TargetStoreWeek.week_number == week_data.week_number
-            ))
+            s
             existing_target = result.scalar_one_or_none()
 
             if existing_target:
@@ -1464,8 +1460,11 @@ class TargetStaffService:
                 ))
                 existing_target = result.scalar_one_or_none()
 
-                # 使用 sales_value 作为 staff_target_value
-                staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
+                if existing_target and existing_target.sales_value is not None:
+                    staff_target_value = existing_target.sales_value
+                else:
+                    staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
+
                 non_selling_1_total_sales += staff_target_value
                 app_logger.debug(f"Staff {staff_data.staff_code} target value: {staff_target_value}, "
                                  f"running total: {non_selling_1_total_sales}")
@@ -1473,6 +1472,7 @@ class TargetStaffService:
                 if existing_target:
                     # 更新记录
                     app_logger.debug(f"Updating existing record for staff: {staff_data.staff_code}")
+
                     for key, value in staff_data.dict().items():
                         if key not in ['store_code', 'fiscal_month', 'staff_code']:
                             setattr(existing_target, key, value)
