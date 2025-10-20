@@ -43,16 +43,21 @@ async def get_report_data(
                 session, financial_month, keyword, role_code)
 
         elif report_type == "target_percentage_version":
-            report_data["target_percentage_version"] = await TargetRPTService.get_rpt_target_percentage_version(
+            report_data["target_percentage_version"] = await TargetRPTService.get_rpt_target_by_store(
                 session, financial_month, keyword, role_code)
 
         elif report_type == "target_bi_version":
             report_data["target_bi_version"] = await TargetRPTService.get_rpt_target_bi_version(
                 session, financial_month, keyword, role_code)
 
+        elif report_type == "target_date_horizontal_version":
+            report_data[
+                "target_date_horizontal_version"] = await TargetRPTService.get_rpt_target_date_horizontal_version(
+                session, financial_month, keyword, role_code)
+
         elif report_type == "target_by_staff":
             report_data["target_by_staff"] = await TargetRPTService.get_rpt_target_by_staff(
-                session, financial_month, keyword)
+                session, financial_month, keyword, role_code)
 
         elif report_type == "commission":
             report_data["commission"] = await CommissionRPTService.get_rpt_commission_by_store(
@@ -108,7 +113,7 @@ def _export_to_excel(report_data: dict, report_type: str):
 
         # 根据报表类型导出不同sheet
         if report_type in ["target_by_store", "target_percentage_version",
-                           "target_bi_version"] and report_type in report_data:
+                           "target_bi_version", "target_date_horizontal_version"] and report_type in report_data:
             _write_data_to_sheet(report_data[report_type], "Target")
 
         elif report_type == "target_by_staff" and "target_by_staff" in report_data:

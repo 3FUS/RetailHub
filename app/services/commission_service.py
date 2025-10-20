@@ -837,21 +837,27 @@ class CommissionService:
         Returns:
             Dict: 岗位出勤统计数据
         """
+        app_logger.debug(f"开始处理岗位出勤统计数据，员工数量: {len(staff_attendances)}")
         position_stats = {}
 
-        for staff in staff_attendances:
+        for idx, staff in enumerate(staff_attendances):
             position = staff['position']
             actual_attendance = staff.get('actual_attendance', 0)
             target_value = staff['target_value']
             sales_value = staff['sales_value'] or 0
 
+            app_logger.debug(
+                f"处理员工[{idx + 1}/{len(staff_attendances)}] - 岗位: {position}, 实际出勤: {actual_attendance}, 目标值: {target_value}, 销售额: {sales_value}")
+
             # 计算员工达成率
             achievement_rate = 0
             if sales_value is not None and target_value > 0:
                 achievement_rate = (sales_value / target_value) * 100
+            app_logger.debug(f"员工达成率: {achievement_rate}%")
 
             # 计算折扣因子
             discount_factor = CommissionService.calculate_discount_factor(achievement_rate)
+            app_logger.debug(f"折扣因子: {discount_factor}")
 
             # 累计各岗位实际出勤(考虑折扣)
             if position not in position_stats:
@@ -859,10 +865,15 @@ class CommissionService:
                     'total_attendance': 0,
                     'staff_count': 0
                 }
+                app_logger.debug(f"新增岗位统计: {position}")
 
             position_stats[position]['total_attendance'] += actual_attendance * discount_factor
             position_stats[position]['staff_count'] += 1
 
+            app_logger.debug(
+                f"岗位 {position} 累计统计 - 总出勤: {position_stats[position]['total_attendance']}, 员工数: {position_stats[position]['staff_count']}")
+
+        app_logger.debug(f"岗位出勤统计处理完成，共处理 {len(position_stats)} 个岗位: {list(position_stats.keys())}")
         return position_stats
 
     @staticmethod

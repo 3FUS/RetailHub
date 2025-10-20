@@ -39,18 +39,26 @@ class TargetRPTService:
             # 执行SQL查询逻辑
             query = select(
                 TargetStoreDaily.target_date.label('date'),
-                TargetStoreMain.fiscal_month,
+                TargetStoreMain.store_code,
+                store_alias.c.Location_ID,
+                store_alias.c.store_name,
                 (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label(
                     'fiscal_week'),
-                TargetStoreMain.store_code,
-                store_alias.c.store_name,
-                store_alias.c.Location_ID,
-                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+                TargetStoreWeek.percentage.label('week_percentage'),
+                (TargetStoreWeek.percentage / 100 * TargetStoreMain.target_value).label('week_value'),
+                TargetStoreDaily.percentage.label('day_percentage'),
+                (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
+                        TargetStoreDaily.percentage / 100)).label('day_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
                     (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
                     (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    TargetStoreWeek.__table__,
+                    (TargetStoreDaily.store_code == TargetStoreWeek.store_code) &
+                    (TargetStoreDaily.fiscal_month == TargetStoreWeek.fiscal_month) &
+                    (DimensionDayWeek.week_number == TargetStoreWeek.week_number)
                 ).join(
                     store_alias,
                     store_alias.c.store_code == TargetStoreMain.store_code
@@ -78,22 +86,26 @@ class TargetRPTService:
             for row in target_data:
                 formatted_data.append({
                     "date": row.date.strftime('%Y%m%d') if row.date else None,
-                    "fiscal_month": row.fiscal_month,
-                    "fiscal_week": row.fiscal_week,
                     "store_code": row.store_code,
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
-                    "target_date_value": float(row.target_date_value) if row.target_date_value is not None else 0.0
+                    "week_number": row.fiscal_week,
+                    "week_percentage": float(row.week_percentage) if row.week_percentage is not None else 0.0,
+                    "week_value": float(row.week_value) if row.week_value is not None else 0.0,
+                    "day_percentage": float(row.day_percentage) if row.day_percentage is not None else 0.0,
+                    "day_value": float(row.day_value) if row.day_value is not None else 0.0
                 })
 
             field_translations = {
                 "date": {"en": "Date (Number)", "zh": "日期"},
-                "fiscal_month": {"en": "Fiscal Month (ID)", "zh": "财月"},
-                "fiscal_week": {"en": "Fiscal Week (ID)", "zh": "财周"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
                 "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
-                "store_name": {"en": "Location short Name", "zh": "店铺名称"},
-                "target_date_value": {"en": "Commission Target Local", "zh": "日期目标值"}
+                "store_name": {"en": "Location Name", "zh": "店铺名称"},
+                "week_number": {"en": "Week Number", "zh": "周数"},
+                "week_percentage": {"en": "Week Percentage", "zh": "周百分比"},
+                "week_value": {"en": "Week Value", "zh": "周目标值"},
+                "day_percentage": {"en": "Day Percentage", "zh": "日百分比"},
+                "day_value": {"en": "Day Value", "zh": "日目标值"}
             }
 
             return {
@@ -103,10 +115,7 @@ class TargetRPTService:
         except Exception as e:
             # 记录并返回错误信息
             error_msg = f"Error in get_rpt_target_by_store: {str(e)}"
-            # print(error_msg)  # 在实际应用中应该使用日志记录
             app_logger.error(error_msg)
-            # 添加字段名称的中英文翻译
-
             return {
                 "data": [],
                 "field_translations": [],
@@ -223,19 +232,26 @@ class TargetRPTService:
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
-            # 执行SQL查询逻辑
             query = select(
                 TargetStoreDaily.target_date.label('date'),
+                (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label(
+                    'fiscal_week'),
                 TargetStoreMain.fiscal_month.label('fiscal_month'),
-                (DimensionDayWeek.finance_year + DimensionDayWeek.week_number.cast(String)).label('fiscal_week'),
                 TargetStoreMain.store_code.label('store_code'),
+                store_alias.c.Location_ID,
                 store_alias.c.store_name.label('store_name'),
-                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+                (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
+                        TargetStoreDaily.percentage / 100)).label('commission_target_local')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
                     (TargetStoreMain.store_code == TargetStoreDaily.store_code) &
                     (TargetStoreMain.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    TargetStoreWeek.__table__,
+                    (TargetStoreDaily.store_code == TargetStoreWeek.store_code) &
+                    (TargetStoreDaily.fiscal_month == TargetStoreWeek.fiscal_month) &
+                    (TargetStoreDaily.week_number == TargetStoreWeek.week_number)
                 ).join(
                     store_alias,
                     store_alias.c.store_code == TargetStoreMain.store_code
@@ -265,10 +281,10 @@ class TargetRPTService:
                     "fiscal_week_id": row.fiscal_week,
                     "fiscal_month_id": row.fiscal_month,
                     "location_code": row.store_code,
-                    "location_id": row.store_code,
+                    "location_id": row.Location_ID,
                     "location_short_name": row.store_name,
                     "commission_target_local": float(
-                        row.target_date_value) if row.target_date_value is not None else 0.0
+                        row.commission_target_local) if row.commission_target_local is not None else 0.0
                 })
 
             field_translations = {
@@ -400,7 +416,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str = None):
+    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str = None, role_code: str = None):
         """
         获取员工目标报表数据
 
@@ -413,21 +429,23 @@ class TargetRPTService:
             dict: 报表数据
         """
         try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
             # 执行SQL查询逻辑
             query = select(
                 TargetStoreMain.fiscal_month,
                 TargetStoreMain.store_code,
-                StoreModel.store_name,
+                store_alias.c.store_name,
                 StaffAttendanceModel.staff_code,
-                (TargetStoreMain.target_value * StaffAttendanceModel.target_value_ratio).label('target_value')
+                StaffAttendanceModel.target_value
             ).select_from(
                 TargetStoreMain.__table__.join(
                     StaffAttendanceModel.__table__,
                     (TargetStoreMain.store_code == StaffAttendanceModel.store_code) &
                     (TargetStoreMain.fiscal_month == StaffAttendanceModel.fiscal_month)
                 ).join(
-                    StoreModel.__table__,
-                    StoreModel.store_code == TargetStoreMain.store_code
+                    store_alias,
+                    store_alias.c.store_code == TargetStoreMain.store_code
                 )
             ).where(
                 TargetStoreMain.fiscal_month == fiscal_month
@@ -437,7 +455,7 @@ class TargetRPTService:
             if key_word:
                 query = query.where(
                     TargetStoreMain.store_code.contains(key_word) |
-                    StoreModel.store_name.contains(key_word)
+                    StoreModel.c.store_name.contains(key_word)
                 )
 
             result = await db.execute(query)
@@ -451,7 +469,7 @@ class TargetRPTService:
                     "store_code": row.store_code,
                     "store_name": row.store_name,
                     "staff_code": row.staff_code,
-                    "target_value": round(float(row.target_value), 2) if row.target_value is not None else 0.0
+                    "target_value": row.target_value
                 })
 
             field_translations = {
@@ -1090,7 +1108,6 @@ class TargetStaffService:
             app_logger.debug(
                 f"get_staff_attendance Store target value: {store_target_value}, sales value: {store_sales_value}")
 
-
             merged_codes = [store_code]
             merged_months = [fiscal_month]
             if store_target_record and module == "commission":
@@ -1119,7 +1136,9 @@ class TargetStaffService:
                 store_sales_value = float(
                     merged_data.total_sales_value) if merged_data.total_sales_value is not None else 0.0
 
-            fiscal_period = await TargetStaffService._fetch_fiscal_period(db, merged_months if module == "commission" else [fiscal_month])
+            fiscal_period = await TargetStaffService._fetch_fiscal_period(db,
+                                                                          merged_months if module == "commission" else [
+                                                                              fiscal_month])
 
             app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
