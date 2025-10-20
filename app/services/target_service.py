@@ -19,18 +19,11 @@ from app.utils.logger import app_logger
 
 
 class TargetRPTService:
+
     @staticmethod
     async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
         """
         获取门店目标报表数据
-
-        Args:
-            db: 数据库会话
-            fiscal_month: 财月
-            key_word: 查询关键字（门店代码或名称）
-
-        Returns:
-            dict: 报表数据
         """
 
         try:
@@ -416,7 +409,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str = None, role_code: str = None):
+    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
         """
         获取员工目标报表数据
 
@@ -456,7 +449,7 @@ class TargetRPTService:
             if key_word:
                 query = query.where(
                     TargetStoreMain.store_code.contains(key_word) |
-                    StoreModel.c.store_name.contains(key_word)
+                    store_alias.c.store_name.contains(key_word)
                 )
 
             result = await db.execute(query)
@@ -1139,9 +1132,9 @@ class TargetStaffService:
                 store_sales_value = float(
                     merged_data.total_sales_value) if merged_data.total_sales_value is not None else 0.0
 
-            fiscal_period = await TargetStaffService._fetch_fiscal_period(db,
-                                                                          merged_months if module == "commission" else [
-                                                                              fiscal_month])
+            fiscal_period, min_date = await TargetStaffService._fetch_fiscal_period(db,
+                                                                                    merged_months if module == "commission" else [
+                                                                                        fiscal_month])
 
             app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
@@ -1289,6 +1282,7 @@ class TargetStaffService:
                     "store_target_value": store_target_value,
                     "store_sales_value": store_sales_value,
                     "fiscal_period": fiscal_period,  # 新增的财月日期范围
+                    "min_date": min_date,
                     "staff_status": staff_status,
                     "staff_status_details": staff_status_details,
                     "store_status": store_status,
@@ -1423,7 +1417,7 @@ class TargetStaffService:
                 commission_status, commission_status_details, store_status_details, staff_status_details)
 
     @staticmethod
-    async def _fetch_fiscal_period(db: AsyncSession, fiscal_month: list) -> str:
+    async def _fetch_fiscal_period(db: AsyncSession, fiscal_month: list):
         """获取指定财月的时间区间"""
         date_range_result = await db.execute(
             select(
@@ -1434,155 +1428,211 @@ class TargetStaffService:
         )
         date_range = date_range_result.fetchone()
         if date_range and date_range.min_date and date_range.max_date:
-            return f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
-        return ""
+            date_range_str = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
+            return date_range_str, date_range.min_date
+        return "", None
 
     @staticmethod
     async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate, user_id: str = 'system'):
+        """
+        创建员工考勤和目标数据
+
+        Args:
+            db: 数据库会话
+            target_data: 员工考勤创建数据
+            user_id: 操作用户ID
+        """
+        app_logger.info(f"Starting create_staff_attendance for store_code={target_data.store_code}, "
+                        f"fiscal_month={target_data.fiscal_month}, user_id={user_id}")
+        app_logger.debug(f"Received target_data: {target_data}")
 
         created_staff_targets = []
 
-        non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
+        try:
+            # 分离 Selling_1 和非 Selling_1 员工
+            non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
+            app_logger.debug(f"Found {len(non_selling_1_staffs)} non Selling_1 staff members")
 
-        non_selling_1_total_sales = 0
-        for staff_data in non_selling_1_staffs:
-            result = await db.execute(select(StaffAttendanceModel).where(
-                StaffAttendanceModel.staff_code == staff_data.staff_code,
-                StaffAttendanceModel.store_code == target_data.store_code,
-                StaffAttendanceModel.fiscal_month == target_data.fiscal_month
-            ))
-            existing_target = result.scalar_one_or_none()
+            # 处理非 Selling_1 员工
+            non_selling_1_total_sales = 0
+            for staff_data in non_selling_1_staffs:
+                app_logger.debug(f"Processing non Selling_1 staff: {staff_data.staff_code}")
+                result = await db.execute(select(StaffAttendanceModel).where(
+                    StaffAttendanceModel.staff_code == staff_data.staff_code,
+                    StaffAttendanceModel.store_code == target_data.store_code,
+                    StaffAttendanceModel.fiscal_month == target_data.fiscal_month
+                ))
+                existing_target = result.scalar_one_or_none()
 
-            # 使用 sales_value 作为 staff_target_value
-            staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
-            non_selling_1_total_sales += staff_target_value
+                # 使用 sales_value 作为 staff_target_value
+                staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
+                non_selling_1_total_sales += staff_target_value
+                app_logger.debug(f"Staff {staff_data.staff_code} target value: {staff_target_value}, "
+                                 f"running total: {non_selling_1_total_sales}")
 
-            if existing_target:
-                # 更新记录
-                for key, value in staff_data.dict().items():
-                    if key not in ['store_code', 'fiscal_month', 'staff_code']:
-                        setattr(existing_target, key, value)
-                existing_target.target_value = staff_target_value
-                existing_target.position = staff_data.position
-                existing_target.salary_coefficient = staff_data.salary_coefficient,
-                existing_target.updated_at = datetime.now()
-                created_staff_targets.append(existing_target)
-            else:
-                # 创建新记录
-                target_staff_attendance = StaffAttendanceModel(
-                    staff_code=staff_data.staff_code,
-                    store_code=target_data.store_code,
-                    fiscal_month=target_data.fiscal_month,
-                    expected_attendance=staff_data.expected_attendance,
-                    position=staff_data.position,
-                    salary_coefficient=staff_data.salary_coefficient,
-                    target_value=staff_target_value,
-                    creator_code=user_id
+                if existing_target:
+                    # 更新记录
+                    app_logger.debug(f"Updating existing record for staff: {staff_data.staff_code}")
+                    for key, value in staff_data.dict().items():
+                        if key not in ['store_code', 'fiscal_month', 'staff_code']:
+                            setattr(existing_target, key, value)
+                    existing_target.target_value = staff_target_value
+                    existing_target.position = staff_data.position
+                    existing_target.salary_coefficient = staff_data.salary_coefficient
+                    existing_target.updated_at = datetime.now()
+                    created_staff_targets.append(existing_target)
+                else:
+                    # 创建新记录
+                    app_logger.debug(f"Creating new record for staff: {staff_data.staff_code}")
+                    target_staff_attendance = StaffAttendanceModel(
+                        staff_code=staff_data.staff_code,
+                        store_code=target_data.store_code,
+                        fiscal_month=target_data.fiscal_month,
+                        expected_attendance=staff_data.expected_attendance,
+                        position=staff_data.position,
+                        salary_coefficient=staff_data.salary_coefficient,
+                        target_value=staff_target_value,
+                        creator_code=user_id
+                    )
+                    db.add(target_staff_attendance)
+                    created_staff_targets.append(target_staff_attendance)
+
+            # 处理 Selling_1 员工
+            staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
+            app_logger.debug(f"Found {len(staffs)} Selling_1 staff members")
+
+            # 获取门店目标值
+            result_store = await db.execute(
+                select(TargetStoreMain.target_value)
+                    .where(
+                    TargetStoreMain.store_code == target_data.store_code,
+                    TargetStoreMain.fiscal_month == target_data.fiscal_month
                 )
-                db.add(target_staff_attendance)
-                created_staff_targets.append(target_staff_attendance)
-
-        staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
-
-        result_store = await db.execute(
-            select(TargetStoreMain.target_value)
-                .where(
-                TargetStoreMain.store_code == target_data.store_code,
-                TargetStoreMain.fiscal_month == target_data.fiscal_month
             )
-        )
-        store_target_record = result_store.fetchone()
-        store_target_value = float(
-            store_target_record.target_value) if store_target_record and store_target_record.target_value else 0.0
+            store_target_record = result_store.fetchone()
+            store_target_value = float(
+                store_target_record.target_value) if store_target_record and store_target_record.target_value else 0.0
+            app_logger.debug(f"Store target value: {store_target_value}")
 
-        store_target_value = store_target_value - non_selling_1_total_sales
+            # 计算分配给 Selling_1 员工的目标值
+            store_target_value = store_target_value - non_selling_1_total_sales
+            app_logger.debug(f"Adjusted store target value for Selling_1 staff: {store_target_value}")
 
-        total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
-        total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
-        #
-        weights = []
-        for staff_data in staffs:
-            expected_attendance = staff_data.expected_attendance or 0
-            salary_coefficient = staff_data.salary_coefficient or 0
+            # 计算权重
+            total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
+            total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
+            app_logger.debug(f"Total expected attendance: {total_expected_attendance}, "
+                             f"total salary coefficient: {total_salary_coefficient}")
 
-            if total_expected_attendance > 0 and total_salary_coefficient > 0:
-                expected_attendance_ratio = expected_attendance / total_expected_attendance
-                salary_coefficient_ratio = salary_coefficient / total_salary_coefficient
-                weight = expected_attendance_ratio * salary_coefficient_ratio
-            else:
-                weight = 0
+            weights = []
+            for staff_data in staffs:
+                expected_attendance = staff_data.expected_attendance or 0
+                salary_coefficient = staff_data.salary_coefficient or 0
 
-            weights.append(weight)
+                if total_expected_attendance > 0 and total_salary_coefficient > 0:
+                    expected_attendance_ratio = expected_attendance / total_expected_attendance
+                    salary_coefficient_ratio = salary_coefficient / total_salary_coefficient
+                    weight = expected_attendance_ratio * salary_coefficient_ratio
+                else:
+                    weight = 0
 
-        # 计算总权重
-        total_weight = sum(weights)
+                weights.append(weight)
+                app_logger.debug(f"Staff {staff_data.staff_code}: weight={weight}")
 
-        if total_weight <= 0:
-            return []
+            # 计算总权重
+            total_weight = sum(weights)
+            app_logger.debug(f"Total weight: {total_weight}")
 
-        ratios = []
-        if total_weight > 0:
-            for i in range(len(weights)):
-                ratio = round(weights[i] / total_weight, 6)
-                ratios.append(ratio)
+            if total_weight <= 0:
+                app_logger.warning("Total weight is zero or negative, returning empty list")
+                return []
 
-            # 调整最后一个员工的比例以确保总和为1
-            if ratios:
-                ratio_sum = sum(ratios[1:])  # 除第一个员工外的所有比例之和
-                ratios[0] = round(1.0 - ratio_sum, 6)
+            # 计算比例
+            ratios = []
+            if total_weight > 0:
+                for i in range(len(weights)):
+                    ratio = round(weights[i] / total_weight, 6)
+                    ratios.append(ratio)
 
-        staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
+                # 调整最后一个员工的比例以确保总和为1
+                if ratios:
+                    ratio_sum = sum(ratios[1:])  # 除第一个员工外的所有比例之和
+                    ratios[0] = round(1.0 - ratio_sum, 6)
+            app_logger.debug(f"Calculated ratios: {ratios}")
 
-        for i, staff_data in enumerate(staffs):
-            result = await db.execute(select(StaffAttendanceModel).where(
-                StaffAttendanceModel.staff_code == staff_data.staff_code,
-                StaffAttendanceModel.store_code == target_data.store_code,
-                StaffAttendanceModel.fiscal_month == target_data.fiscal_month
-            ))
-            existing_target = result.scalar_one_or_none()
+            # 计算员工目标值
+            staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
+            app_logger.debug(f"Calculated staff target values: {staff_target_values}")
 
-            target_value_ratio = ratios[i] if ratios else 0
-            staff_target_value = staff_target_values[i]
+            # 为 Selling_1 员工创建或更新记录
+            for i, staff_data in enumerate(staffs):
+                app_logger.debug(f"Processing Selling_1 staff: {staff_data.staff_code}")
+                result = await db.execute(select(StaffAttendanceModel).where(
+                    StaffAttendanceModel.staff_code == staff_data.staff_code,
+                    StaffAttendanceModel.store_code == target_data.store_code,
+                    StaffAttendanceModel.fiscal_month == target_data.fiscal_month
+                ))
+                existing_target = result.scalar_one_or_none()
 
-            if existing_target:
-                # 如果存在，更新记录
-                for key, value in staff_data.dict().items():
-                    if key not in ['store_code', 'fiscal_month', 'staff_code']:  # 不更新主键
-                        setattr(existing_target, key, value)
-                existing_target.target_value_ratio = target_value_ratio
-                existing_target.target_value = staff_target_value
-                existing_target.updated_at = datetime.now()
-                created_staff_targets.append(existing_target)
-            else:
-                target_staff_attendance = StaffAttendanceModel(
-                    staff_code=staff_data.staff_code,
-                    store_code=target_data.store_code,
-                    fiscal_month=target_data.fiscal_month,
-                    expected_attendance=staff_data.expected_attendance,
-                    position=staff_data.position,
-                    salary_coefficient=staff_data.salary_coefficient,
-                    target_value_ratio=target_value_ratio,
-                    target_value=staff_target_value,
-                    creator_code=user_id
-                )
-                db.add(target_staff_attendance)
-                created_staff_targets.append(target_staff_attendance)
+                target_value_ratio = ratios[i] if ratios else 0
+                staff_target_value = staff_target_values[i]
+                app_logger.debug(f"Staff {staff_data.staff_code}: ratio={target_value_ratio}, "
+                                 f"target_value={staff_target_value}")
 
-        await db.commit()
+                if existing_target:
+                    # 如果存在，更新记录
+                    app_logger.debug(f"Updating existing record for Selling_1 staff: {staff_data.staff_code}")
+                    for key, value in staff_data.dict().items():
+                        if key not in ['store_code', 'fiscal_month', 'staff_code']:  # 不更新主键
+                            setattr(existing_target, key, value)
+                    existing_target.target_value_ratio = target_value_ratio
+                    existing_target.target_value = staff_target_value
+                    existing_target.updated_at = datetime.now()
+                    created_staff_targets.append(existing_target)
+                else:
+                    app_logger.debug(f"Creating new record for Selling_1 staff: {staff_data.staff_code}")
+                    target_staff_attendance = StaffAttendanceModel(
+                        staff_code=staff_data.staff_code,
+                        store_code=target_data.store_code,
+                        fiscal_month=target_data.fiscal_month,
+                        expected_attendance=staff_data.expected_attendance,
+                        position=staff_data.position,
+                        salary_coefficient=staff_data.salary_coefficient,
+                        target_value_ratio=target_value_ratio,
+                        target_value=staff_target_value,
+                        creator_code=user_id
+                    )
+                    db.add(target_staff_attendance)
+                    created_staff_targets.append(target_staff_attendance)
 
-        target_store_update = TargetStoreUpdate(
-            store_code=target_data.store_code,
-            fiscal_month=target_data.fiscal_month,
-            staff_status=target_data.staff_status,
-            creator_code=user_id
-        )
-        await TargetStoreService.update_target_store(db, target_data.store_code, target_data.fiscal_month,
-                                                     target_store_update, user_id)
-        # 刷新所有创建的对象以获取数据库生成的值
-        for target in created_staff_targets:
-            await db.refresh(target)
+            # 提交事务
+            await db.commit()
+            app_logger.info(f"Committed {len(created_staff_targets)} staff attendance records")
 
-        return created_staff_targets
+            # 更新门店目标状态
+            target_store_update = TargetStoreUpdate(
+                store_code=target_data.store_code,
+                fiscal_month=target_data.fiscal_month,
+                staff_status=target_data.staff_status,
+                creator_code=user_id
+            )
+            app_logger.debug(f"Updating target store with status: {target_data.staff_status}")
+            await TargetStoreService.update_target_store(db, target_data.store_code, target_data.fiscal_month,
+                                                         target_store_update, user_id)
+
+            # 刷新所有创建的对象以获取数据库生成的值
+            for target in created_staff_targets:
+                await db.refresh(target)
+
+            app_logger.info(f"Successfully completed create_staff_attendance for store_code={target_data.store_code}, "
+                            f"fiscal_month={target_data.fiscal_month}")
+            return created_staff_targets
+
+        except Exception as e:
+            app_logger.error(f"Error in create_staff_attendance for store_code={target_data.store_code}, "
+                             f"fiscal_month={target_data.fiscal_month}, error={str(e)}")
+            await db.rollback()
+            raise e
 
     @staticmethod
     async def delete_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, staff_code: str):

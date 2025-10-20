@@ -20,7 +20,7 @@ from app.utils.logger import app_logger
 class CommissionRPTService:
 
     @staticmethod
-    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str = None):
+    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str,role_code: str):
         try:
             # 构建查询，包含所有需要的字段
             query = (

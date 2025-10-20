@@ -61,11 +61,11 @@ async def get_report_data(
 
         elif report_type == "commission":
             report_data["commission"] = await CommissionRPTService.get_rpt_commission_by_store(
-                session, financial_month, keyword)
+                session, financial_month, keyword, role_code)
 
         elif report_type == "budget":
             report_data["budget"] = await BudgetService.get_budget_data(
-                session, financial_month, keyword)
+                session, financial_month, keyword, role_code)
 
         # 添加元数据
         report_data.update({
