@@ -61,7 +61,7 @@ class TargetRPTService:
                 )
             ).where(
                 TargetStoreMain.fiscal_month == fiscal_month
-            ).order_by(TargetStoreDaily.target_date, TargetStoreMain.store_code)
+            ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
             if key_word:
@@ -152,7 +152,7 @@ class TargetRPTService:
                 )
             ).where(
                 TargetStoreMain.fiscal_month == fiscal_month
-            ).order_by(TargetStoreDaily.target_date, TargetStoreMain.store_code)
+            ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
             if key_word:
@@ -1450,7 +1450,7 @@ class TargetStaffService:
 
         try:
             # 分离 Selling_1 和非 Selling_1 员工
-            non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
+            non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
             app_logger.debug(f"Found {len(non_selling_1_staffs)} non Selling_1 staff members")
 
             # 处理非 Selling_1 员工
@@ -1498,7 +1498,7 @@ class TargetStaffService:
                     created_staff_targets.append(target_staff_attendance)
 
             # 处理 Selling_1 员工
-            staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
+            staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
             app_logger.debug(f"Found {len(staffs)} Selling_1 staff members")
 
             # 获取门店目标值
