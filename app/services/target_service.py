@@ -58,7 +58,7 @@ class TargetRPTService:
                     TargetStoreWeek.__table__,
                     (TargetStoreDaily.store_code == TargetStoreWeek.store_code) &
                     (TargetStoreDaily.fiscal_month == TargetStoreWeek.fiscal_month) &
-                    (DimensionDayWeek.week_number == TargetStoreWeek.week_number)
+                    (TargetStoreDaily.week_number == TargetStoreWeek.week_number)
                 ).join(
                     store_alias,
                     store_alias.c.store_code == TargetStoreMain.store_code
@@ -435,6 +435,7 @@ class TargetRPTService:
             query = select(
                 TargetStoreMain.fiscal_month,
                 TargetStoreMain.store_code,
+                store_alias.c.Location_ID,
                 store_alias.c.store_name,
                 StaffAttendanceModel.staff_code,
                 StaffAttendanceModel.target_value
@@ -467,6 +468,7 @@ class TargetRPTService:
                 formatted_data.append({
                     "fiscal_month": row.fiscal_month,
                     "store_code": row.store_code,
+                    "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
                     "staff_code": row.staff_code,
                     "target_value": row.target_value
@@ -475,6 +477,7 @@ class TargetRPTService:
             field_translations = {
                 "fiscal_month": {"en": "Fiscal Month (ID)", "zh": "财月"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
+                "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
                 "store_name": {"en": "Location Short Name", "zh": "店铺名称"},
                 "staff_code": {"en": "Associate Number", "zh": "员工代码"},
                 "target_value": {"en": "Commission Target Local", "zh": "目标值"}
@@ -1439,6 +1442,48 @@ class TargetStaffService:
 
         created_staff_targets = []
 
+        non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
+
+        non_selling_1_total_sales = 0
+        for staff_data in non_selling_1_staffs:
+            result = await db.execute(select(StaffAttendanceModel).where(
+                StaffAttendanceModel.staff_code == staff_data.staff_code,
+                StaffAttendanceModel.store_code == target_data.store_code,
+                StaffAttendanceModel.fiscal_month == target_data.fiscal_month
+            ))
+            existing_target = result.scalar_one_or_none()
+
+            # 使用 sales_value 作为 staff_target_value
+            staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
+            non_selling_1_total_sales += staff_target_value
+
+            if existing_target:
+                # 更新记录
+                for key, value in staff_data.dict().items():
+                    if key not in ['store_code', 'fiscal_month', 'staff_code']:
+                        setattr(existing_target, key, value)
+                existing_target.target_value = staff_target_value
+                existing_target.position = staff_data.position
+                existing_target.salary_coefficient = staff_data.salary_coefficient,
+                existing_target.updated_at = datetime.now()
+                created_staff_targets.append(existing_target)
+            else:
+                # 创建新记录
+                target_staff_attendance = StaffAttendanceModel(
+                    staff_code=staff_data.staff_code,
+                    store_code=target_data.store_code,
+                    fiscal_month=target_data.fiscal_month,
+                    expected_attendance=staff_data.expected_attendance,
+                    position=staff_data.position,
+                    salary_coefficient=staff_data.salary_coefficient,
+                    target_value=staff_target_value,
+                    creator_code=user_id
+                )
+                db.add(target_staff_attendance)
+                created_staff_targets.append(target_staff_attendance)
+
+        staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
+
         result_store = await db.execute(
             select(TargetStoreMain.target_value)
                 .where(
@@ -1450,11 +1495,13 @@ class TargetStaffService:
         store_target_value = float(
             store_target_record.target_value) if store_target_record and store_target_record.target_value else 0.0
 
-        total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in target_data.staffs)
-        total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in target_data.staffs)
+        store_target_value = store_target_value - non_selling_1_total_sales
+
+        total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
+        total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
         #
         weights = []
-        for staff_data in target_data.staffs:
+        for staff_data in staffs:
             expected_attendance = staff_data.expected_attendance or 0
             salary_coefficient = staff_data.salary_coefficient or 0
 
@@ -1486,7 +1533,7 @@ class TargetStaffService:
 
         staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
 
-        for i, staff_data in enumerate(target_data.staffs):
+        for i, staff_data in enumerate(staffs):
             result = await db.execute(select(StaffAttendanceModel).where(
                 StaffAttendanceModel.staff_code == staff_data.staff_code,
                 StaffAttendanceModel.store_code == target_data.store_code,

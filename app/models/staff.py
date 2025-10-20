@@ -77,6 +77,7 @@ class PositionModel(Base):
     description = Column(String(255))  # 岗位描述
     default_coefficient = Column(Float, default=1.0)  # 默认计算系数
     is_active = Column(Boolean, default=True)  # 是否启用该规则分配
+    # allocation_type = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 #

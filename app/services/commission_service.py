@@ -910,7 +910,7 @@ class CommissionService:
         position = staff['position']
         position_stat = position_stats.get(position, {})
 
-        app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 岗位: {position}, 岗位统计信息: {position_stat}")
+        app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 岗位: {position}, 岗位统计信息: {position_stat},consider_attendance: {rule_info.consider_attendance}")
 
         if rule_info.consider_attendance == 1:
             # 团队分摊模式

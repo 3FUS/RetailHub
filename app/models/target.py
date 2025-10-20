@@ -74,6 +74,7 @@ class TargetStoreDaily(Base):
     store_code = Column(String(50), primary_key=True)
     fiscal_month = Column(String(50), nullable=False)
     target_date = Column(Date, primary_key=True)  # 日期
+    week_number = Column(Integer)
     percentage = Column(Float, nullable=False)  # 每日目标占比
     monthly_percentage = Column(Float)
     target_value = Column(Float)  # 每日目标数值

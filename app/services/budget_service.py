@@ -1,16 +1,19 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import String
+from sqlalchemy.future import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.budget import BudgetModel
 from collections import defaultdict
 
-from app.models.target import TargetStoreDaily
+from app.models.dimension import DimensionDayWeek
+from app.models.target import TargetStoreDaily, TargetStoreWeek
+from app.utils.permissions import build_store_permission_query
 
 
 class BudgetService:
     @staticmethod
-    async def get_budget_data(db: AsyncSession, fiscal_month: str, keyword:str) -> dict:
+    async def get_budget_data(db: AsyncSession, fiscal_month: str, key_word:str, role_code: str) -> dict:
         """
         获取预算数据并按门店横向展示
 
@@ -22,25 +25,40 @@ class BudgetService:
             dict: 包含预算数据和表头信息的字典
         """
         # 执行SQL查询逻辑
-        result = await db.execute(
-            select(
-                TargetStoreDaily.target_date.label('date'),
-                BudgetModel.store_code,
-                (BudgetModel.budget_value * TargetStoreDaily.monthly_percentage / 100).label('budget_date_value')
-            )
-                .select_from(
-                BudgetModel.__table__.join(
-                    TargetStoreDaily.__table__,
-                    (BudgetModel.store_code == TargetStoreDaily.store_code) &
-                    (BudgetModel.fiscal_month == TargetStoreDaily.fiscal_month)
-                )
-            )
-                .where(
-                BudgetModel.fiscal_month == fiscal_month
-            )
-                .order_by(TargetStoreDaily.target_date)
-        )
+        store_permission_query = build_store_permission_query(role_code)
+        store_alias = store_permission_query.subquery()
 
+        # 修改后的 get_budget_data 方法部分代码
+        query = select(
+            TargetStoreDaily.target_date.label('date'),
+            BudgetModel.store_code,
+            (BudgetModel.budget_value * (TargetStoreWeek.percentage / 100) * (
+                    TargetStoreDaily.percentage / 100)).label('budget_date_value')
+        ).select_from(
+            BudgetModel.__table__.join(
+                TargetStoreDaily.__table__,
+                (BudgetModel.store_code == TargetStoreDaily.store_code) &
+                (BudgetModel.fiscal_month == TargetStoreDaily.fiscal_month)
+            ).join(
+                TargetStoreWeek.__table__,
+                (TargetStoreDaily.store_code == TargetStoreWeek.store_code) &
+                (TargetStoreDaily.fiscal_month == TargetStoreWeek.fiscal_month) &
+                (TargetStoreDaily.week_number == TargetStoreWeek.week_number)
+            ).join(
+                store_alias,
+                BudgetModel.store_code == store_alias.c.store_code
+            )
+        ).where(
+            BudgetModel.fiscal_month == fiscal_month
+        ).order_by(TargetStoreDaily.target_date, BudgetModel.store_code)
+
+        # 如果有关键字过滤条件
+        if key_word:
+            query = query.where(
+                BudgetModel.store_code.contains(key_word)
+            )
+
+        result = await db.execute(query)
         budget_data = result.all()
 
         if not budget_data:
@@ -55,12 +73,13 @@ class BudgetService:
         store_codes = set()
 
         for row in budget_data:
-            date_str = row.date.strftime('%Y-%m-%d')
+            date_str = row.date.strftime('%Y-%m-%d') if row.date else None
             store_code = row.store_code
             budget_value = float(row.budget_date_value) if row.budget_date_value is not None else 0.0
 
-            date_groups[date_str][store_code] = budget_value
-            store_codes.add(store_code)
+            if date_str:
+                date_groups[date_str][store_code] = budget_value
+                store_codes.add(store_code)
 
         # 构建结果数据
         sorted_store_codes = sorted(list(store_codes))
