@@ -880,20 +880,30 @@ class CommissionService:
         Returns:
             float: 调整后的佣金金额
         """
+        app_logger.debug(f"开始应用出勤调整，员工: {staff.get('staff_code', 'Unknown')}, 原始佣金金额: {commission_amount}")
+
         expected_attendance = staff['expected_attendance'] or 0
         actual_attendance = staff['actual_attendance'] or 0
 
+        app_logger.debug(
+            f"员工 {staff.get('staff_code', 'Unknown')} 出勤信息 - 应出勤: {expected_attendance}, 实际出勤: {actual_attendance}")
+
         if expected_attendance <= 0:
+            app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 应出勤为0或负数，不发放佣金")
             return 0  # 应出勤为0，不发放佣金
 
         if not rule_info.consider_attendance:
+            app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 不考虑出勤率，返回原始佣金金额: {commission_amount}")
             return commission_amount  # 不考虑出勤率
 
         position = staff['position']
         position_stat = position_stats.get(position, {})
 
+        app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 岗位: {position}, 岗位统计信息: {position_stat}")
+
         if rule_info.consider_attendance == 1:
             # 团队分摊模式
+            app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 使用团队分摊模式")
             total_attendance = position_stat.get('total_attendance', 0)
             if total_attendance > 0:
                 # 重新计算当前员工的折扣因子
@@ -904,13 +914,25 @@ class CommissionService:
                     achievement_rate = (sales_value / target_value) * 100
                 discount_factor = CommissionService.calculate_discount_factor(achievement_rate)
 
-                attendance_factor = (actual_attendance * discount_factor) / total_attendance
-                return commission_amount * attendance_factor
-        else:
-            # 个人出勤模式
-            attendance_factor = actual_attendance / expected_attendance
-            return commission_amount * attendance_factor
+                app_logger.debug(
+                    f"员工 {staff.get('staff_code', 'Unknown')} 达成率: {achievement_rate}%, 折扣因子: {discount_factor}")
 
+                attendance_factor = (actual_attendance * discount_factor) / total_attendance
+                adjusted_amount = commission_amount * attendance_factor
+                app_logger.debug(
+                    f"团队分摊模式调整 - 总岗位出勤: {total_attendance}, 出勤因子: {attendance_factor}, 调整后金额: {adjusted_amount}")
+                return adjusted_amount
+            else:
+                app_logger.debug(f"岗位 {position} 总出勤为0，无法进行团队分摊计算")
+        elif rule_info.consider_attendance == 2:
+            # 个人出勤模式
+            app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 使用个人出勤模式")
+            attendance_factor = actual_attendance / expected_attendance
+            adjusted_amount = commission_amount * attendance_factor
+            app_logger.debug(f"个人出勤模式调整 - 出勤因子: {attendance_factor}, 调整后金额: {adjusted_amount}")
+            return adjusted_amount
+
+        app_logger.debug(f"未满足任何调整条件，返回原始佣金金额: {commission_amount}")
         return commission_amount
 
     @staticmethod
@@ -1237,9 +1259,8 @@ class CommissionService:
 
                     # 只有佣金金额大于0时才保存
                     if commission_amount and commission_amount > 0:
-                        commission_amount = round(commission_amount / 10) * 10
-                        commission_amount = round(commission_amount, 2)
                         app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
+                        commission_amount = round(commission_amount, -1)
                         commission_record = CommissionStaffModel(
                             fiscal_month=fiscal_month,
                             staff_code=staff['staff_code'],
