@@ -1137,7 +1137,8 @@ class TargetStaffService:
                                                                                         fiscal_month])
 
             should_values = True
-            if min_date and min_date > datetime.now().date():
+            app_logger.debug(f"min_date values: {min_date}")
+            if min_date and min_date.date() > datetime.now().date():
                 should_values = False
                 app_logger.debug("Minimum date is in the future, hiding target values")
 
@@ -1236,7 +1237,8 @@ class TargetStaffService:
                             row.expected_attendance) if row.expected_attendance is not None else 0.0,
                         "actual_attendance": float(
                             row.actual_attendance) if row.actual_attendance is not None else 0.0,
-                        "target_value": float(row.target_value) if row.target_value is not None and should_values else 0.0,
+                        "target_value": float(
+                            row.target_value) if row.target_value is not None and should_values else 0.0,
                         "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
                         "deletable": row.deletable
@@ -1454,14 +1456,14 @@ class TargetStaffService:
         created_staff_targets = []
 
         try:
-            # 分离 Selling_1 和非 Selling_1 员工
-            non_selling_1_staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
-            app_logger.debug(f"Found {len(non_selling_1_staffs)} non Selling_1 staff members")
 
-            # 处理非 Selling_1 员工
-            non_selling_1_total_sales = 0
-            for staff_data in non_selling_1_staffs:
-                app_logger.debug(f"Processing non Selling_1 staff: {staff_data.staff_code}")
+            selling_1_staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
+            app_logger.debug(f"Found {len(selling_1_staffs)}  Selling_1 staff members")
+
+            # 处理 Selling_1 员工
+            selling_1_total_sales = 0
+            for staff_data in selling_1_staffs:
+                app_logger.debug(f"Processing  Selling_1 staff: {staff_data.staff_code}")
                 result = await db.execute(select(StaffAttendanceModel).where(
                     StaffAttendanceModel.staff_code == staff_data.staff_code,
                     StaffAttendanceModel.store_code == target_data.store_code,
@@ -1470,13 +1472,13 @@ class TargetStaffService:
                 existing_target = result.scalar_one_or_none()
 
                 if existing_target and existing_target.sales_value is not None:
-                    staff_target_value = round(existing_target.sales_value,0)
+                    staff_target_value = round(existing_target.sales_value, 0)
                 else:
                     staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
 
-                non_selling_1_total_sales += staff_target_value
+                selling_1_total_sales += staff_target_value
                 app_logger.debug(f"Staff {staff_data.staff_code} target value: {staff_target_value}, "
-                                 f"running total: {non_selling_1_total_sales}")
+                                 f"running total: {selling_1_total_sales}")
 
                 if existing_target:
                     # 更新记录
@@ -1506,7 +1508,6 @@ class TargetStaffService:
                     db.add(target_staff_attendance)
                     created_staff_targets.append(target_staff_attendance)
 
-            # 处理 Selling_1 员工
             staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
             app_logger.debug(f"Found {len(staffs)} Selling_1 staff members")
 
@@ -1524,7 +1525,7 @@ class TargetStaffService:
             app_logger.debug(f"Store target value: {store_target_value}")
 
             # 计算分配给 Selling_1 员工的目标值
-            store_target_value = store_target_value - non_selling_1_total_sales
+            store_target_value = store_target_value - selling_1_total_sales
             app_logger.debug(f"Adjusted store target value for Selling_1 staff: {store_target_value}")
 
             # 计算权重
