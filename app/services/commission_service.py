@@ -10,7 +10,7 @@ from app.schemas.commission import CommissionCreate, CommissionUpdate, Commissio
 from app.models.target import TargetStoreMain
 
 from datetime import datetime
-from sqlalchemy import func, or_, exists
+from sqlalchemy import func, or_, exists, case
 from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
@@ -20,7 +20,7 @@ from app.utils.logger import app_logger
 class CommissionRPTService:
 
     @staticmethod
-    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str,role_code: str):
+    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
         try:
             # 构建查询，包含所有需要的字段
             query = (
@@ -257,6 +257,211 @@ class CommissionRPTService:
             # 记录异常信息（在实际应用中可以使用日志记录器）
             print(f"Error in get_rpt_commission_by_store: {str(e)}")
             # 可以根据需要重新抛出异常或返回默认值
+            raise e
+
+    @staticmethod
+    async def get_rpt_sales_by_achievement(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+        try:
+            # 构建权限查询
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 构建主查询
+            query = (
+                select(
+                    CommissionStoreModel.fiscal_month.label('fiscal_month'),
+                    CommissionStoreModel.store_code.label('store_code'),
+                    store_alias.c.manage_region.label('manage_region'),
+                    store_alias.c.store_name.label('store_name'),
+                    StaffAttendanceModel.staff_code.label('staff_code'),
+                    func.concat(StaffModel.first_name, StaffModel.last_name).label('full_name'),
+                    StaffAttendanceModel.target_value.label('target_value'),
+                    StaffAttendanceModel.sales_value.label('sales_value'),
+                    (StaffAttendanceModel.sales_value / StaffAttendanceModel.target_value * 100).label(
+                        'achievement_rate'),
+                    StaffModel.position_code.label('position_code'),
+                    StaffAttendanceModel.position.label('position')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(StaffAttendanceModel,
+                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code) &
+                          (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month))
+                    .join(StaffModel,
+                          StaffAttendanceModel.staff_code == StaffModel.staff_code)
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .order_by(CommissionStoreModel.store_code)
+            )
+
+            # 如果提供了关键词，则添加过滤条件
+            if key_word:
+                query = query.where(
+                    or_(
+                        CommissionStoreModel.store_code.contains(key_word),
+                        store_alias.c.store_name.contains(key_word),
+                        StaffAttendanceModel.staff_code.contains(key_word),
+                        StaffModel.first_name.contains(key_word),
+                        StaffModel.last_name.contains(key_word)
+                    )
+                )
+
+            result = await db.execute(query)
+            rows = result.fetchall()
+
+            # 格式化数据
+            formatted_data = []
+            for row in rows:
+                # 计算达成率，避免除零错误
+                target_value = float(row.target_value) if row.target_value is not None else 0.0
+                sales_value = float(row.sales_value) if row.sales_value is not None else 0.0
+                achievement_rate = 0.0
+                if target_value > 0:
+                    achievement_rate = (sales_value / target_value) * 100
+
+                formatted_data.append({
+                    "fiscal_month": row.fiscal_month or '',
+                    "store_code": row.store_code or '',
+                    "manage_region": row.manage_region or '',
+                    "store_name": row.store_name or '',
+                    "staff_code": row.staff_code or '',
+                    "full_name": row.full_name or '',
+                    "target_value": target_value,
+                    "sales_value": sales_value,
+                    "achievement_rate": round(achievement_rate, 2),
+                    "position_code": row.position_code or '',
+                    "position": row.position or ''
+                })
+
+            # 字段翻译
+            field_translations = {
+                "fiscal_month": {"en": "Month", "zh": "月份"},
+                "store_code": {"en": "Store ID", "zh": "店铺ID"},
+                "manage_region": {"en": "Region", "zh": "区域"},
+                "store_name": {"en": "Store", "zh": "店铺"},
+                "staff_code": {"en": "Staff ID", "zh": "员工ID"},
+                "full_name": {"en": "Full Name", "zh": "姓名"},
+                "target_value": {"en": "Monthly Target", "zh": "月销售指标"},
+                "sales_value": {"en": "Monthly Sales", "zh": "月销售"},
+                "achievement_rate": {"en": "% TGT Ach", "zh": "月达成"},
+                "position_code": {"en": "Position Code", "zh": "职位代码"},
+                "position": {"en": "Position", "zh": "职位"}
+            }
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations
+            }
+
+        except Exception as e:
+            app_logger.error(f"Error in get_rpt_sales_by_achievement: {str(e)}")
+            raise e
+
+    @staticmethod
+    async def get_rpt_commission_payout(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+        try:
+            # 构建权限查询
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            # 构建主查询
+            query = (
+                select(
+                    store_alias.c.store_name.label('store_name'),
+                    CommissionStoreModel.store_code.label('store_code'),
+                    CommissionStaffModel.staff_code.label('staff_code'),
+                    func.concat(StaffModel.first_name, StaffModel.last_name).label('full_name'),
+                    StaffModel.position_code.label('position_code'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class != 'incentive', CommissionStaffModel.amount),
+                            else_=0
+                        )
+                    ).label('commission_only'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class == 'incentive', CommissionStaffModel.amount),
+                            else_=0
+                        )
+                    ).label('incentive'),
+                    func.sum(CommissionStaffModel.amount).label('total_commission')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(CommissionStaffModel,
+                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code) &
+                          (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month))
+                    .join(CommissionRuleDetailModel,
+                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
+                    .join(CommissionRuleModel,
+                          CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
+                    .join(StaffModel,
+                          CommissionStaffModel.staff_code == StaffModel.staff_code)
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .group_by(
+                    store_alias.c.store_name,
+                    CommissionStoreModel.store_code,
+                    CommissionStaffModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.last_name,
+                    StaffModel.position_code
+                )
+                    .order_by(CommissionStoreModel.store_code)
+            )
+
+            # 如果提供了关键词，则添加过滤条件
+            if key_word:
+                query = query.where(
+                    or_(
+                        CommissionStoreModel.store_code.contains(key_word),
+                        store_alias.c.store_name.contains(key_word),
+                        CommissionStaffModel.staff_code.contains(key_word),
+                        StaffModel.first_name.contains(key_word),
+                        StaffModel.last_name.contains(key_word)
+                    )
+                )
+
+            result = await db.execute(query)
+            rows = result.fetchall()
+
+            # 格式化数据
+            formatted_data = []
+            for row in rows:
+                commission_only = float(row.commission_only) if row.commission_only is not None else 0.0
+                incentive = float(row.incentive) if row.incentive is not None else 0.0
+                total_commission = float(row.total_commission) if row.total_commission is not None else 0.0
+
+                formatted_data.append({
+                    "store_name": row.store_name or '',
+                    "store_code": row.store_code or '',
+                    "staff_code": row.staff_code or '',
+                    "full_name": row.full_name or '',
+                    "position_code": row.position_code or '',
+                    "commission_only": commission_only,
+                    "incentive": incentive,
+                    "total_commission": total_commission
+                })
+
+            # 字段翻译
+            field_translations = {
+                "store_name": {"en": "Store", "zh": "店铺"},
+                "store_code": {"en": "Store ID", "zh": "店铺ID"},
+                "staff_code": {"en": "Staff ID", "zh": "员工ID"},
+                "full_name": {"en": "Full Name", "zh": "姓名"},
+                "position_code": {"en": "Position", "zh": "职位"},
+                "commission_only": {"en": "Commission only", "zh": "纯佣金"},
+                "incentive": {"en": "Incentive", "zh": "激励金额"},
+                "total_commission": {"en": "Total Commission", "zh": "总佣金"}
+            }
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations
+            }
+
+        except Exception as e:
+            app_logger.error(f"Error in get_rpt_commission_payout: {str(e)}")
             raise e
 
 
@@ -910,7 +1115,8 @@ class CommissionService:
         position = staff['position']
         position_stat = position_stats.get(position, {})
 
-        app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 岗位: {position}, 岗位统计信息: {position_stat},consider_attendance: {rule_info.consider_attendance}")
+        app_logger.debug(
+            f"员工 {staff.get('staff_code', 'Unknown')} 岗位: {position}, 岗位统计信息: {position_stat},consider_attendance: {rule_info.consider_attendance}")
 
         if rule_info.consider_attendance == 1:
             # 团队分摊模式

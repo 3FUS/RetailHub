@@ -815,7 +815,11 @@ class TargetStoreWeekService:
         # 遍历所有传入的数据
         for week_data in target_data.weeks:
             # 检查记录是否已存在
-            s
+            result = await db.execute(select(TargetStoreWeek).where(
+                TargetStoreWeek.store_code == target_data.store_code,
+                TargetStoreWeek.fiscal_month == target_data.fiscal_month,
+                TargetStoreWeek.week_number == week_data.week_number
+            ))
             existing_target = result.scalar_one_or_none()
 
             if existing_target:
@@ -823,7 +827,7 @@ class TargetStoreWeekService:
                 for key, value in week_data.dict().items():
                     if key not in ['store_code', 'fiscal_month', 'week_number']:  # 不更新主键
                         setattr(existing_target, key, value)
-                existing_target.updated_at = datetime.utcnow()
+                existing_target.updated_at = datetime.now()
                 created_targets.append(existing_target)
             else:
                 # 如果不存在，创建新记录
@@ -1132,6 +1136,11 @@ class TargetStaffService:
                                                                                     merged_months if module == "commission" else [
                                                                                         fiscal_month])
 
+            should_values = True
+            if min_date and min_date > datetime.now().date():
+                should_values = False
+                app_logger.debug("Minimum date is in the future, hiding target values")
+
             app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
                 select(func.count()).select_from(StaffAttendanceModel)
@@ -1227,7 +1236,7 @@ class TargetStaffService:
                             row.expected_attendance) if row.expected_attendance is not None else 0.0,
                         "actual_attendance": float(
                             row.actual_attendance) if row.actual_attendance is not None else 0.0,
-                        "target_value": float(row.target_value) if row.target_value is not None else 0.0,
+                        "target_value": float(row.target_value) if row.target_value is not None and should_values else 0.0,
                         "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
                         "deletable": row.deletable
@@ -1275,7 +1284,7 @@ class TargetStaffService:
             result_data = {
                 "data": staff_attendance_list,
                 "header_info": {
-                    "store_target_value": store_target_value,
+                    "store_target_value": store_target_value if should_values else 0,
                     "store_sales_value": store_sales_value,
                     "fiscal_period": fiscal_period,  # 新增的财月日期范围
                     "min_date": min_date,
