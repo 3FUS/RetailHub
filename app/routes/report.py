@@ -13,7 +13,7 @@ router = APIRouter()
 
 # 报表类型枚举
 REPORT_TYPES = ["target_by_store", "target_percentage_version", "target_bi_version", "target_date_horizontal_version",
-                "target_by_staff", "commission", "budget"]
+                "target_by_staff", "commission", "budget", "sales_by_achievement", "commission_payout"]
 
 
 @router.get("/data")
