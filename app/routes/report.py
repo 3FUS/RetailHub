@@ -63,6 +63,14 @@ async def get_report_data(
             report_data["commission"] = await CommissionRPTService.get_rpt_commission_by_store(
                 session, financial_month, keyword, role_code)
 
+        elif report_type == "sales_by_achievement":
+            report_data["sales_by_achievement"] = await CommissionRPTService.get_rpt_sales_by_achievement(
+                session, financial_month, keyword, role_code)
+
+        elif report_type == "commission_payout":
+            report_data["commission_payout"] = await CommissionRPTService.get_rpt_commission_payout(
+                session, financial_month, keyword, role_code)
+
         elif report_type == "budget":
             report_data["budget"] = await BudgetService.get_budget_data(
                 session, financial_month, keyword, role_code)
@@ -119,8 +127,11 @@ def _export_to_excel(report_data: dict, report_type: str):
         elif report_type == "target_by_staff" and "target_by_staff" in report_data:
             _write_data_to_sheet(report_data["target_by_staff"], "StaffTarget")
 
-        elif report_type == "commission" and "commission" in report_data:
-            _write_data_to_sheet(report_data["commission"], "Commission")
+        elif report_type == "commission_payout" and "commission_payout" in report_data:
+            _write_data_to_sheet(report_data["commission_payout"], "Commission_Payout")
+
+        elif report_type == "sales_by_achievement" and "sales_by_achievement" in report_data:
+            _write_data_to_sheet(report_data["sales_by_achievement"], "Sales_Achievement")
 
         elif report_type == "budget" and "budget" in report_data:
             _write_data_to_sheet(report_data["budget"], "Budget")
