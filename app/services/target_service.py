@@ -1470,7 +1470,7 @@ class TargetStaffService:
                 existing_target = result.scalar_one_or_none()
 
                 if existing_target and existing_target.sales_value is not None:
-                    staff_target_value = existing_target.sales_value
+                    staff_target_value = round(existing_target.sales_value,0)
                 else:
                     staff_target_value = getattr(staff_data, 'sales_value', 0) or 0
 
