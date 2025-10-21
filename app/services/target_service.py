@@ -1563,10 +1563,25 @@ class TargetStaffService:
                     ratio = round(weights[i] / total_weight, 6)
                     ratios.append(ratio)
 
-                # 调整最后一个员工的比例以确保总和为1
+                app_logger.debug(f"Initial ratios before adjustment: {ratios}")
+
                 if ratios:
-                    ratio_sum = sum(ratios[1:])  # 除第一个员工外的所有比例之和
-                    ratios[0] = round(1.0 - ratio_sum, 6)
+                    ratio_sum = sum(ratios)
+                    diff = 1.0 - ratio_sum
+                    app_logger.debug(f"Ratio sum: {ratio_sum}, Difference to 1.0: {diff}")
+
+                    if diff != 0:
+                        # 找到比例最高的员工索引
+                        max_ratio_index = ratios.index(max(ratios))
+                        app_logger.debug(f"Max ratio index: {max_ratio_index}, Max ratio value: {max(ratios)}")
+
+                        # 将差额加到比例最高的员工身上
+                        ratios[max_ratio_index] = round(ratios[max_ratio_index] + diff, 6)
+                        app_logger.debug(
+                            f"Adjusted ratio at index {max_ratio_index} from {max(ratios) - diff} to {ratios[max_ratio_index]}")
+
+                    app_logger.debug(f"Final ratios after adjustment: {ratios}, Sum: {sum(ratios)}")
+
             app_logger.debug(f"Calculated ratios: {ratios}")
 
             # 计算员工目标值
