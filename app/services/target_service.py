@@ -999,15 +999,15 @@ class TargetStoreDailyService:
             "target_value":
                 target_main_data.target_value if target_main_data and target_main_data.target_value is not None and should_values else None,
             "store_status_details": {
-                "store_saved_by": target_main_data.store_saved_by if target_main_data else None,
-                "store_saved_at": target_main_data.store_saved_at if target_main_data else None,
-                "store_submit_by": target_main_data.store_submit_by if target_main_data else None,
-                "store_submit_at": target_main_data.store_submit_at if target_main_data else None,
-                "store_approved_by": target_main_data.store_approved_by if target_main_data else None,
-                "store_approved_at": target_main_data.store_approved_at if target_main_data else None,
-                "store_reject_remarks": target_main_data.store_reject_remarks if target_main_data else None,
-                "store_rejected_at": target_main_data.store_rejected_at if target_main_data else None,
-                "store_rejected_by": target_main_data.store_rejected_by if target_main_data else None}
+                "saved_by": target_main_data.store_saved_by if target_main_data else None,
+                "saved_at": target_main_data.store_saved_at if target_main_data else None,
+                "submit_by": target_main_data.store_submit_by if target_main_data else None,
+                "submit_at": target_main_data.store_submit_at if target_main_data else None,
+                "approved_by": target_main_data.store_approved_by if target_main_data else None,
+                "approved_at": target_main_data.store_approved_at if target_main_data else None,
+                "reject_remarks": target_main_data.store_reject_remarks if target_main_data else None,
+                "rejected_at": target_main_data.store_rejected_at if target_main_data else None,
+                "rejected_by": target_main_data.store_rejected_by if target_main_data else None}
 
         }
 

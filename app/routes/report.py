@@ -97,7 +97,7 @@ async def get_report_data(
 
 def _export_to_excel(report_data: dict, report_type: str):
     """
-    将报告数据导出为 Excel 文件
+    将报告数据导出为 Excel 文件，使用 field_translations 的英文字段名作为表头
     """
     output = BytesIO()
 
@@ -105,20 +105,46 @@ def _export_to_excel(report_data: dict, report_type: str):
         financial_month = report_data.get("financial_month", "unknown")
         keyword = report_data.get("keyword", "")
 
-        # 通用的数据处理函数
+        # 通用的数据处理函数，支持使用 field_translations 设置表头
         def _write_data_to_sheet(data, sheet_name):
             if isinstance(data, dict) and "data" in data:
                 details = data.get("data", [])
                 if details:
                     df = pd.DataFrame(details)
+                    # 如果有 field_translations，使用英文字段名作为表头
+                    if "field_translations" in data and data["field_translations"]:
+                        field_translations = data["field_translations"]
+                        # 创建列名映射（从原始字段名到英文字段名）
+                        column_mapping = {
+                            old_name: translations["en"]
+                            for old_name, translations in field_translations.items()
+                            if "en" in translations
+                        }
+                        # 重命名列
+                        df.rename(columns=column_mapping, inplace=True)
                     df.to_excel(writer, sheet_name=sheet_name, index=False)
                 else:
-                    pd.DataFrame([data]).to_excel(writer, sheet_name=sheet_name, index=False)
+                    df = pd.DataFrame([data])
+                    # 如果有 field_translations，使用英文字段名作为表头
+                    if "field_translations" in data and data["field_translations"]:
+                        field_translations = data["field_translations"]
+                        column_mapping = {
+                            old_name: translations["en"]
+                            for old_name, translations in field_translations.items()
+                            if "en" in translations
+                        }
+                        df.rename(columns=column_mapping, inplace=True)
+                    df.to_excel(writer, sheet_name=sheet_name, index=False)
             elif isinstance(data, list):
                 df = pd.DataFrame(data)
+                # 如果列表不为空且有字段翻译信息，尝试应用翻译
+                if data and isinstance(data[0], dict):
+                    # 这里无法直接获取 field_translations，需要在调用时确保传入正确的数据结构
+                    pass
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
             else:
-                pd.DataFrame([data]).to_excel(writer, sheet_name=sheet_name, index=False)
+                df = pd.DataFrame([data])
+                df.to_excel(writer, sheet_name=sheet_name, index=False)
 
         # 根据报表类型导出不同sheet
         if report_type in ["target_by_store", "target_percentage_version",
