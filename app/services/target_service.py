@@ -32,6 +32,7 @@ class TargetRPTService:
             # 执行SQL查询逻辑
             query = select(
                 TargetStoreDaily.target_date.label('date'),
+                func.to_char(TargetStoreDaily.target_date, 'Day').label('day_of_week'),
                 TargetStoreMain.store_code,
                 store_alias.c.Location_ID,
                 store_alias.c.store_name,
@@ -83,9 +84,10 @@ class TargetRPTService:
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
                     "week_number": row.fiscal_week,
-                    "week_percentage": float(row.week_percentage) if row.week_percentage is not None else 0.0,
+                    "week": row.day_of_week,
+                    "week_percentage": f"{row.week_percentage}%" if row.week_percentage is not None else 0.0,
                     "week_value": float(row.week_value) if row.week_value is not None else 0.0,
-                    "day_percentage": float(row.day_percentage) if row.day_percentage is not None else 0.0,
+                    "day_percentage": f"{row.day_percentage}%" if row.day_percentage is not None else 0.0,
                     "day_value": float(row.day_value) if row.day_value is not None else 0.0
                 })
 
@@ -95,6 +97,7 @@ class TargetRPTService:
                 "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
                 "store_name": {"en": "Location Name", "zh": "店铺名称"},
                 "week_number": {"en": "Week Number", "zh": "周数"},
+                "week": {"en": "Week", "zh": "周"},
                 "week_percentage": {"en": "Week Percentage", "zh": "周百分比"},
                 "week_value": {"en": "Week Value", "zh": "周目标值"},
                 "day_percentage": {"en": "Day Percentage", "zh": "日百分比"},
@@ -254,7 +257,7 @@ class TargetRPTService:
                 )
             ).where(
                 TargetStoreMain.fiscal_month == fiscal_month
-            ).order_by(TargetStoreDaily.target_date, TargetStoreMain.store_code)
+            ).order_by(TargetStoreMain.store_code,TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
             if key_word:
@@ -358,19 +361,19 @@ class TargetRPTService:
             # 按日期分组数据并构建横向表结构（参考 get_budget_data 的实现方式）
             date_groups = defaultdict(dict)
             store_codes = set()
-            store_names = {}
+            # store_names = {}
 
             for row in target_data:
                 date_str = row.date.strftime('%Y%m%d') if row.date else None
                 store_code = row.store_code
-                store_name = row.store_name
+                # store_name = row.store_name
                 target_value = float(row.target_date_value) if row.target_date_value is not None else 0.0
 
                 if date_str:
                     date_groups[date_str][store_code] = target_value
                     store_codes.add(store_code)
-                    if store_code not in store_names:
-                        store_names[store_code] = store_name
+                    # if store_code not in store_names:
+                    #     store_names[store_code] = store_name
 
             # 构建结果数据 - 转换为横向格式
             sorted_store_codes = sorted(list(store_codes))
@@ -378,8 +381,8 @@ class TargetRPTService:
 
             # 为每个门店构建一行数据
             for store_code in sorted_store_codes:
-                store_name = store_names.get(store_code, "")
-                row_data = {"store": f"{store_code}({store_name})" if store_name else store_code}
+                # store_name = store_names.get(store_code, "")
+                row_data = {"store": f"{store_code}"}
 
                 # 为每个日期添加目标值
                 for date_str in sorted(date_groups.keys()):
@@ -653,12 +656,30 @@ class TargetStoreService:
         result = await db.execute(query)
         target_stores = result.all()
 
+        should_values = True
+        date_range_result = await db.execute(
+            select(
+                func.min(DimensionDayWeek.actual_date).label('min_date'),
+                func.max(DimensionDayWeek.actual_date).label('max_date')
+            )
+                .where(DimensionDayWeek.fiscal_month == fiscal_month)
+        )
+        date_range = date_range_result.fetchone()
+        min_date = None
+        if date_range and date_range.min_date:
+            min_date = date_range.min_date
+
+        app_logger.debug(f"min_date values: {min_date}")
+        if min_date and min_date.date() > datetime.now().date():
+            should_values = False
+            app_logger.debug("Minimum date is in the future, hiding target values")
+
         formatted_data = [
             {
                 "store_code": row.store_code,
                 "store_name": row.store_name,
                 "store_type": row.store_type,
-                "target_value": row.target_value if row.target_value is not None else None,
+                "target_value": row.target_value if row.target_value is not None and should_values else None,
                 "store_status": row.store_status,
                 "staff_status": row.staff_status
             }
@@ -810,10 +831,22 @@ class TargetStoreWeekService:
 
     @staticmethod
     async def create_target_store_week(db: AsyncSession, target_data: TargetStoreWeekCreate):
+
+        result_main = await db.execute(select(TargetStoreMain.target_value).where(
+            TargetStoreMain.store_code == target_data.store_code,
+            TargetStoreMain.fiscal_month == target_data.fiscal_month
+        ))
+        target_store_main = result_main.fetchone()
+
+        store_target_value = target_store_main.target_value if target_store_main and target_store_main.target_value else 0
+
         created_targets = []
 
         # 遍历所有传入的数据
-        for week_data in target_data.weeks:
+        total_target_value = 0
+        weeks_data = target_data.weeks
+
+        for i, week_data in enumerate(weeks_data):
             # 检查记录是否已存在
             result = await db.execute(select(TargetStoreWeek).where(
                 TargetStoreWeek.store_code == target_data.store_code,
@@ -822,11 +855,22 @@ class TargetStoreWeekService:
             ))
             existing_target = result.scalar_one_or_none()
 
+            calculated_target_value = None
+            if store_target_value > 0 and week_data.percentage is not None:
+                calculated_target_value = round(store_target_value * week_data.percentage / 100)
+                total_target_value += calculated_target_value
+                if i == len(weeks_data) - 1:
+                    # 最后一条记录使用剩余值
+                    remaining_value = store_target_value - total_target_value
+                    calculated_target_value = calculated_target_value + remaining_value  # 确保不为负数
+
             if existing_target:
                 # 如果存在，更新记录
                 for key, value in week_data.dict().items():
                     if key not in ['store_code', 'fiscal_month', 'week_number']:  # 不更新主键
                         setattr(existing_target, key, value)
+                existing_target.percentage = week_data.percentage
+                existing_target.target_value = calculated_target_value
                 existing_target.updated_at = datetime.now()
                 created_targets.append(existing_target)
             else:
@@ -838,6 +882,8 @@ class TargetStoreWeekService:
                     percentage=week_data.percentage,
                     creator_code=target_data.creator_code
                 )
+                if calculated_target_value is not None:
+                    target_store_week.target_value = calculated_target_value
                 db.add(target_store_week)
                 created_targets.append(target_store_week)
 
@@ -854,6 +900,27 @@ class TargetStoreDailyService:
     @staticmethod
     async def get_target_store_daily(db: AsyncSession, store_code: str, fiscal_month: str):
 
+        result_main = await db.execute(
+            select(
+                TargetStoreMain.store_status,
+                TargetStoreMain.store_saved_by,
+                TargetStoreMain.store_saved_at,
+                TargetStoreMain.store_submit_by,
+                TargetStoreMain.store_submit_at,
+                TargetStoreMain.store_approved_by,
+                TargetStoreMain.store_approved_at,
+                TargetStoreMain.store_reject_remarks,
+                TargetStoreMain.store_rejected_at,
+                TargetStoreMain.store_rejected_by,
+                TargetStoreMain.target_value
+            )
+                .where(
+                TargetStoreMain.store_code == store_code,
+                TargetStoreMain.fiscal_month == fiscal_month
+            )
+        )
+        target_main_data = result_main.fetchone()
+
         result = await db.execute(
             select(
                 DimensionDayWeek.day_number,
@@ -863,6 +930,7 @@ class TargetStoreDailyService:
                 TargetStoreDaily.target_value,
                 TargetStoreDaily.sales_value_ly,
                 TargetStoreDaily.sales_value_ly_percentage
+
             )
                 .select_from(
                 DimensionDayWeek.__table__.join(
@@ -879,6 +947,26 @@ class TargetStoreDailyService:
         )
         target_daily = result.all()
 
+        should_values = True
+        date_range_result = await db.execute(
+            select(
+                func.min(DimensionDayWeek.actual_date).label('min_date'),
+                func.max(DimensionDayWeek.actual_date).label('max_date')
+            )
+                .where(DimensionDayWeek.fiscal_month == fiscal_month)
+        )
+        date_range = date_range_result.fetchone()
+        min_date = None
+        fiscal_period = None
+        if date_range and date_range.min_date:
+            min_date = date_range.min_date
+            fiscal_period = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
+
+        app_logger.debug(f"min_date values: {min_date}")
+        if min_date and min_date.date() > datetime.now().date():
+            should_values = False
+            app_logger.debug("Minimum date is in the future, hiding target values")
+
         data = [
             {
                 "week_number": row.week_number if row.week_number is not None else None,
@@ -891,9 +979,27 @@ class TargetStoreDailyService:
             for row in target_daily
         ]
 
+        header_info = {
+            "store_status": target_main_data.store_status if target_main_data else None,
+            "fiscal_period": fiscal_period,
+            "target_value":
+                target_main_data.target_value if target_main_data and target_main_data.target_value is not None and should_values else None,
+            "store_status_details": {
+                "store_saved_by": target_main_data.store_saved_by if target_main_data else None,
+                "store_saved_at": target_main_data.store_saved_at if target_main_data else None,
+                "store_submit_by": target_main_data.store_submit_by if target_main_data else None,
+                "store_submit_at": target_main_data.store_submit_at if target_main_data else None,
+                "store_approved_by": target_main_data.store_approved_by if target_main_data else None,
+                "store_approved_at": target_main_data.store_approved_at if target_main_data else None,
+                "store_reject_remarks": target_main_data.store_reject_remarks if target_main_data else None,
+                "store_rejected_at": target_main_data.store_rejected_at if target_main_data else None,
+                "store_rejected_by": target_main_data.store_rejected_by if target_main_data else None}
+
+        }
+
         month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
 
-        return {"data": data, "MonthEnd": month_end_value}
+        return {"data": data, "header_info": header_info, "MonthEnd": month_end_value}
 
     @staticmethod
     async def update_target_monthly_percentage(db: AsyncSession, store_code: str, fiscal_month: str):

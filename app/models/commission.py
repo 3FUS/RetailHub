@@ -48,6 +48,7 @@ class CommissionStaffModel(Base):
     store_code = Column(String(30), primary_key=True)
     amount = Column(Float, nullable=False)
     rule_detail_code = Column(String(60), primary_key=True)  # rule_detail_code
+    total_days_store_work = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

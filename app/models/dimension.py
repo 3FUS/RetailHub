@@ -36,6 +36,7 @@ class StoreModel(Base):
     country = Column(String(30))  # 国家
     state = Column(String(30))  # 省
     City = Column(String(50))  # 城市
+    City_Tier = Column(String(60))
     county = Column(String(30))
     Area = Column(String(30))  # 区域
     Address1 = Column(String(255))  # 地址1

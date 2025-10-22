@@ -23,6 +23,9 @@ class CommissionRPTService:
     async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
         try:
             # 构建查询，包含所有需要的字段
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
             query = (
                 select(
                     CommissionStoreModel.store_code,
@@ -344,8 +347,8 @@ class CommissionRPTService:
                 "target_value": {"en": "Monthly Target", "zh": "月销售指标"},
                 "sales_value": {"en": "Monthly Sales", "zh": "月销售"},
                 "achievement_rate": {"en": "% TGT Ach", "zh": "月达成"},
-                "position_code": {"en": "Position Code", "zh": "职位代码"},
-                "position": {"en": "Position", "zh": "职位"}
+                "position_code": {"en": "Position", "zh": "职位"},
+                "position": {"en": "Position Type", "zh": "职位类型"}
             }
 
             return {
@@ -1477,7 +1480,9 @@ class CommissionService:
                         app_logger.debug(f"应用最低保障金额: {old_amount} -> {commission_amount}")
 
                     # 只有佣金金额大于0时才保存
+
                     if commission_amount and commission_amount > 0:
+                        position_stat = position_stats.get(staff['position'], {})
                         app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
                         commission_amount = round(commission_amount, -1)
                         commission_record = CommissionStaffModel(
@@ -1485,7 +1490,8 @@ class CommissionService:
                             staff_code=staff['staff_code'],
                             store_code=store_code,
                             amount=commission_amount,
-                            rule_detail_code=matching_detail.rule_detail_code
+                            rule_detail_code=matching_detail.rule_detail_code,
+                            total_days_store_work=position_stat.get('total_attendance', 0)
                         )
                         commission_records.append(commission_record)
                     else:

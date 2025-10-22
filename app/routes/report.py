@@ -8,6 +8,7 @@ from app.services.target_service import TargetRPTService
 from app.services.commission_service import CommissionRPTService
 from app.services.budget_service import BudgetService
 from app.core.security import get_current_user
+from app.utils.logger import app_logger
 
 router = APIRouter()
 
@@ -90,10 +91,10 @@ async def get_report_data(
             return {"code": 200, "data": report_data}
 
     except Exception as e:
+        app_logger.error(f"Error generating report: {str(e)}")
         return {"code": 500, "msg": f"Error generating report: {str(e)}"}
 
 
-# 优化后的 _export_to_excel 函数
 def _export_to_excel(report_data: dict, report_type: str):
     """
     将报告数据导出为 Excel 文件
