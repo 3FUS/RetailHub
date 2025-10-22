@@ -105,7 +105,8 @@ async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession 
                            current_user: dict = Depends(get_current_user)):
     try:
         target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month)
-        return {"code": 200, "data": target_data['data'], "MonthEnd": target_data['MonthEnd']}
+        return {"code": 200, "data": target_data['data'], "header_info": target_data['header_info'],
+                "MonthEnd": target_data['MonthEnd']}
     except SQLAlchemyError as e:
         app_logger.error(f"get_daily_target SQLAlchemyError {str(e)}")
         raise HTTPException(

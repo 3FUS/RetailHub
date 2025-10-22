@@ -25,14 +25,21 @@ class TargetRPTService:
         """
         获取门店目标报表数据
         """
+        # 添加方法入口日志
+        app_logger.info(
+            f"Starting get_rpt_target_by_store with fiscal_month={fiscal_month}, key_word={key_word}, role_code={role_code}")
 
         try:
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
+
+            # 记录权限查询结果
+            app_logger.debug(f"Built store permission query for role_code={role_code}")
+
             # 执行SQL查询逻辑
             query = select(
                 TargetStoreDaily.target_date.label('date'),
-                func.to_char(TargetStoreDaily.target_date, 'Day').label('day_of_week'),
+                func.dayname(TargetStoreDaily.target_date).label('day_of_week'),
                 TargetStoreMain.store_code,
                 store_alias.c.Location_ID,
                 store_alias.c.store_name,
@@ -70,10 +77,13 @@ class TargetRPTService:
                     TargetStoreMain.store_code.contains(key_word) |
                     store_alias.c.store_name.contains(key_word)
                 )
+                app_logger.debug(f"Applied keyword filter: {key_word}")
 
+            app_logger.debug(f"Executing query for fiscal_month={fiscal_month}")
             result = await db.execute(query)
 
             target_data = result.all()
+            app_logger.debug(f"Query returned {len(target_data)} rows")
 
             # 构建结果数据
             formatted_data = []
@@ -91,6 +101,8 @@ class TargetRPTService:
                     "day_value": float(row.day_value) if row.day_value is not None else 0.0
                 })
 
+            app_logger.debug(f"Formatted {len(formatted_data)} rows of data")
+
             field_translations = {
                 "date": {"en": "Date (Number)", "zh": "日期"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
@@ -103,6 +115,8 @@ class TargetRPTService:
                 "day_percentage": {"en": "Day Percentage", "zh": "日百分比"},
                 "day_value": {"en": "Day Value", "zh": "日目标值"}
             }
+
+            app_logger.info(f"Successfully completed get_rpt_target_by_store with {len(formatted_data)} records")
 
             return {
                 "data": formatted_data,
