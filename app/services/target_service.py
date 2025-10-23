@@ -271,7 +271,7 @@ class TargetRPTService:
                 )
             ).where(
                 TargetStoreMain.fiscal_month == fiscal_month
-            ).order_by(TargetStoreMain.store_code,TargetStoreDaily.target_date)
+            ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
             if key_word:
@@ -1304,6 +1304,10 @@ class TargetStaffService:
                         StaffAttendanceModel.store_code.in_(merged_codes),
                         StaffAttendanceModel.fiscal_month.in_(merged_months)
                     )
+                        .order_by(
+                        StaffModel.position.desc(),  # position 倒序
+                        StaffModel.staff_code.asc()  # staff_code 正序
+                    )
                 )
             else:
                 # 没有数据存在，直接查询StaffModel单表
@@ -1329,6 +1333,9 @@ class TargetStaffService:
                         .where(
                         StaffModel.store_code.in_(merged_codes),
                         StaffModel.state == 'A'
+                    ).order_by(
+                        StaffModel.position.desc(),  # position 倒序
+                        StaffModel.staff_code.asc()  # staff_code 正序
                     )
                 )
             staff_attendance_data = result.all()

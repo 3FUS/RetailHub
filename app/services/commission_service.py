@@ -1333,7 +1333,8 @@ class CommissionService:
                     CommissionRuleModel.rule_class,
                     CommissionRuleModel.rule_type,
                     CommissionRuleModel.minimum_guarantee,
-                    CommissionRuleModel.consider_attendance
+                    CommissionRuleModel.consider_attendance,
+                    CommissionRuleModel.minimum_guarantee_on_attendance
                 ).where(
                     CommissionRuleModel.rule_code.in_(all_rule_codes)
                 )
@@ -1477,7 +1478,27 @@ class CommissionService:
                     if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
                         old_amount = commission_amount
                         commission_amount = rule_info.minimum_guarantee
-                        app_logger.debug(f"应用最低保障金额: {old_amount} -> {commission_amount}")
+                        app_logger.debug(f"应用保底金额: 原始金额 {old_amount} < 保底金额 {rule_info.minimum_guarantee}, 调整为保底金额")
+
+                        expected_attendance = staff['expected_attendance'] or 0
+                        actual_attendance = staff['actual_attendance'] or 0
+
+                        if rule_info.minimum_guarantee_on_attendance == 1 and expected_attendance > 0:
+                            attendance_factor = actual_attendance / expected_attendance
+                            commission_amount = commission_amount * attendance_factor
+                            app_logger.debug(
+                                f"保底金额考虑出勤比例: 保底金额 {rule_info.minimum_guarantee} * 出勤率 {attendance_factor} = 调整后金额 {commission_amount}")
+                        elif rule_info.minimum_guarantee_on_attendance > 1 and expected_attendance > 0:
+                            attendance_percentage = (actual_attendance / expected_attendance) * 100
+                            if attendance_percentage < rule_info.minimum_guarantee_on_attendance:
+                                commission_amount = 0
+                                app_logger.debug(
+                                    f"出勤率 {attendance_percentage}% 低于要求的 {rule_info.minimum_guarantee_on_attendance}%, 保底金额取消")
+                            else:
+                                app_logger.debug(
+                                    f"出勤率 {attendance_percentage}% 满足要求的 {rule_info.minimum_guarantee_on_attendance}%, 保底金额保持 {commission_amount}")
+                        else:
+                            app_logger.debug(f"保底金额不考虑出勤或应出勤为0, 最终金额 {commission_amount}")
 
                     # 只有佣金金额大于0时才保存
 

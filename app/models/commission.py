@@ -14,6 +14,7 @@ class CommissionMainModel(Base):
     updated_at = Column(DateTime, default=datetime.now)
     updated_by = Column(String(50))
 
+
 class CommissionStoreModel(Base):
     __tablename__ = "commissions_store"
 
@@ -53,6 +54,7 @@ class CommissionStaffModel(Base):
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+
 class CommissionRuleModel(Base):
     __tablename__ = "commissions_rule"
 
@@ -65,18 +67,20 @@ class CommissionRuleModel(Base):
     rule_class = Column(String(30))  # 'individual', 'team', 'adjustment', 'incentive'
     minimum_guarantee = Column(Float, default=0.0)  # 保底金额字段
     consider_attendance = Column(Integer, default=0)  # 是否考虑出勤比例
+    minimum_guarantee_on_attendance = Column(Float, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class CommissionRuleDetailModel(Base):
     __tablename__ = "commissions_rule_detail"
 
     rule_detail_code = Column(String(60), primary_key=True)
     rule_code = Column(String(30), nullable=False)  # 关联到 commissions_rule 的 rule_code
-    start_value = Column(Float, nullable=False)     # 区间起始值，例如 0.0, 80.0
-    end_value = Column(Float, nullable=True)       # 区间结束值，>=140% 时可为 None
-    value = Column(Float, nullable=False)          # 对应的数值，如 0.5%, 1500 RMB
+    start_value = Column(Float, nullable=False)  # 区间起始值，例如 0.0, 80.0
+    end_value = Column(Float, nullable=True)  # 区间结束值，>=140% 时可为 None
+    value = Column(Float, nullable=False)  # 对应的数值，如 0.5%, 1500 RMB
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

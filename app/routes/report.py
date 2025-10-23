@@ -107,6 +107,7 @@ def _export_to_excel(report_data: dict, report_type: str):
 
         # 通用的数据处理函数，支持使用 field_translations 设置表头
         def _write_data_to_sheet(data, sheet_name):
+            sheet_name = 'Sheet1'
             if isinstance(data, dict) and "data" in data:
                 details = data.get("data", [])
                 if details:

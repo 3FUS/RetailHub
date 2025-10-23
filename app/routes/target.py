@@ -126,7 +126,8 @@ async def create_staff_attendance(TargetStaffAttendance: StaffAttendanceCreate,
                                   db: AsyncSession = Depends(get_db),
                                   current_user: dict = Depends(get_current_user)):
     try:
-        data = await TargetStaffService.create_staff_attendance(db, TargetStaffAttendance)
+        role_code = current_user['user_code']
+        data = await TargetStaffService.create_staff_attendance(db, TargetStaffAttendance, role_code)
         await TargetStaffService.update_staff(db, TargetStaffAttendance)
         return {"code": 200, "data": data, "msg": "Success"}
     except SQLAlchemyError as e:
