@@ -21,7 +21,7 @@ from app.utils.logger import app_logger
 class TargetRPTService:
 
     @staticmethod
-    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
         """
         获取门店目标报表数据
         """
@@ -46,10 +46,12 @@ class TargetRPTService:
                 (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label(
                     'fiscal_week'),
                 TargetStoreWeek.percentage.label('week_percentage'),
-                (TargetStoreWeek.percentage / 100 * TargetStoreMain.target_value).label('week_value'),
+                # (TargetStoreWeek.percentage / 100 * TargetStoreMain.target_value).label('week_value'),
+                TargetStoreWeek.target_value.label('week_value'),
                 TargetStoreDaily.percentage.label('day_percentage'),
-                (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
-                        TargetStoreDaily.percentage / 100)).label('day_value')
+                # (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
+                #         TargetStoreDaily.percentage / 100)).label('day_value')
+                TargetStoreDaily.target_value.label('day_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
@@ -68,7 +70,8 @@ class TargetRPTService:
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month
+                TargetStoreMain.fiscal_month == fiscal_month,
+                TargetStoreMain.store_status == status
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
@@ -133,7 +136,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_percentage_version(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_target_percentage_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,role_code: str):
 
         try:
             store_permission_query = build_store_permission_query(role_code)
@@ -168,7 +171,8 @@ class TargetRPTService:
                     (TargetStoreWeek.week_number == DimensionDayWeek.week_number)
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month
+                TargetStoreMain.fiscal_month == fiscal_month,
+                TargetStoreMain.store_status == status
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
@@ -224,7 +228,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
         """
         获取门店目标报表数据 - BI版本
         格式: Date (Number)	Fiscal Week (ID)	Fiscal Month (ID)	Location Code	Location ID	Location Short Name	Commission Target Local
@@ -250,8 +254,9 @@ class TargetRPTService:
                 TargetStoreMain.store_code.label('store_code'),
                 store_alias.c.Location_ID,
                 store_alias.c.store_name.label('store_name'),
-                (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
-                        TargetStoreDaily.percentage / 100)).label('commission_target_local')
+                # (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
+                #         TargetStoreDaily.percentage / 100)).label('commission_target_local')
+                TargetStoreDaily.target_value.label('commission_target_local')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
@@ -270,7 +275,8 @@ class TargetRPTService:
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month
+                TargetStoreMain.fiscal_month == fiscal_month,
+                TargetStoreMain.store_status == status
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
@@ -321,7 +327,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str,
+    async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str,status: str,
                                                      role_code: str):
         """
         获取门店目标报表数据 - 日期横向版本
@@ -345,7 +351,8 @@ class TargetRPTService:
                 TargetStoreDaily.target_date.label('date'),
                 TargetStoreMain.store_code.label('store_code'),
                 store_alias.c.store_name.label('store_name'),
-                (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+                # (TargetStoreMain.target_value * TargetStoreDaily.monthly_percentage / 100).label('target_date_value')
+                TargetStoreDaily.target_value.label('target_date_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
@@ -359,7 +366,8 @@ class TargetRPTService:
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month
+                TargetStoreMain.fiscal_month == fiscal_month,
+                TargetStoreMain.store_status == status
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件

@@ -78,6 +78,7 @@ class TargetStoreDaily(Base):
     percentage = Column(Float, nullable=False)  # 每日目标占比
     monthly_percentage = Column(Float)
     target_value = Column(Float)  # 每日目标数值
+    budget_value = Column(Float)
     sales_value_ly = Column(Float)
     sales_value_ly_percentage = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)

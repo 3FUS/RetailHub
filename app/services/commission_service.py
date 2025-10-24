@@ -20,57 +20,59 @@ from app.utils.logger import app_logger
 class CommissionRPTService:
 
     @staticmethod
-    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
+                                          role_code: str):
         try:
             # 构建查询，包含所有需要的字段
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
+            # 构建主查询
             query = (
                 select(
-                    CommissionStoreModel.store_code,
-                    StoreModel.store_name,
-                    CommissionStoreModel.store_type,
-                    StaffAttendanceModel.staff_code,
-                    StaffModel.first_name,
-                    StaffAttendanceModel.position,
-                    StaffAttendanceModel.salary_coefficient,
-                    CommissionStoreModel.fiscal_period,
-                    CommissionStoreModel.status,
-                    StaffAttendanceModel.sales_value,
-                    (TargetStoreMain.target_value * StaffAttendanceModel.target_value_ratio).label('target_value'),
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.actual_attendance,
-                    CommissionRuleModel.rule_class,
-                    func.sum(CommissionStaffModel.amount).label('amount')
+                    StaffModel.staff_code.label('staff_code'),
+                    func.concat(StaffModel.first_name, StaffModel.last_name).label('full_name'),
+                    StaffModel.position_code.label('position_code'),
+                    StaffAttendanceModel.position.label('position'),
+                    StaffAttendanceModel.expected_attendance.label('expected_attendance'),
+                    StaffAttendanceModel.target_value.label('target_value'),
+                    StaffAttendanceModel.sales_value.label('sales_value'),
+                    (StaffAttendanceModel.sales_value / StaffAttendanceModel.target_value * 100).label(
+                        'achievement_rate'),
+                    CommissionRuleDetailModel.value.label('individual_commission_percent'),
+                    CommissionStaffModel.amount.label('amount'),
+                    StaffAttendanceModel.actual_attendance.label('actual_attendance'),
+                    CommissionRuleModel.rule_code.label('rule_code'),
+                    CommissionStaffModel.total_days_store_work.label('total_days_store_work'),
+                    CommissionStoreModel.store_code.label('store_code'),
+                    CommissionStoreModel.fiscal_month.label('fiscal_month'),
+                    TargetStoreMain.sales_value.label('store_sales_value'),
+                    TargetStoreMain.target_value.label('store_target_value'),
+                    (TargetStoreMain.sales_value / TargetStoreMain.target_value * 100).label('store_achievement_rate'),
+                    store_alias.c.manage_region.label('manage_region'),
+                    store_alias.c.manage_channel.label('manage_channel'),
+                    store_alias.c.city.label('city'),
+                    store_alias.c.city_tier.label('city_tier')
                 )
                     .select_from(CommissionStoreModel)
-                    .join(StoreModel,
-                          CommissionStoreModel.store_code == StoreModel.store_code)
-                    .join(StaffAttendanceModel,
-                          (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month) &
-                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code),
-                          isouter=True)
-                    .join(StaffModel,
-                          StaffAttendanceModel.staff_code == StaffModel.staff_code,
-                          isouter=True)
-                    .join(TargetStoreMain,
-                          (CommissionStoreModel.fiscal_month == TargetStoreMain.fiscal_month) &
-                          (CommissionStoreModel.store_code == TargetStoreMain.store_code),
-                          isouter=True)
                     .join(CommissionStaffModel,
                           (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month) &
-                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code) &
-                          (StaffAttendanceModel.staff_code == CommissionStaffModel.staff_code),
-                          isouter=True)
+                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code))
                     .join(CommissionRuleDetailModel,
-                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code,
-                          isouter=True)
+                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
                     .join(CommissionRuleModel,
-                          CommissionRuleModel.rule_code == CommissionRuleDetailModel.rule_code,
-                          isouter=True)
+                          CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
+                    .join(StaffAttendanceModel,
+                          (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month) &
+                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code))
+                    .join(TargetStoreMain,
+                          (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
+                          (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month))
+                    .join(StaffModel,
+                          CommissionStaffModel.staff_code == StaffModel.staff_code)
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
                     .where(CommissionStoreModel.fiscal_month == fiscal_month)
-                    .where(StoreModel.manage_channel.in_(['ROCN', 'RFCN']))
             )
 
             # 如果提供了关键词，则添加过滤条件
@@ -78,192 +80,146 @@ class CommissionRPTService:
                 query = query.where(
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
-                        StoreModel.store_name.contains(key_word),
-                        StaffAttendanceModel.staff_code.contains(key_word),
-                        StaffAttendanceModel.first_name.contains(key_word)
+                        store_alias.c.store_name.contains(key_word),
+                        StaffModel.staff_code.contains(key_word),
+                        StaffModel.first_name.contains(key_word),
+                        StaffModel.last_name.contains(key_word)
                     )
                 )
-
-            # 按所有非聚合字段分组
-            query = query.group_by(
-                CommissionStoreModel.store_code,
-                StoreModel.store_name,
-                CommissionStoreModel.store_type,
-                StaffAttendanceModel.staff_code,
-                StaffModel.first_name,
-                StaffAttendanceModel.position,
-                StaffAttendanceModel.salary_coefficient,
-                CommissionStoreModel.fiscal_period,
-                CommissionStoreModel.status,
-                StaffAttendanceModel.sales_value,
-                TargetStoreMain.target_value,
-                StaffAttendanceModel.target_value_ratio,
-                StaffAttendanceModel.expected_attendance,
-                StaffAttendanceModel.actual_attendance,
-                CommissionRuleModel.rule_class
-            )
 
             result = await db.execute(query)
-            commissions = result.fetchall()
+            rows = result.fetchall()
 
-            # 使用 defaultdict 简化数据处理逻辑
-            from collections import defaultdict
-
-            commission_dict = defaultdict(lambda: {
-                'store_code': '',
-                'store_name': '',
-                'store_type': '',
-                'staff_code': '',
-                'first_name': '',
-                'position': '',
-                'salary_coefficient': 0.0,
-                'fiscal_period': '',
-                'status': '',
-                'sales_value': 0.0,
-                'target_value': 0.0,
-                'expected_attendance': 0.0,
-                'actual_attendance': 0.0,
-                'achievement_rate': 0.0,  # 计算达成率
-                'attendance_rate': 0.0,  # 考勤率
-                'amount_individual': 0.0,
-                'amount_team': 0.0,
-                'amount_incentive': 0.0,
-                'amount_adjustment': 0.0
-            })
-
-            fiscal_periods = set(commission.fiscal_period for commission in commissions if commission.fiscal_period)
-
-            # 为每个 fiscal_period 获取日期范围
-            date_ranges = {}
-            for fp in fiscal_periods:
-                if fp:
-                    # 分割可能包含多个财月的 fiscal_period
-                    months = [month.strip() for month in fp.split(',')]
-
-                    # 查询日期范围
-                    date_query = select(
-                        func.min(DimensionDayWeek.actual_date).label('min_date'),
-                        func.max(DimensionDayWeek.actual_date).label('max_date')
-                    ).where(
-                        DimensionDayWeek.fiscal_month.in_(months)
-                    )
-
-                    date_result = await db.execute(date_query)
-                    date_row = date_result.fetchone()
-
-                    if date_row and date_row.min_date and date_row.max_date:
-                        date_ranges[
-                            fp] = f"{date_row.min_date.strftime('%Y-%m-%d')} to {date_row.max_date.strftime('%Y-%m-%d')}"
-                    else:
-                        date_ranges[fp] = "N/A"
-
-            for commission in commissions:
-                store_code = commission.store_code
-                staff_code = commission.staff_code or ''
-
-                # 创建唯一键，包含 store_code 和 staff_code
-                key = f"{store_code}_{staff_code}" if staff_code else store_code
-
-                # 初始化店铺和员工信息
-                if commission_dict[key]['store_code'] == '':
-                    # 计算达成率
-                    sales_value = float(commission.sales_value) if commission.sales_value is not None else 0.0
-                    target_value = float(commission.target_value) if commission.target_value is not None else 0.0
-                    achievement_rate = 0.0
-                    if target_value > 0:
-                        achievement_rate = (sales_value / target_value) * 100
-
-                    # 计算考勤率
-                    expected_attendance = float(
-                        commission.expected_attendance) if commission.expected_attendance is not None else 0.0
-                    actual_attendance = float(
-                        commission.actual_attendance) if commission.actual_attendance is not None else 0.0
-                    attendance_rate = 0.0
-                    if expected_attendance > 0:
-                        attendance_rate = (actual_attendance / expected_attendance) * 100
-
-                    commission_dict[key].update({
-                        'store_code': store_code or '',
-                        'store_name': commission.store_name or '',
-                        'store_type': commission.store_type or '',
-                        'staff_code': staff_code,
-                        'first_name': commission.first_name or '',
-                        'position': commission.position or '',
-                        'salary_coefficient': float(
-                            commission.salary_coefficient) if commission.salary_coefficient is not None else 0.0,
-                        'fiscal_period': date_ranges.get(commission.fiscal_period, ''),
-                        'status': commission.status or '',
-                        'sales_value': sales_value,
-                        'target_value': target_value,
-                        'expected_attendance': expected_attendance,
-                        'actual_attendance': actual_attendance,
-                        'achievement_rate': round(achievement_rate, 2),
-                        'attendance_rate': round(attendance_rate, 2)
-                    })
-
-                # 根据规则类别累加金额
-                rule_class = commission.rule_class
-                amount = float(commission.amount) if commission.amount is not None else 0.0
-
-                if rule_class == 'individual':
-                    commission_dict[key]['amount_individual'] += amount
-                elif rule_class == 'team':
-                    commission_dict[key]['amount_team'] += amount
-                elif rule_class == 'incentive':
-                    commission_dict[key]['amount_incentive'] += amount
-                elif rule_class == 'adjustment':
-                    commission_dict[key]['amount_adjustment'] += amount
-
-            # 转换为列表格式返回
-            formatted_commissions = list(commission_dict.values())
-
-            status_count_query = (
+            # 获取区域、渠道和城市层级的聚合数据
+            # 区域达成率
+            region_achievement_query = (
                 select(
-                    CommissionStoreModel.status,
-                    func.count(CommissionStoreModel.store_code).label('count')
+                    store_alias.c.manage_region,
+                    func.sum(TargetStoreMain.sales_value).label('region_sales'),
+                    func.sum(TargetStoreMain.target_value).label('region_target')
                 )
+                    .select_from(CommissionStoreModel)
+                    .join(TargetStoreMain,
+                          (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
+                          (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month))
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
                     .where(CommissionStoreModel.fiscal_month == fiscal_month)
-                    .group_by(CommissionStoreModel.status)
+                    .group_by(store_alias.c.manage_region)
             )
-            status_count_result = await db.execute(status_count_query)
-            status_counts = status_count_result.fetchall()
 
-            # 转换为字典格式
-            status_count_dict = {row.status: row.count for row in status_counts}
-
-            field_translations = {
-                "store_code": {"en": "Store Code", "zh": "店铺代码"},
-                "store_name": {"en": "Store Name", "zh": "店铺名称"},
-                "store_type": {"en": "Store Type", "zh": "店铺类型"},
-                "staff_code": {"en": "Staff Code", "zh": "员工代码"},
-                "first_name": {"en": "Staff Name", "zh": "员工姓名"},
-                "position": {"en": "Position", "zh": "职位"},
-                "salary_coefficient": {"en": "Salary Coefficient", "zh": "薪资系数"},
-                "fiscal_period": {"en": "Fiscal Period", "zh": "计算周期"},
-                "status": {"en": "Status", "zh": "状态"},
-                "sales_value": {"en": "Sales Value", "zh": "销售额"},
-                "target_value": {"en": "Target Value", "zh": "目标值"},
-                "expected_attendance": {"en": "Expected Attendance", "zh": "应出勤"},
-                "actual_attendance": {"en": "Actual Attendance", "zh": "实际出勤"},
-                "achievement_rate": {"en": "Achievement Rate (%)", "zh": "达成率 (%)"},
-                "attendance_rate": {"en": "Attendance Rate (%)", "zh": "出勤率 (%)"},
-                "amount_individual": {"en": "Individual Amount", "zh": "个人提成"},
-                "amount_team": {"en": "Team Amount", "zh": "团队提成"},
-                "amount_incentive": {"en": "Incentive Amount", "zh": "激励金额"},
-                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整金额"}
+            region_result = await db.execute(region_achievement_query)
+            region_achievements = {
+                row.manage_region: (row.region_sales / row.region_target * 100)
+                if row.region_target and row.region_target > 0 else 0
+                for row in region_result.fetchall()
             }
 
-            return {"data": formatted_commissions, "status_counts": status_count_dict,
-                    "field_translations": field_translations}
+            # 渠道达成率
+            channel_achievement_query = (
+                select(
+                    store_alias.c.manage_channel,
+                    func.sum(TargetStoreMain.sales_value).label('channel_sales'),
+                    func.sum(TargetStoreMain.target_value).label('channel_target')
+                )
+                    .select_from(CommissionStoreModel)
+                    .join(TargetStoreMain,
+                          (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
+                          (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month))
+                    .join(store_alias,
+                          CommissionStoreModel.store_code == store_alias.c.store_code)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .group_by(store_alias.c.manage_channel)
+            )
+
+            channel_result = await db.execute(channel_achievement_query)
+            channel_achievements = {
+                row.manage_channel: (row.channel_sales / row.channel_target * 100)
+                if row.channel_target and row.channel_target > 0 else 0
+                for row in channel_result.fetchall()
+            }
+
+            # 格式化数据
+            formatted_data = []
+            for row in rows:
+                # 计算每日目标值
+                target_value = float(row.target_value) if row.target_value is not None else 0.0
+                expected_attendance = float(row.expected_attendance) if row.expected_attendance is not None else 0.0
+                daily_target = target_value / expected_attendance if expected_attendance > 0 else 0.0
+
+                # 获取区域和渠道达成率
+                region_achievement = region_achievements.get(row.manage_region, 0.0)
+                channel_achievement = channel_achievements.get(row.manage_channel, 0.0)
+
+                formatted_data.append({
+                    "staff_no": row.staff_code or '',
+                    "full_name": row.full_name or '',
+                    "position_from_wd": row.position_code or '',
+                    "position": row.position or '',
+                    "expected_attendance": expected_attendance,
+                    "monthly_target": target_value,
+                    "daily_target": round(daily_target, 2),
+                    "achievement_rate": round(float(row.achievement_rate) if row.achievement_rate is not None else 0.0,
+                                              2),
+                    "individual_commission_percent": float(
+                        row.individual_commission_percent) if row.individual_commission_percent is not None else 0.0,
+                    "amount": float(row.amount) if row.amount is not None else 0.0,
+                    "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
+                    "rule_code": row.rule_code or '',
+                    "total_days_store_work": float(
+                        row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
+                    "store_code": row.store_code or '',
+                    "fiscal_month": row.fiscal_month or '',
+                    "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
+                    "store_target_value": float(row.store_target_value) if row.store_target_value is not None else 0.0,
+                    "store_achievement_rate": round(
+                        float(row.store_achievement_rate) if row.store_achievement_rate is not None else 0.0, 2),
+                    "manage_region": row.manage_region or '',
+                    "manage_channel": row.manage_channel or '',
+                    "city": row.city or '',
+                    "city_tier": row.city_tier or '',
+                    "region_achievement_rate": round(region_achievement, 2),
+                    "channel_achievement_rate": round(channel_achievement, 2)
+                })
+
+            # 字段翻译
+            field_translations = {
+                "staff_no": {"en": "Staff No.", "zh": "员工编号"},
+                "full_name": {"en": "Supervisor/Sales Associates", "zh": "主管/销售助理"},
+                "position_from_wd": {"en": "Position (From WD)", "zh": "职位(来自WD)"},
+                "position": {"en": "Possition", "zh": "岗位"},
+                "expected_attendance": {"en": "Actual Working Days", "zh": "实际工作天数"},
+                "monthly_target": {"en": "Monthly Target", "zh": "月度目标"},
+                "daily_target": {"en": "Daily Target Sales", "zh": "每日目标销售额"},
+                "achievement_rate": {"en": "vs ind target (列名更新：Individual Achievement%)", "zh": "个人达成率"},
+                "individual_commission_percent": {"en": "Individual Commission %", "zh": "个人佣金比例"},
+                "amount": {"en": "Individual Commission Pool Commission", "zh": "个人佣金池佣金"},
+                "actual_attendance": {"en": "Actual Working Days.1", "zh": "实际工作天数.1"},
+                "rule_code": {"en": "Individual Type", "zh": "规则类型"},
+                "total_days_store_work": {"en": "Total Days of Store's Acutal Working Days", "zh": "折算团队奖金的全店总天数"},
+                "store_code": {"en": "Store Code", "zh": "店铺代码"},
+                "fiscal_month": {"en": "Month", "zh": "月份"},
+                "store_sales_value": {"en": "Store Sales", "zh": "店铺销售额"},
+                "store_achievement_rate": {"en": "Store Achieved Rate", "zh": "店铺达成率"},
+                "manage_region": {"en": "Region", "zh": "区域"},
+                "region_achievement_rate": {"en": "Regional Achieved Rate", "zh": "区域达成率"},
+                "manage_channel": {"en": "Channel", "zh": "渠道"},
+                "channel_achievement_rate": {"en": "Channel Achieved Rate", "zh": "渠道达成率"},
+                "city": {"en": "City", "zh": "城市"},
+                "city_tier": {"en": "City Tier", "zh": "城市等级"}
+            }
+
+            return {
+                "data": formatted_data,
+                "field_translations": field_translations
+            }
 
         except Exception as e:
-            # 记录异常信息（在实际应用中可以使用日志记录器）
-            print(f"Error in get_rpt_commission_by_store: {str(e)}")
-            # 可以根据需要重新抛出异常或返回默认值
+            app_logger.error(f"Error in get_rpt_commission_by_store: {str(e)}")
             raise e
 
     @staticmethod
-    async def get_rpt_sales_by_achievement(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_sales_by_achievement(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
         try:
             # 构建权限查询
             store_permission_query = build_store_permission_query(role_code)
@@ -361,7 +317,7 @@ class CommissionRPTService:
             raise e
 
     @staticmethod
-    async def get_rpt_commission_payout(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_commission_payout(db: AsyncSession, fiscal_month: str, key_word: str, status: str,role_code: str):
         try:
             # 构建权限查询
             store_permission_query = build_store_permission_query(role_code)

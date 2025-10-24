@@ -20,6 +20,7 @@ REPORT_TYPES = ["target_by_store", "target_percentage_version", "target_bi_versi
 @router.get("/data")
 async def get_report_data(
         financial_month: str = Query(..., description="财月，格式如：2025-9"),
+        status: str = Query('approved'),
         report_type: str = Query("target_by_store", description=f"报表类型: {', '.join(REPORT_TYPES)}"),
         keyword: str = Query(None, description="门店代码或名称模糊查询"),
         format: str = Query("json", description="返回格式: json 或 excel"),
@@ -41,40 +42,40 @@ async def get_report_data(
     try:
         if report_type == "target_by_store":
             report_data["target_by_store"] = await TargetRPTService.get_rpt_target_by_store(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "target_percentage_version":
             report_data["target_percentage_version"] = await TargetRPTService.get_rpt_target_by_store(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "target_bi_version":
             report_data["target_bi_version"] = await TargetRPTService.get_rpt_target_bi_version(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "target_date_horizontal_version":
             report_data[
                 "target_date_horizontal_version"] = await TargetRPTService.get_rpt_target_date_horizontal_version(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "target_by_staff":
             report_data["target_by_staff"] = await TargetRPTService.get_rpt_target_by_staff(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "commission":
             report_data["commission"] = await CommissionRPTService.get_rpt_commission_by_store(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "sales_by_achievement":
             report_data["sales_by_achievement"] = await CommissionRPTService.get_rpt_sales_by_achievement(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "commission_payout":
             report_data["commission_payout"] = await CommissionRPTService.get_rpt_commission_payout(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         elif report_type == "budget":
             report_data["budget"] = await BudgetService.get_budget_data(
-                session, financial_month, keyword, role_code)
+                session, financial_month, keyword, status, role_code)
 
         # 添加元数据
         report_data.update({
