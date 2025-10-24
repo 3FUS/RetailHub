@@ -86,6 +86,8 @@ class CommissionRPTService:
                         StaffModel.last_name.contains(key_word)
                     )
                 )
+            if status != 'All':
+                query = query.where(CommissionStoreModel.status == status)
 
             result = await db.execute(query)
             rows = result.fetchall()
@@ -265,6 +267,9 @@ class CommissionRPTService:
                     )
                 )
 
+            if status != 'All':
+                query = query.where(CommissionStoreModel.status == status)
+
             result = await db.execute(query)
             rows = result.fetchall()
 
@@ -380,6 +385,8 @@ class CommissionRPTService:
                         StaffModel.last_name.contains(key_word)
                     )
                 )
+            if status != 'All':
+                query = query.where(CommissionStoreModel.status == status)
 
             result = await db.execute(query)
             rows = result.fetchall()
