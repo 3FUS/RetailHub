@@ -108,7 +108,7 @@ def _export_to_excel(report_data: dict, report_type: str):
 
         # 通用的数据处理函数，支持使用 field_translations 设置表头
         def _write_data_to_sheet(data, sheet_name):
-            sheet_name = 'Sheet1'
+
             if isinstance(data, dict) and "data" in data:
                 details = data.get("data", [])
                 if details:
@@ -151,19 +151,22 @@ def _export_to_excel(report_data: dict, report_type: str):
         # 根据报表类型导出不同sheet
         if report_type in ["target_by_store", "target_percentage_version",
                            "target_bi_version", "target_date_horizontal_version"] and report_type in report_data:
-            _write_data_to_sheet(report_data[report_type], "Target")
+            _write_data_to_sheet(report_data[report_type], "Sheet1")
 
         elif report_type == "target_by_staff" and "target_by_staff" in report_data:
-            _write_data_to_sheet(report_data["target_by_staff"], "StaffTarget")
+            _write_data_to_sheet(report_data["target_by_staff"], "Sheet1")
 
         elif report_type == "commission_payout" and "commission_payout" in report_data:
-            _write_data_to_sheet(report_data["commission_payout"], "Commission_Payout")
+            _write_data_to_sheet(report_data["commission_payout"], "Sheet1")
+
+        elif report_type == "commission" and "commission" in report_data:
+            _write_data_to_sheet(report_data["commission"], "Sheet1")
 
         elif report_type == "sales_by_achievement" and "sales_by_achievement" in report_data:
-            _write_data_to_sheet(report_data["sales_by_achievement"], "Sales_Achievement")
+            _write_data_to_sheet(report_data["sales_by_achievement"], "Sheet1")
 
         elif report_type == "budget" and "budget" in report_data:
-            _write_data_to_sheet(report_data["budget"], "Budget")
+            _write_data_to_sheet(report_data["budget"], "Upload_Budget")
 
     output.seek(0)
 

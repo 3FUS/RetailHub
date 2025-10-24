@@ -55,6 +55,29 @@ class CommissionStaffModel(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+class CommissionStaffDetailModel(Base):
+    __tablename__ = "commissions_staff_detail"
+    fiscal_month = Column(String(50), primary_key=True)
+    store_code = Column(String(30), primary_key=True)
+    staff_code = Column(String(30), primary_key=True)
+    store_target_value = Column(Float)
+    store_sales_value = Column(Float)
+    store_achievement_rate = Column(Float)
+    staff_target_value = Column(Float)
+    staff_sales_value = Column(Float)
+    staff_achievement_rate = Column(Float)
+    expected_attendance = Column(Float, nullable=False)  # 应出勤天数
+    actual_attendance = Column(Float)  # 实际出勤天数
+    position = Column(String(100))  # 职位
+    salary_coefficient = Column(Float)  # 目标系数
+    amount = Column(Float, nullable=False)
+    rule_code = Column(String(30), primary_key=True)
+    rule_detail_code = Column(String(60), primary_key=True)
+    total_days_store_work = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    creator_code = Column(String(30))
+
+
 class CommissionRuleModel(Base):
     __tablename__ = "commissions_rule"
 

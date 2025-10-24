@@ -112,7 +112,8 @@ class BudgetService:
                 row_data = {"date": date_str}
                 table_data.append(row_data)
                 for store_code in sorted_store_codes:
-                    row_data[store_code] = store_values.get(store_code, 0.0)
+                    formatted_store_code = f"Store{store_code}"
+                    row_data[formatted_store_code] = store_values.get(store_code, 0.0)
 
                 if date_idx > 0 and date_idx % 1000 == 0:
                     app_logger.debug(f"Built {date_idx}/{len(date_list)} table rows")
