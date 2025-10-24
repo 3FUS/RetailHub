@@ -9,7 +9,7 @@ from collections import defaultdict
 from app.models.dimension import DimensionDayWeek
 from app.models.target import TargetStoreDaily, TargetStoreWeek, TargetStoreMain
 from app.utils.permissions import build_store_permission_query
-
+from app.utils.logger import app_logger
 
 class BudgetService:
     @staticmethod
@@ -24,83 +24,110 @@ class BudgetService:
         Returns:
             dict: 包含预算数据和表头信息的字典
         """
-        # 执行SQL查询逻辑
-        store_permission_query = build_store_permission_query(role_code)
-        store_alias = store_permission_query.subquery()
+        try:
+            app_logger.info(f"Starting get_budget_data for fiscal_month: {fiscal_month}, "
+                            f"key_word: {key_word}, status: {status}, role_code: {role_code}")
 
-        # 修改后的 get_budget_data 方法部分代码
-        query = select(
-            TargetStoreDaily.target_date.label('date'),
-            BudgetModel.store_code,
-            TargetStoreDaily.budget_value.label('budget_date_value')
-        ).select_from(
-            BudgetModel.__table__.join(
-                TargetStoreDaily.__table__,
-                (BudgetModel.store_code == TargetStoreDaily.store_code) &
-                (BudgetModel.fiscal_month == TargetStoreDaily.fiscal_month)
-            ).join(
-                TargetStoreMain.__table__,
-                (BudgetModel.store_code == TargetStoreMain.store_code) &
-                (BudgetModel.fiscal_month == TargetStoreMain.fiscal_month)
-            ).join(
-                store_alias,
-                BudgetModel.store_code == store_alias.c.store_code
-            )
-        ).where(
-            BudgetModel.fiscal_month == fiscal_month
-        ).order_by(TargetStoreDaily.target_date, BudgetModel.store_code)
+            # 执行SQL查询逻辑
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
 
-        # 如果有关键字过滤条件
-        if key_word:
-            query = query.where(
-                BudgetModel.store_code.contains(key_word)
-            )
+            # 修改后的 get_budget_data 方法部分代码
+            query = select(
+                TargetStoreDaily.target_date.label('date'),
+                BudgetModel.store_code,
+                TargetStoreDaily.budget_value.label('budget_date_value')
+            ).select_from(
+                BudgetModel.__table__.join(
+                    TargetStoreDaily.__table__,
+                    (BudgetModel.store_code == TargetStoreDaily.store_code) &
+                    (BudgetModel.fiscal_month == TargetStoreDaily.fiscal_month)
+                ).join(
+                    TargetStoreMain.__table__,
+                    (BudgetModel.store_code == TargetStoreMain.store_code) &
+                    (BudgetModel.fiscal_month == TargetStoreMain.fiscal_month)
+                ).join(
+                    store_alias,
+                    BudgetModel.store_code == store_alias.c.store_code
+                )
+            ).where(
+                BudgetModel.fiscal_month == fiscal_month
+            ).order_by(TargetStoreDaily.target_date, BudgetModel.store_code)
 
-        if status:
-            query = query.where(
-                TargetStoreMain.store_status == status
-            )
+            # 如果有关键字过滤条件
+            if key_word:
+                app_logger.debug(f"Applying keyword filter: {key_word}")
+                query = query.where(
+                    BudgetModel.store_code.contains(key_word)
+                )
 
-        result = await db.execute(query)
-        budget_data = result.all()
+            if status:
+                app_logger.debug(f"Applying status filter: {status}")
+                query = query.where(
+                    TargetStoreMain.store_status == status
+                )
 
-        if not budget_data:
+            app_logger.debug("Executing budget data query")
+            result = await db.execute(query)
+            budget_data = result.all()
+            app_logger.info(f"Fetched {len(budget_data)} rows from budget data query")
+
+            if not budget_data:
+                app_logger.warning(f"No budget data found for fiscal_month: {fiscal_month}")
+                return {
+                    "data": [],
+                    "columns": ["date"],
+                    "store_codes": []
+                }
+
+            # 按日期分组数据并构建横向表结构
+            app_logger.debug("Grouping data by date")
+            date_groups = defaultdict(dict)
+            store_codes = set()
+
+            for idx, row in enumerate(budget_data):
+                date_str = row.date.strftime('%Y-%m-%d') if row.date else None
+                store_code = row.store_code
+                budget_value = float(row.budget_date_value) if row.budget_date_value is not None else 0.0
+
+                if date_str:
+                    date_groups[date_str][store_code] = budget_value
+                    store_codes.add(store_code)
+
+                if idx > 0 and idx % 1000 == 0:
+                    app_logger.debug(f"Processed {idx}/{len(budget_data)} rows")
+
+            # 构建结果数据
+            sorted_store_codes = sorted(list(store_codes))
+            columns = ["date"] + sorted_store_codes
+            app_logger.debug(f"Found {len(sorted_store_codes)} unique store codes")
+
+            # 构建表格数据
+            app_logger.debug("Building table data")
+            table_data = []
+            date_list = sorted(list(date_groups.keys()))
+
+            for date_idx, date_str in enumerate(date_list):
+                store_values = date_groups[date_str]
+                row_data = {"date": date_str}
+                table_data.append(row_data)
+                for store_code in sorted_store_codes:
+                    row_data[store_code] = store_values.get(store_code, 0.0)
+
+                if date_idx > 0 and date_idx % 1000 == 0:
+                    app_logger.debug(f"Built {date_idx}/{len(date_list)} table rows")
+
+            app_logger.info(f"Returning {len(table_data)} rows of formatted data with {len(columns)} columns")
+
             return {
-                "data": [],
-                "columns": ["date"],
-                "store_codes": []
+                "data": table_data,
+                "columns": columns,
+                "store_codes": sorted_store_codes
             }
 
-        # 按日期分组数据并构建横向表结构
-        date_groups = defaultdict(dict)
-        store_codes = set()
-
-        for row in budget_data:
-            date_str = row.date.strftime('%Y-%m-%d') if row.date else None
-            store_code = row.store_code
-            budget_value = float(row.budget_date_value) if row.budget_date_value is not None else 0.0
-
-            if date_str:
-                date_groups[date_str][store_code] = budget_value
-                store_codes.add(store_code)
-
-        # 构建结果数据
-        sorted_store_codes = sorted(list(store_codes))
-        columns = ["date"] + sorted_store_codes
-
-        # 构建表格数据
-        table_data = []
-        for date_str, store_values in sorted(date_groups.items()):
-            row_data = {"date": date_str}
-            table_data.append(row_data)
-            for store_code in sorted_store_codes:
-                row_data[store_code] = store_values.get(store_code, 0.0)
-
-        return {
-            "data": table_data,
-            "columns": columns,
-            "store_codes": sorted_store_codes
-        }
+        except Exception as e:
+            app_logger.error(f"Error in get_budget_data: {str(e)}", exc_info=True)
+            raise e
 
     @staticmethod
     async def batch_update_budget_value(db: AsyncSession, budget_updates: list):

@@ -23,6 +23,9 @@ class CommissionRPTService:
     async def get_rpt_commission_by_store(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
                                           role_code: str):
         try:
+            app_logger.info(f"Starting get_rpt_commission_by_store for fiscal_month: {fiscal_month}, "
+                            f"key_word: {key_word}, status: {status}, role_code: {role_code}")
+
             # 构建查询，包含所有需要的字段
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
@@ -77,6 +80,7 @@ class CommissionRPTService:
 
             # 如果提供了关键词，则添加过滤条件
             if key_word:
+                app_logger.debug(f"Applying keyword filter: {key_word}")
                 query = query.where(
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
@@ -87,10 +91,13 @@ class CommissionRPTService:
                     )
                 )
             if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
                 query = query.where(CommissionStoreModel.status == status)
 
+            app_logger.debug("Executing main query")
             result = await db.execute(query)
             rows = result.fetchall()
+            app_logger.info(f"Fetched {len(rows)} rows from main query")
 
             # 获取区域、渠道和城市层级的聚合数据
             # 区域达成率
@@ -110,12 +117,14 @@ class CommissionRPTService:
                     .group_by(store_alias.c.manage_region)
             )
 
+            app_logger.debug("Executing region achievement query")
             region_result = await db.execute(region_achievement_query)
             region_achievements = {
                 row.manage_region: (row.region_sales / row.region_target * 100)
                 if row.region_target and row.region_target > 0 else 0
                 for row in region_result.fetchall()
             }
+            app_logger.debug(f"Retrieved {len(region_achievements)} region achievements")
 
             # 渠道达成率
             channel_achievement_query = (
@@ -134,16 +143,19 @@ class CommissionRPTService:
                     .group_by(store_alias.c.manage_channel)
             )
 
+            app_logger.debug("Executing channel achievement query")
             channel_result = await db.execute(channel_achievement_query)
             channel_achievements = {
                 row.manage_channel: (row.channel_sales / row.channel_target * 100)
                 if row.channel_target and row.channel_target > 0 else 0
                 for row in channel_result.fetchall()
             }
+            app_logger.debug(f"Retrieved {len(channel_achievements)} channel achievements")
 
             # 格式化数据
             formatted_data = []
-            for row in rows:
+            app_logger.debug("Formatting data")
+            for idx, row in enumerate(rows):
                 # 计算每日目标值
                 target_value = float(row.target_value) if row.target_value is not None else 0.0
                 expected_attendance = float(row.expected_attendance) if row.expected_attendance is not None else 0.0
@@ -184,6 +196,11 @@ class CommissionRPTService:
                     "channel_achievement_rate": round(channel_achievement, 2)
                 })
 
+                if idx > 0 and idx % 1000 == 0:
+                    app_logger.debug(f"Formatted {idx}/{len(rows)} rows")
+
+            app_logger.info(f"Returning {len(formatted_data)} formatted records")
+
             # 字段翻译
             field_translations = {
                 "staff_no": {"en": "Staff No.", "zh": "员工编号"},
@@ -217,12 +234,16 @@ class CommissionRPTService:
             }
 
         except Exception as e:
-            app_logger.error(f"Error in get_rpt_commission_by_store: {str(e)}")
+            app_logger.error(f"Error in get_rpt_commission_by_store: {str(e)}", exc_info=True)
             raise e
 
     @staticmethod
-    async def get_rpt_sales_by_achievement(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
+    async def get_rpt_sales_by_achievement(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
+                                           role_code: str):
         try:
+            app_logger.info(f"Starting get_rpt_sales_by_achievement for fiscal_month: {fiscal_month}, "
+                            f"key_word: {key_word}, status: {status}, role_code: {role_code}")
+
             # 构建权限查询
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
@@ -257,6 +278,7 @@ class CommissionRPTService:
 
             # 如果提供了关键词，则添加过滤条件
             if key_word:
+                app_logger.debug(f"Applying keyword filter: {key_word}")
                 query = query.where(
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
@@ -268,14 +290,18 @@ class CommissionRPTService:
                 )
 
             if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
                 query = query.where(CommissionStoreModel.status == status)
 
+            app_logger.debug("Executing main query")
             result = await db.execute(query)
             rows = result.fetchall()
+            app_logger.info(f"Fetched {len(rows)} rows from main query")
 
             # 格式化数据
             formatted_data = []
-            for row in rows:
+            app_logger.debug("Formatting data")
+            for idx, row in enumerate(rows):
                 # 计算达成率，避免除零错误
                 target_value = float(row.target_value) if row.target_value is not None else 0.0
                 sales_value = float(row.sales_value) if row.sales_value is not None else 0.0
@@ -296,6 +322,11 @@ class CommissionRPTService:
                     "position_code": row.position_code or '',
                     "position": row.position or ''
                 })
+
+                if idx > 0 and idx % 1000 == 0:
+                    app_logger.debug(f"Formatted {idx}/{len(rows)} rows")
+
+            app_logger.info(f"Returning {len(formatted_data)} formatted records")
 
             # 字段翻译
             field_translations = {
@@ -318,12 +349,16 @@ class CommissionRPTService:
             }
 
         except Exception as e:
-            app_logger.error(f"Error in get_rpt_sales_by_achievement: {str(e)}")
+            app_logger.error(f"Error in get_rpt_sales_by_achievement: {str(e)}", exc_info=True)
             raise e
 
     @staticmethod
-    async def get_rpt_commission_payout(db: AsyncSession, fiscal_month: str, key_word: str, status: str,role_code: str):
+    async def get_rpt_commission_payout(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
+                                        role_code: str):
         try:
+            app_logger.info(f"Starting get_rpt_commission_payout for fiscal_month: {fiscal_month}, "
+                            f"key_word: {key_word}, status: {status}, role_code: {role_code}")
+
             # 构建权限查询
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
@@ -376,6 +411,7 @@ class CommissionRPTService:
 
             # 如果提供了关键词，则添加过滤条件
             if key_word:
+                app_logger.debug(f"Applying keyword filter: {key_word}")
                 query = query.where(
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
@@ -386,14 +422,18 @@ class CommissionRPTService:
                     )
                 )
             if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
                 query = query.where(CommissionStoreModel.status == status)
 
+            app_logger.debug("Executing main query")
             result = await db.execute(query)
             rows = result.fetchall()
+            app_logger.info(f"Fetched {len(rows)} rows from main query")
 
             # 格式化数据
             formatted_data = []
-            for row in rows:
+            app_logger.debug("Formatting data")
+            for idx, row in enumerate(rows):
                 commission_only = float(row.commission_only) if row.commission_only is not None else 0.0
                 incentive = float(row.incentive) if row.incentive is not None else 0.0
                 total_commission = float(row.total_commission) if row.total_commission is not None else 0.0
@@ -408,6 +448,11 @@ class CommissionRPTService:
                     "incentive": incentive,
                     "total_commission": total_commission
                 })
+
+                if idx > 0 and idx % 1000 == 0:
+                    app_logger.debug(f"Formatted {idx}/{len(rows)} rows")
+
+            app_logger.info(f"Returning {len(formatted_data)} formatted records")
 
             # 字段翻译
             field_translations = {
@@ -427,7 +472,7 @@ class CommissionRPTService:
             }
 
         except Exception as e:
-            app_logger.error(f"Error in get_rpt_commission_payout: {str(e)}")
+            app_logger.error(f"Error in get_rpt_commission_payout: {str(e)}", exc_info=True)
             raise e
 
 
