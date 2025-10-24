@@ -52,7 +52,7 @@ class CommissionRPTService:
                     store_alias.c.manage_region.label('manage_region'),
                     store_alias.c.manage_channel.label('manage_channel'),
                     store_alias.c.City.label('city'),
-                    store_alias.c.city_tier.label('city_tier')
+                    store_alias.c.City_Tier.label('city_tier')
                 )
                     .select_from(CommissionStoreModel)
                     .join(CommissionStaffModel,
