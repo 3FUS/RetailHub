@@ -7,13 +7,13 @@ from app.models.budget import BudgetModel
 from collections import defaultdict
 
 from app.models.dimension import DimensionDayWeek
-from app.models.target import TargetStoreDaily, TargetStoreWeek
+from app.models.target import TargetStoreDaily, TargetStoreWeek, TargetStoreMain
 from app.utils.permissions import build_store_permission_query
 
 
 class BudgetService:
     @staticmethod
-    async def get_budget_data(db: AsyncSession, fiscal_month: str, key_word:str, role_code: str) -> dict:
+    async def get_budget_data(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str) -> dict:
         """
         获取预算数据并按门店横向展示
 
@@ -32,18 +32,16 @@ class BudgetService:
         query = select(
             TargetStoreDaily.target_date.label('date'),
             BudgetModel.store_code,
-            (BudgetModel.budget_value * (TargetStoreWeek.percentage / 100) * (
-                    TargetStoreDaily.percentage / 100)).label('budget_date_value')
+            TargetStoreDaily.budget_value.label('budget_date_value')
         ).select_from(
             BudgetModel.__table__.join(
                 TargetStoreDaily.__table__,
                 (BudgetModel.store_code == TargetStoreDaily.store_code) &
                 (BudgetModel.fiscal_month == TargetStoreDaily.fiscal_month)
             ).join(
-                TargetStoreWeek.__table__,
-                (TargetStoreDaily.store_code == TargetStoreWeek.store_code) &
-                (TargetStoreDaily.fiscal_month == TargetStoreWeek.fiscal_month) &
-                (TargetStoreDaily.week_number == TargetStoreWeek.week_number)
+                TargetStoreMain.__table__,
+                (BudgetModel.store_code == TargetStoreMain.store_code) &
+                (BudgetModel.fiscal_month == TargetStoreMain.fiscal_month)
             ).join(
                 store_alias,
                 BudgetModel.store_code == store_alias.c.store_code
@@ -56,6 +54,11 @@ class BudgetService:
         if key_word:
             query = query.where(
                 BudgetModel.store_code.contains(key_word)
+            )
+
+        if status:
+            query = query.where(
+                TargetStoreMain.store_status == status
             )
 
         result = await db.execute(query)
@@ -98,7 +101,6 @@ class BudgetService:
             "columns": columns,
             "store_codes": sorted_store_codes
         }
-
 
     @staticmethod
     async def batch_update_budget_value(db: AsyncSession, budget_updates: list):

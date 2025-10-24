@@ -51,7 +51,7 @@ class CommissionRPTService:
                     (TargetStoreMain.sales_value / TargetStoreMain.target_value * 100).label('store_achievement_rate'),
                     store_alias.c.manage_region.label('manage_region'),
                     store_alias.c.manage_channel.label('manage_channel'),
-                    store_alias.c.city.label('city'),
+                    store_alias.c.City.label('city'),
                     store_alias.c.city_tier.label('city_tier')
                 )
                     .select_from(CommissionStoreModel)
