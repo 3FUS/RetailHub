@@ -8,6 +8,8 @@ from jose import JWTError, jwt
 from sqlalchemy.orm import Session
 
 from app.services.access_service import verify_password
+
+from app.utils.logger import app_logger
 # from app.database import get_sqlserver_db
 
 # OAuth2配置
@@ -20,7 +22,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="retail_hub_api/token")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-
     to_encode = data.copy()
     if expires_delta:
         expire = datetime.utcnow() + expires_delta
@@ -47,14 +48,15 @@ async def get_current_user(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_code: str = payload.get("sub")
-
+        app_logger.info(f"get_current_user: {user_code}")
         if user_code is None:
             raise credentials_exception
 
     except JWTError:
         raise credentials_exception
 
-    return {"user_code": user_code}
+    return {"user_code": user_code, "approve": payload.get("approve", False)}
+
 
 async def authenticate_user(
         session: Session,
@@ -64,6 +66,7 @@ async def authenticate_user(
     """
     验证用户凭据
     """
-    if await verify_password(session, user_code, password):
-        return {"user_code": user_code}
+    data = await verify_password(session, user_code, password)
+    if data.get("verify_result", False):
+        return {"user_code": user_code, "approve": data.get("approve", False)}
     return None

@@ -21,7 +21,7 @@ from app.utils.logger import app_logger
 class TargetRPTService:
 
     @staticmethod
-    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
+    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str):
         """
         获取门店目标报表数据
         """
@@ -70,8 +70,7 @@ class TargetRPTService:
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month,
-                TargetStoreMain.store_status == status
+                TargetStoreMain.fiscal_month == fiscal_month
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
@@ -81,6 +80,10 @@ class TargetRPTService:
                     store_alias.c.store_name.contains(key_word)
                 )
                 app_logger.debug(f"Applied keyword filter: {key_word}")
+
+            if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
+                query = query.where(TargetStoreMain.store_status == status)
 
             app_logger.debug(f"Executing query for fiscal_month={fiscal_month}")
             result = await db.execute(query)
@@ -136,7 +139,8 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_percentage_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,role_code: str):
+    async def get_rpt_target_percentage_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
+                                                role_code: str):
 
         try:
             store_permission_query = build_store_permission_query(role_code)
@@ -228,7 +232,8 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str,status: str, role_code: str):
+    async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
+                                        role_code: str):
         """
         获取门店目标报表数据 - BI版本
         格式: Date (Number)	Fiscal Week (ID)	Fiscal Month (ID)	Location Code	Location ID	Location Short Name	Commission Target Local
@@ -275,8 +280,7 @@ class TargetRPTService:
                     DimensionDayWeek.actual_date == TargetStoreDaily.target_date
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month,
-                TargetStoreMain.store_status == status
+                TargetStoreMain.fiscal_month == fiscal_month
             ).order_by(TargetStoreMain.store_code, TargetStoreDaily.target_date)
 
             # 如果有关键字过滤条件
@@ -285,6 +289,10 @@ class TargetRPTService:
                     TargetStoreMain.store_code.contains(key_word) |
                     store_alias.c.store_name.contains(key_word)
                 )
+
+            if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
+                query = query.where(TargetStoreMain.store_status == status)
 
             result = await db.execute(query)
             target_data = result.all()
@@ -327,7 +335,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str,status: str,
+    async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
                                                      role_code: str):
         """
         获取门店目标报表数据 - 日期横向版本
@@ -434,7 +442,7 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str, role_code: str):
+    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str):
         """
         获取员工目标报表数据
 
@@ -476,6 +484,10 @@ class TargetRPTService:
                     TargetStoreMain.store_code.contains(key_word) |
                     store_alias.c.store_name.contains(key_word)
                 )
+
+            if status != 'All':
+                app_logger.debug(f"Applying status filter: {status}")
+                query = query.where(TargetStoreMain.staff_status == status)
 
             result = await db.execute(query)
             target_data = result.all()
@@ -647,7 +659,8 @@ class TargetStoreService:
         return target_store
 
     @staticmethod
-    async def get_all_target_stores_by_key(role_code: str, fiscal_month: str, key_word: str, db: AsyncSession):
+    async def get_all_target_stores_by_key(role_code: str, fiscal_month: str, key_word: str, db: AsyncSession,
+                                           has_approved: bool = False):
 
         store_permission_query = build_store_permission_query(role_code)
         store_alias = store_permission_query.subquery()
@@ -695,6 +708,8 @@ class TargetStoreService:
         if min_date and min_date.date() > datetime.now().date():
             should_values = False
             app_logger.debug("Minimum date is in the future, hiding target values")
+        if has_approved:
+            should_values = True
 
         formatted_data = [
             {
@@ -920,7 +935,7 @@ class TargetStoreWeekService:
 
 class TargetStoreDailyService:
     @staticmethod
-    async def get_target_store_daily(db: AsyncSession, store_code: str, fiscal_month: str):
+    async def get_target_store_daily(db: AsyncSession, store_code: str, fiscal_month: str, has_approved: bool = False):
 
         result_main = await db.execute(
             select(
@@ -988,6 +1003,8 @@ class TargetStoreDailyService:
         if min_date and min_date.date() > datetime.now().date():
             should_values = False
             app_logger.debug("Minimum date is in the future, hiding target values")
+        if has_approved:
+            should_values = True
 
         data = [
             {
@@ -1217,7 +1234,8 @@ class StaffTargetCalculator:
 
 class TargetStaffService:
     @staticmethod
-    async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, module: str = "target"):
+    async def get_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, module: str = "target",
+                                   has_approved: bool = False):
         try:
             app_logger.info(f"Starting get_staff_attendance for fiscal_month={fiscal_month}, store_code={store_code}")
 
@@ -1269,6 +1287,9 @@ class TargetStaffService:
             if min_date and min_date.date() > datetime.now().date():
                 should_values = False
                 app_logger.debug("Minimum date is in the future, hiding target values")
+
+            if has_approved:
+                should_values = True
 
             app_logger.debug("Checking if staff attendance data exists")
             attendance_check_result = await db.execute(
@@ -1644,7 +1665,7 @@ class TargetStaffService:
                     created_staff_targets.append(target_staff_attendance)
 
             staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
-            app_logger.debug(f"Found {len(staffs)} Selling_1 staff members")
+            app_logger.debug(f"Found {len(staffs)}  staff members")
 
             # 获取门店目标值
             result_store = await db.execute(
@@ -1688,9 +1709,9 @@ class TargetStaffService:
             total_weight = sum(weights)
             app_logger.debug(f"Total weight: {total_weight}")
 
-            if total_weight <= 0:
-                app_logger.warning("Total weight is zero or negative, returning empty list")
-                return []
+            # if total_weight <= 0:
+            #     app_logger.warning("Total weight is zero or negative, returning empty list")
+            #     return []
 
             # 计算比例
             ratios = []

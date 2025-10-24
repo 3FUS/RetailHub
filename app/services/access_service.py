@@ -2,7 +2,7 @@ from sqlalchemy.orm import Session
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-
+from sqlalchemy import text
 from app.utils.logger import app_logger
 from app.models.dimension import SysUser
 
@@ -31,27 +31,37 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> str:
     return userid
 
 
-
-
 _password_hasher = Ssha2Hasher()
 
-async def verify_password(session: Session, user_code: str, user_password: str) -> bool:
+
+async def verify_password(session: Session, user_code: str, user_password: str):
     # 查询用户
-    result = session.query(SysUser.password).filter(SysUser.login_name == user_code).first()
+    result = session.query(SysUser.password, SysUser.id).filter(SysUser.login_name == user_code).first()
     # 如果用户不存在，返回 False
     if not result:
         app_logger.warning(f"user not found: {user_code}")
-        return False
-    # return True
-    hashed_password = result[0]
+        return {"verify_result": False, "approve": False}
 
-    hasher = Ssha2Hasher()
+    hashed_password = result[0]
+    user_id = result[1]
+    # hasher = Ssha2Hasher()
     # 复用全局 hasher 实例
     verify_result = _password_hasher.verify(hashed_password, user_password)
 
-    return verify_result
+    # return verify_result
 
-    #
-    # # 使用JAR包中的方法验证密码
-    # password_handler = get_password_handler()
-    # return password_handler.verify_password(user_password, hashed_password)
+    sql = text("""
+        SELECT menu_rel_id from sys_user_role_rel a 
+        INNER JOIN sys_role_menu_rel b on a.role_rel_id=b.sys_role_id 
+        where sys_user_id=:sys_user_id and menu_rel_id='approve'
+    """)
+
+    result = session.execute(sql, {"sys_user_id": user_id}).fetchone()
+
+    if result:
+        app_logger.info(f"User {user_code}   have 'approve' permission.")
+        approve = True
+    else:
+        approve = False
+
+    return {"verify_result": verify_result, "approve": approve}

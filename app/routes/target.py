@@ -22,7 +22,8 @@ async def get_targets(fiscal_month: str, key_word: str = None,
                       current_user: dict = Depends(get_current_user)):
     try:
         role_code = current_user['user_code']
-        data = await TargetStoreService.get_all_target_stores_by_key(role_code, fiscal_month, key_word, db)
+        approve = current_user['approve']
+        data = await TargetStoreService.get_all_target_stores_by_key(role_code, fiscal_month, key_word, db,approve)
         return {"code": 200, "data": data['data'],
                 "field_translations": data['field_translations'],
                 "MonthEnd": data['MonthEnd'], "fiscal_month": fiscal_month}
@@ -104,7 +105,9 @@ async def create_daily_target(TargetStoreDaily: TargetStoreDailyCreate, db: Asyn
 async def get_daily_target(store_code: str, fiscal_month: str, db: AsyncSession = Depends(get_db),
                            current_user: dict = Depends(get_current_user)):
     try:
-        target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month)
+        app_logger.info(current_user)
+        approve = current_user['approve']
+        target_data = await TargetStoreDailyService.get_target_store_daily(db, store_code, fiscal_month,approve)
         return {"code": 200, "data": target_data['data'], "header_info": target_data['header_info'],
                 "MonthEnd": target_data['MonthEnd']}
     except SQLAlchemyError as e:
@@ -149,7 +152,8 @@ async def get_staff_attendance_details(fiscal_month: str, store_code: str, db: A
                                        module: str = "target",
                                        current_user: dict = Depends(get_current_user)):
     try:
-        data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code, module)
+        approve = current_user['approve']
+        data = await TargetStaffService.get_staff_attendance(db, fiscal_month, store_code, module,approve)
         return {"code": 200, "data": data['data'], "header_info": data['header_info'], "MonthEnd": data['MonthEnd']}
     except SQLAlchemyError as e:
         raise HTTPException(

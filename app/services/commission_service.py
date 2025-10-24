@@ -67,7 +67,10 @@ class CommissionRPTService:
                           CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
                     .join(StaffAttendanceModel,
                           (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month) &
-                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code))
+                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code)
+                          &
+                          (CommissionStaffModel.staff_code == StaffAttendanceModel.staff_code)
+                          )
                     .join(TargetStoreMain,
                           (TargetStoreMain.store_code == CommissionStoreModel.store_code) &
                           (TargetStoreMain.fiscal_month == CommissionStoreModel.fiscal_month))
@@ -158,6 +161,7 @@ class CommissionRPTService:
             for idx, row in enumerate(rows):
                 # 计算每日目标值
                 target_value = float(row.target_value) if row.target_value is not None else 0.0
+                Sales = float(row.sales_value) if row.sales_value is not None else 0.0
                 expected_attendance = float(row.expected_attendance) if row.expected_attendance is not None else 0.0
                 daily_target = target_value / expected_attendance if expected_attendance > 0 else 0.0
 
@@ -172,28 +176,31 @@ class CommissionRPTService:
                     "position": row.position or '',
                     "expected_attendance": expected_attendance,
                     "monthly_target": target_value,
+                    "Sales": Sales,
                     "daily_target": round(daily_target, 2),
-                    "achievement_rate": round(float(row.achievement_rate) if row.achievement_rate is not None else 0.0,
-                                              2),
+                    "achievement_rate": f"{round(float(row.achievement_rate) if row.achievement_rate is not None else 0.0, 2)}%",
                     "individual_commission_percent": float(
                         row.individual_commission_percent) if row.individual_commission_percent is not None else 0.0,
                     "amount": float(row.amount) if row.amount is not None else 0.0,
                     "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
+
+                    "fiscal_month": row.fiscal_month or '',
+
                     "rule_code": row.rule_code or '',
                     "total_days_store_work": float(
                         row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
+
                     "store_code": row.store_code or '',
-                    "fiscal_month": row.fiscal_month or '',
                     "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
                     "store_target_value": float(row.store_target_value) if row.store_target_value is not None else 0.0,
-                    "store_achievement_rate": round(
-                        float(row.store_achievement_rate) if row.store_achievement_rate is not None else 0.0, 2),
+                    "store_achievement_rate": f"{round(float(row.store_achievement_rate) if row.store_achievement_rate is not None else 0.0, 2)}%"
+                    ,
                     "manage_region": row.manage_region or '',
+                    "region_achievement_rate": f"{round(region_achievement, 2)}%",
                     "manage_channel": row.manage_channel or '',
+                    "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
                     "city": row.city or '',
-                    "city_tier": row.city_tier or '',
-                    "region_achievement_rate": round(region_achievement, 2),
-                    "channel_achievement_rate": round(channel_achievement, 2)
+                    "city_tier": row.city_tier or ''
                 })
 
                 if idx > 0 and idx % 1000 == 0:
@@ -209,8 +216,9 @@ class CommissionRPTService:
                 "position": {"en": "Possition", "zh": "岗位"},
                 "expected_attendance": {"en": "Actual Working Days", "zh": "实际工作天数"},
                 "monthly_target": {"en": "Monthly Target", "zh": "月度目标"},
+                "Sales": {"en": "Sales", "zh": "销售额"},
                 "daily_target": {"en": "Daily Target Sales", "zh": "每日目标销售额"},
-                "achievement_rate": {"en": "vs ind target (列名更新：Individual Achievement%)", "zh": "个人达成率"},
+                "achievement_rate": {"en": "Individual Achievement%", "zh": "个人达成率"},
                 "individual_commission_percent": {"en": "Individual Commission %", "zh": "个人佣金比例"},
                 "amount": {"en": "Individual Commission Pool Commission", "zh": "个人佣金池佣金"},
                 "actual_attendance": {"en": "Actual Working Days.1", "zh": "实际工作天数.1"},
@@ -318,7 +326,7 @@ class CommissionRPTService:
                     "full_name": row.full_name or '',
                     "target_value": target_value,
                     "sales_value": sales_value,
-                    "achievement_rate": round(achievement_rate, 2),
+                    "achievement_rate": f"{round(achievement_rate, 2)}%",
                     "position_code": row.position_code or '',
                     "position": row.position or ''
                 })
@@ -439,11 +447,11 @@ class CommissionRPTService:
                 total_commission = float(row.total_commission) if row.total_commission is not None else 0.0
 
                 formatted_data.append({
-                    "store_name": row.store_name or '',
-                    "store_code": row.store_code or '',
-                    "staff_code": row.staff_code or '',
-                    "full_name": row.full_name or '',
-                    "position_code": row.position_code or '',
+                    "store_name": row.store_name if row.store_name is not None else '',
+                    "store_code": row.store_code if row.store_code is not None else '',
+                    "staff_code": row.staff_code if row.staff_code is not None else '',
+                    "full_name": row.full_name if row.full_name is not None else '',
+                    "position_code": row.position_code if row.position_code is not None else '',
                     "commission_only": commission_only,
                     "incentive": incentive,
                     "total_commission": total_commission
