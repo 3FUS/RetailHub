@@ -180,7 +180,7 @@ class CommissionRPTService:
                 'amount_adjustment': 0.0,
                 'actual_attendance': 0.0,
                 'fiscal_month': '',
-                'rule_code': '',
+                # 'rule_code': '',
                 'total_days_store_work': 0.0,
                 'store_code': '',
                 'store_name': '',
@@ -215,14 +215,16 @@ class CommissionRPTService:
                         "achievement_rate": row.staff_achievement_rate,
                         "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
                         "fiscal_month": row.fiscal_month or '',
+                        "individual_rule": '',
+                        "team_rule": '',
                         # "rule_code": row.rule_code or '',
                         "total_days_store_work": float(
                             row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
                         "store_code": row.store_code or '',
                         "store_name": row.store_name or '',
                         "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
-                        "store_target_value": float(
-                            row.store_target_value) if row.store_target_value is not None else 0.0,
+                        # "store_target_value": float(
+                        #     row.store_target_value) if row.store_target_value is not None else 0.0,
                         "store_achievement_rate": row.store_achievement_rate,
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",
@@ -230,10 +232,9 @@ class CommissionRPTService:
                         "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
                         "city": row.city or '',
                         "city_tier": row.city_tier or '',
-                        "commission_only":0,
-                        "total_commission":0,
-                        "individual_rule": '',
-                        "team_rule": '',
+                        "commission_only": 0,
+                        "total_commission": 0
+
                     })
 
                 # 根据规则类型累加金额
@@ -1616,7 +1617,7 @@ class CommissionService:
                             fiscal_month=fiscal_month,
                             staff_code=staff['staff_code'],
                             store_code=store_code,
-                            # position=staff['position'],
+                            position=staff['position'],
                             store_target_value=store_target_value,
                             store_sales_value=store_sales_value,
                             store_achievement_rate=store_achievement_rate,
