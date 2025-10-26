@@ -95,7 +95,7 @@ class TargetRPTService:
             formatted_data = []
             for row in target_data:
                 formatted_data.append({
-                    "date": row.date.strftime('%Y%m%d') if row.date else None,
+                    "date": row.date.strftime('%Y/%-m/%-d') if row.date else None,
                     "store_code": row.store_code,
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
@@ -259,9 +259,9 @@ class TargetRPTService:
                 TargetStoreMain.store_code.label('store_code'),
                 store_alias.c.Location_ID,
                 store_alias.c.store_name.label('store_name'),
-                # (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
-                #         TargetStoreDaily.percentage / 100)).label('commission_target_local')
-                TargetStoreDaily.target_value.label('commission_target_local')
+                TargetStoreDaily.target_value.label('commission_target_local'),
+                DimensionDayWeek.finance_year.label('finance_year'),
+                DimensionDayWeek.week_number.label('week_number')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
@@ -299,25 +299,48 @@ class TargetRPTService:
 
             # 构建结果数据
             formatted_data = []
+            # 月份名称映射
+            month_names = {
+                1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MAY', 6: 'JUN',
+                7: 'JUL', 8: 'AUG', 9: 'SEP', 10: 'OCT', 11: 'NOV', 12: 'DEC'
+            }
+
             for row in target_data:
+                # 解析 fiscal_month
+                fiscal_month_parts = row.fiscal_month.split('-')
+                fiscal_year = fiscal_month_parts[0]
+                fiscal_month_num = int(fiscal_month_parts[1])
+
+                # 格式化各字段
                 formatted_data.append({
+                    "Date_Format": row.date.strftime('%Y/%-m/%-d') if row.date else None,  # 2025/8/3 格式
                     "date_number": row.date.strftime('%Y%m%d') if row.date else None,
+                    "Fiscal_Week_Format": f"FY{row.finance_year} WK {row.week_number}",  # FY2025 WK 31 格式
                     "fiscal_week_id": row.fiscal_week,
-                    "fiscal_month_id": row.fiscal_month,
+                    "fiscal_month_Format": f"FY{fiscal_year} P{fiscal_month_num:02d} ({month_names.get(fiscal_month_num, '')})",
+                    # FY2025 PO8 (AUG) 格式
+                    "fiscal_month_id": f"{fiscal_year}{fiscal_month_num:02d}",  # 202508 格式
+                    "fiscal_month_num": fiscal_month_num,  # 8 格式
                     "location_code": row.store_code,
                     "location_id": row.Location_ID,
                     "location_short_name": row.store_name,
+                    "Location_Long_Name": row.store_name,
                     "commission_target_local": float(
                         row.commission_target_local) if row.commission_target_local is not None else 0.0
                 })
 
             field_translations = {
+                "Date_Format": {"en": "Date (Format)", "zh": "日期"},
                 "date_number": {"en": "Date (Number)", "zh": "日期"},
+                "Fiscal_Week_Format": {"en": "Fiscal Week (Format)", "zh": "财周"},
                 "fiscal_week_id": {"en": "Fiscal Week (ID)", "zh": "财周"},
+                "fiscal_month_Format": {"en": "Fiscal Month (Format)", "zh": "财月"},
                 "fiscal_month_id": {"en": "Fiscal Month (ID)", "zh": "财月"},
+                "fiscal_month_num": {"en": "Fiscal Month (Num)", "zh": "财月"},
                 "location_code": {"en": "Location Code", "zh": "店铺代码"},
                 "location_id": {"en": "Location ID", "zh": "店铺ID"},
                 "location_short_name": {"en": "Location Short Name", "zh": "店铺名称"},
+                "Location_Long_Name": {"en": "Location Long Name", "zh": "店铺名称"},
                 "commission_target_local": {"en": "Commission Target Local", "zh": "佣金目标"}
             }
 

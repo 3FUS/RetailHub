@@ -180,7 +180,8 @@ class CommissionRPTService:
                 'amount_adjustment': 0.0,
                 'actual_attendance': 0.0,
                 'fiscal_month': '',
-                # 'rule_code': '',
+                "individual_rule": "",
+                "team_rule": "",
                 'total_days_store_work': 0.0,
                 'store_code': '',
                 'store_name': '',
@@ -212,12 +213,13 @@ class CommissionRPTService:
                         "expected_attendance": row.expected_attendance,
                         "monthly_target": row.staff_target_value,
                         "Sales": row.staff_sales_value,
-                        "achievement_rate": row.staff_achievement_rate,
+                        "achievement_rate": f"{row.staff_achievement_rate:.2f}%",
                         "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
+                        "commission_only": 0,
+                        "total_commission": 0,
                         "fiscal_month": row.fiscal_month or '',
                         "individual_rule": '',
                         "team_rule": '',
-                        # "rule_code": row.rule_code or '',
                         "total_days_store_work": float(
                             row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
                         "store_code": row.store_code or '',
@@ -225,15 +227,13 @@ class CommissionRPTService:
                         "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
                         # "store_target_value": float(
                         #     row.store_target_value) if row.store_target_value is not None else 0.0,
-                        "store_achievement_rate": row.store_achievement_rate,
+                        "store_achievement_rate": f"{round(row.store_achievement_rate,2)}%",
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",
                         "manage_channel": row.manage_channel or '',
                         "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
                         "city": row.city or '',
-                        "city_tier": row.city_tier or '',
-                        "commission_only": 0,
-                        "total_commission": 0
+                        "city_tier": row.city_tier or ''
 
                     })
 
@@ -245,7 +245,7 @@ class CommissionRPTService:
                     staff_commissions[staff_code]['commission_only'] += amount
                     staff_commissions[staff_code]['total_commission'] += amount
                     staff_commissions[staff_code]['amount_individual'] += amount
-                    staff_commissions[staff_code]['individual_commission_percent'] = row.individual_commission_percent
+                    staff_commissions[staff_code]['individual_commission_percent'] = f"{row.individual_commission_percent}%"
                     staff_commissions[staff_code]['individual_rule'] = row.rule_code or '',
                 elif rule_class == 'team':
                     staff_commissions[staff_code]['commission_only'] += amount
