@@ -169,6 +169,7 @@ class CommissionRPTService:
                 'position_from_wd': '',
                 'position': '',
                 'expected_attendance': 0,
+                'actual_attendance': 0.0,
                 'monthly_target': 0,
                 'Sales': 0,
                 'achievement_rate': 0,
@@ -178,7 +179,8 @@ class CommissionRPTService:
                 'amount_operational': 0.0,
                 'amount_incentive': 0.0,
                 'amount_adjustment': 0.0,
-                'actual_attendance': 0.0,
+                "commission_only": 0,
+                "total_commission": 0,
                 'fiscal_month': '',
                 "individual_rule": "",
                 "team_rule": "",
@@ -211,10 +213,10 @@ class CommissionRPTService:
                         "position_from_wd": row.position_code or '',
                         "position": row.position or '',
                         "expected_attendance": row.expected_attendance,
+                        "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
                         "monthly_target": row.staff_target_value,
                         "Sales": row.staff_sales_value,
                         "achievement_rate": f"{row.staff_achievement_rate:.2f}%",
-                        "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
                         "commission_only": 0,
                         "total_commission": 0,
                         "fiscal_month": row.fiscal_month or '',
@@ -246,12 +248,12 @@ class CommissionRPTService:
                     staff_commissions[staff_code]['total_commission'] += amount
                     staff_commissions[staff_code]['amount_individual'] += amount
                     staff_commissions[staff_code]['individual_commission_percent'] = f"{row.individual_commission_percent}%"
-                    staff_commissions[staff_code]['individual_rule'] = row.rule_code or '',
+                    staff_commissions[staff_code]['individual_rule'] = row.rule_code
                 elif rule_class == 'team':
                     staff_commissions[staff_code]['commission_only'] += amount
                     staff_commissions[staff_code]['total_commission'] += amount
                     staff_commissions[staff_code]['amount_team'] += amount
-                    staff_commissions[staff_code]['team_rule'] = row.rule_code or '',
+                    staff_commissions[staff_code]['team_rule'] = row.rule_code
                 elif rule_class == 'incentive':
                     staff_commissions[staff_code]['total_commission'] += amount
                     staff_commissions[staff_code]['amount_incentive'] += amount
