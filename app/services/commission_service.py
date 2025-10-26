@@ -188,7 +188,7 @@ class CommissionRPTService:
                 'store_code': '',
                 'store_name': '',
                 'store_sales_value': 0.0,
-                'store_target_value': 0.0,
+                # 'store_target_value': 0.0,
                 'store_achievement_rate': 0,
                 'manage_region': '',
                 'region_achievement_rate': '',
