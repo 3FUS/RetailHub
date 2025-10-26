@@ -95,7 +95,7 @@ class TargetRPTService:
             formatted_data = []
             for row in target_data:
                 formatted_data.append({
-                    "date": row.date.strftime('%Y/%-m/%-d') if row.date else None,
+                    "date": row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None,
                     "store_code": row.store_code,
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
@@ -313,7 +313,7 @@ class TargetRPTService:
 
                 # 格式化各字段
                 formatted_data.append({
-                    "Date_Format": row.date.strftime('%Y/%-m/%-d') if row.date else None,  # 2025/8/3 格式
+                    "Date_Format":row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None,
                     "date_number": row.date.strftime('%Y%m%d') if row.date else None,
                     "Fiscal_Week_Format": f"FY{row.finance_year} WK {row.week_number}",  # FY2025 WK 31 格式
                     "fiscal_week_id": row.fiscal_week,

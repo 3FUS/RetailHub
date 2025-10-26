@@ -81,8 +81,7 @@ async def get_report_data(
         report_data.update({
             "financial_month": financial_month,
             "report_type": report_type,
-            "keyword": keyword,
-            "generated_at": pd.Timestamp.now().isoformat()
+            "keyword": keyword
         })
 
         # 根据格式返回数据
