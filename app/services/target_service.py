@@ -1328,39 +1328,40 @@ class TargetStaffService:
             if attendance_exists:
                 # 有数据存在，使用inner join
                 app_logger.debug(f'Querying staff attendance with inner join {merged_codes}, {merged_months}')
-                result = await db.execute(
-                    select(
-                        StaffModel.avatar,
-                        StaffModel.staff_code,
-                        StaffModel.first_name,
-                        StaffModel.state,
-                        StaffModel.position.label('staff_position'),
-                        StaffModel.salary_coefficient.label('staff_salary_coefficient'),
-                        StaffAttendanceModel.expected_attendance,
-                        StaffAttendanceModel.actual_attendance,
-                        StaffAttendanceModel.position.label('attendance_position'),
-                        StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
-                        StaffAttendanceModel.target_value_ratio,
-                        StaffAttendanceModel.target_value,
-                        StaffAttendanceModel.sales_value,
-                        StaffAttendanceModel.deletable,
-                        StaffAttendanceModel.fiscal_month
+                query = select(
+                    StaffModel.avatar,
+                    StaffModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.state,
+                    StaffModel.position.label('staff_position'),
+                    StaffModel.salary_coefficient.label('staff_salary_coefficient'),
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.position.label('attendance_position'),
+                    StaffAttendanceModel.salary_coefficient.label('attendance_salary_coefficient'),
+                    StaffAttendanceModel.target_value_ratio,
+                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.deletable,
+                    StaffAttendanceModel.fiscal_month
+                ).select_from(
+                    StaffModel.__table__.join(
+                        StaffAttendanceModel.__table__,
+                        (StaffModel.staff_code == StaffAttendanceModel.staff_code)
                     )
-                        .select_from(
-                        StaffModel.__table__.join(
-                            StaffAttendanceModel.__table__,
-                            (StaffModel.staff_code == StaffAttendanceModel.staff_code)
-                        )
-                    )
-                        .where(
-                        StaffAttendanceModel.store_code.in_(merged_codes),
-                        StaffAttendanceModel.fiscal_month.in_(merged_months)
-                    )
-                        .order_by(
-                        StaffModel.position.desc(),  # position 倒序
-                        StaffModel.staff_code.asc()  # staff_code 正序
-                    )
+                ).where(
+                    StaffAttendanceModel.store_code.in_(merged_codes),
+                    StaffAttendanceModel.fiscal_month.in_(merged_months)
+                ).order_by(
+                    StaffModel.position.desc(),  # position 倒序
+                    StaffModel.staff_code.asc()  # staff_code 正序
                 )
+
+                # 当module为"target"时，只查询del_flag==0的记录
+                if module == "target":
+                    query = query.where(StaffAttendanceModel.del_flag == 0)
+
+                result = await db.execute(query)
             else:
                 # 没有数据存在，直接查询StaffModel单表
                 app_logger.debug("Querying staff model data only")
@@ -1669,6 +1670,7 @@ class TargetStaffService:
                     existing_target.target_value = staff_target_value
                     existing_target.position = staff_data.position
                     existing_target.salary_coefficient = staff_data.salary_coefficient
+                    existing_target.del_flag = 0
                     existing_target.updated_at = datetime.now()
                     created_staff_targets.append(existing_target)
                 else:
@@ -1847,7 +1849,15 @@ class TargetStaffService:
         ))
         target_staff = result.scalars().all()
         for staff in target_staff:
-            await db.delete(staff)
+            if staff.sales_value is not None and staff.sales_value > 0:
+                # 不删除记录，而是设置 del_flag 为 1，并清空相关字段
+                staff.del_flag = 1
+                staff.expected_attendance = None
+                staff.target_value = None
+                staff.target_value_ratio = None
+            else:
+                # 如果 sales_value 为空或等于 0，则删除记录
+                await db.delete(staff)
         await db.commit()
         return target_staff
 

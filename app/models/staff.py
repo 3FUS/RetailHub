@@ -15,7 +15,7 @@ class StaffAttendanceModel(Base):
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)
     fiscal_month = Column(String(50), primary_key=True)  # 财月
-    expected_attendance = Column(Float, nullable=False)  # 应出勤天数
+    expected_attendance = Column(Float)  # 应出勤天数
     actual_attendance = Column(Float)  # 实际出勤天数
     position = Column(String(100), nullable=False)  # 职位
     salary_coefficient = Column(Float, nullable=False)  # 目标系数
@@ -24,6 +24,7 @@ class StaffAttendanceModel(Base):
     sales_value = Column(Float)  # 个人总销金额 线下+线上
     sales_value_ec = Column(Float)  # 线上销售金额
     sales_value_store = Column(Float)  # 线下门店销售金额
+    del_flag = Column(Boolean, default=False, nullable=False)
     deletable = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))

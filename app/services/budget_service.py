@@ -99,17 +99,19 @@ class BudgetService:
 
             # 构建结果数据
             sorted_store_codes = sorted(list(store_codes))
-            columns = ["date"] + sorted_store_codes
+            columns = ["Date"] + sorted_store_codes
             app_logger.debug(f"Found {len(sorted_store_codes)} unique store codes")
 
             # 构建表格数据
+            # 构建表格数据
             app_logger.debug("Building table data")
             table_data = []
-            date_list = sorted(list(date_groups.keys()))
+            # 使用 datetime 排序确保日期按时间顺序排列
+            date_list = sorted(list(date_groups.keys()), key=lambda x: datetime.strptime(x, '%Y/%m/%d'))
 
             for date_idx, date_str in enumerate(date_list):
                 store_values = date_groups[date_str]
-                row_data = {"date": date_str}
+                row_data = {"Date": date_str}
                 table_data.append(row_data)
                 for store_code in sorted_store_codes:
                     formatted_store_code = f"Store{store_code}"

@@ -1108,6 +1108,51 @@ class CommissionService:
             raise e
 
     @staticmethod
+    async def delete_adjustment(db: AsyncSession, fiscal_month: str, store_code: str, staff_code: str) -> bool:
+        """
+        删除指定员工的调整奖金记录
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财月
+            store_code: 门店代码
+            staff_code: 员工代码
+
+        Returns:
+            bool: 是否成功删除记录
+        """
+        try:
+            app_logger.info(
+                f"开始删除调整奖金记录: fiscal_month={fiscal_month}, store_code={store_code}, staff_code={staff_code}")
+
+            # 查找符合条件的调整记录（rule_detail_code 为 "Z-01" 的记录）
+            result = await db.execute(
+                select(CommissionStaffModel)
+                    .where(CommissionStaffModel.fiscal_month == fiscal_month)
+                    .where(CommissionStaffModel.store_code == store_code)
+                    .where(CommissionStaffModel.staff_code == staff_code)
+                    .where(CommissionStaffModel.rule_detail_code == "Z-01")
+            )
+
+            adjustment_record = result.scalar_one_or_none()
+
+            if adjustment_record:
+                # 删除记录
+                await db.delete(adjustment_record)
+                await db.commit()
+                app_logger.info(f"成功删除调整奖金记录: id={adjustment_record.id}")
+                return True
+            else:
+                app_logger.warning(
+                    f"未找到匹配的调整奖金记录: fiscal_month={fiscal_month}, store_code={store_code}, staff_code={staff_code}")
+                return False
+
+        except Exception as e:
+            app_logger.error(f"删除调整奖金记录时发生错误: {str(e)}")
+            await db.rollback()
+            raise e
+
+    @staticmethod
     def calculate_discount_factor(achievement_rate: float) -> float:
         """
         根据达成率计算折扣因子

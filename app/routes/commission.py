@@ -102,6 +102,24 @@ async def get_commission_detail(fiscal_month: str, store_code: str, staff_code: 
         app_logger.error(f"get_commission_detail An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": "An error occurred while fetching targets"}
 
+@router.delete("/delete_adjustment")
+async def delete_adjustment(fiscal_month: str, store_code: str, staff_code: str,
+                           db: AsyncSession = Depends(get_db),
+                           current_user: dict = Depends(get_current_user)):
+    try:
+        # 调用服务层删除调整记录
+        result = await CommissionService.delete_adjustment(db, fiscal_month, store_code, staff_code)
+        if result:
+            return {"code": 200, "msg": "Adjustment deleted successfully"}
+        else:
+            return {"code": 404, "msg": "No adjustment found for the given parameters"}
+    except SQLAlchemyError as e:
+        app_logger.error(f"delete_adjustment Database error: {str(e)}")
+        return {"code": 500, "msg": "Database error occurred while deleting adjustment"}
+    except Exception as e:
+        app_logger.error(f"delete_adjustment An error occurred: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred while deleting adjustment: {str(e)}"}
+
 
 @router.post("/add_adjustment")
 async def add_adjustment(add_adjustment: CommissionStaffCreate, db: AsyncSession = Depends(get_db)):
