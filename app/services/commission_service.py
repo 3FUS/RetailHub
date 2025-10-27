@@ -1002,13 +1002,13 @@ class CommissionService:
                 "store_code": {"en": "Store Code", "zh": "店铺代码"},
                 "store_name": {"en": "Store Name", "zh": "店铺名称"},
                 "store_type": {"en": "Store Type", "zh": "店铺类型"},
-                "fiscal_period": {"en": "Fiscal Period", "zh": "计算周期"},
+                "fiscal_period": {"en": "Period", "zh": "计算期间"},
                 "status": {"en": "Status", "zh": "状态"},
-                "amount_individual": {"en": "Individual Amount", "zh": "个人提成"},
-                "amount_team": {"en": "Team Amount", "zh": "团队分摊"},
-                "amount_operational": {"en": "Operational Bonus", "zh": "运营奖金"},
-                "amount_incentive": {"en": "Incentive Amount", "zh": "激励奖金"},
-                "amount_adjustment": {"en": "Adjustment Amount", "zh": "调整奖金"}
+                "amount_individual": {"en": "Individual", "zh": "个人提成"},
+                "amount_team": {"en": "Pool", "zh": "团队提成"},
+                "amount_operational": {"en": "Operation", "zh": "运营奖金"},
+                "amount_incentive": {"en": "Incentive", "zh": "激励奖金"},
+                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金"}
             }
 
             month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)

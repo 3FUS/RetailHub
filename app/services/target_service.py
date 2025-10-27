@@ -752,9 +752,9 @@ class TargetStoreService:
             "store_code": {"en": "Store Code", "zh": "店铺代码"},
             "store_name": {"en": "Store Name", "zh": "店铺名称"},
             "store_type": {"en": "Store Type", "zh": "店铺类型"},
-            "target_value": {"en": "Target Value", "zh": "目标值"},
-            "store_status": {"en": "Store Status", "zh": "店铺目标"},
-            "staff_status": {"en": "Staff Status", "zh": "员工目标"}
+            "target_value": {"en": "Target Amount", "zh": "指标金额"},
+            "store_status": {"en": "Store Target Status", "zh": "店铺指标状态"},
+            "staff_status": {"en": "Staff Target Status", "zh": "员工指标状态"}
         }
 
         month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
