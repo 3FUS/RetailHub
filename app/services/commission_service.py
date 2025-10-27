@@ -1140,7 +1140,7 @@ class CommissionService:
                 # 删除记录
                 await db.delete(adjustment_record)
                 await db.commit()
-                app_logger.info(f"成功删除调整奖金记录: id={adjustment_record.id}")
+
                 return True
             else:
                 app_logger.warning(
