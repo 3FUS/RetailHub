@@ -2,6 +2,7 @@ from collections import defaultdict
 from sqlalchemy import String, func, null, cast, Integer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy import or_, and_
 
 from app.models.commission import CommissionStoreModel, CommissionMainModel
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
@@ -1363,8 +1364,16 @@ class TargetStaffService:
 
                 result = await db.execute(query)
             else:
-                # 没有数据存在，直接查询StaffModel单表
-                app_logger.debug("Querying staff model data only")
+                # 没有数据存在，查询StaffModel单表，但包含当前门店的活跃员工和上个月有考勤记录的员工
+                app_logger.debug("Querying staff model data with previous attendance records")
+
+                # 计算上个月的fiscal_month
+                fiscal_year, fiscal_month_num = map(int, fiscal_month.split('-'))
+                if fiscal_month_num == 1:
+                    previous_fiscal_month = f"{fiscal_year - 1}-12"
+                else:
+                    previous_fiscal_month = f"{fiscal_year}-{fiscal_month_num - 1}"
+
                 result = await db.execute(
                     select(
                         StaffModel.avatar,
@@ -1384,13 +1393,40 @@ class TargetStaffService:
                         cast(fiscal_month, type_=String).label('fiscal_month')
                     )
                         .where(
-                        StaffModel.store_code.in_(merged_codes),
-                        StaffModel.state == 'A'
-                    ).order_by(
-                        StaffModel.position.desc(),  # position 倒序
-                        StaffModel.staff_code.asc()  # staff_code 正序
+                        or_(
+                            and_(
+                                StaffModel.store_code.in_(merged_codes),
+                                StaffModel.state == 'A',
+                                StaffModel.del_flag == 0
+                            ),
+                            and_(
+                                select(func.count())
+                                    .select_from(StaffAttendanceModel)
+                                    .where(
+                                    StaffAttendanceModel.staff_code == StaffModel.staff_code,
+                                    StaffAttendanceModel.store_code.in_(merged_codes),
+                                    StaffAttendanceModel.fiscal_month == previous_fiscal_month,
+                                    StaffAttendanceModel.del_flag == 0
+                                )
+                                    .exists(),
+                                ~select(func.count())
+                                    .select_from(StaffAttendanceModel)
+                                    .where(
+                                    StaffAttendanceModel.staff_code == StaffModel.staff_code,
+                                    StaffAttendanceModel.store_code.in_(merged_codes),
+                                    StaffAttendanceModel.fiscal_month == previous_fiscal_month,
+                                    StaffAttendanceModel.del_flag == 1
+                                )
+                                    .exists()
+                            )
+                        )
+                    )
+                        .order_by(
+                        StaffModel.position.desc(),
+                        StaffModel.staff_code.asc()
                     )
                 )
+
             staff_attendance_data = result.all()
             app_logger.debug(f"Retrieved {len(staff_attendance_data)} staff records")
 
@@ -1409,14 +1445,15 @@ class TargetStaffService:
                 )
 
                 if staff_code not in staff_attendance_dict:
+                    # 修改：保持 None 值，不转换为 0.0
                     staff_attendance_dict[staff_code] = {
                         "avatar": row.avatar,
                         "staff_code": staff_code,
                         "first_name": row.first_name,
                         "expected_attendance": float(
-                            row.expected_attendance) if row.expected_attendance is not None else 0.0,
+                            row.expected_attendance) if row.expected_attendance is not None else None,
                         "actual_attendance": float(
-                            row.actual_attendance) if row.actual_attendance is not None else 0.0,
+                            row.actual_attendance) if row.actual_attendance is not None else None,
                         "target_value": float(
                             row.target_value) if row.target_value is not None and should_values else 0.0,
                         "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
@@ -1424,11 +1461,25 @@ class TargetStaffService:
                         "deletable": row.deletable
                     }
                 else:
-                    staff_attendance_dict[staff_code]["expected_attendance"] += float(
-                        row.expected_attendance) if row.expected_attendance is not None else 0.0
+                    # 修改：处理 None 值的累加
+                    current_expected = staff_attendance_dict[staff_code]["expected_attendance"]
+                    current_actual = staff_attendance_dict[staff_code]["actual_attendance"]
 
-                    staff_attendance_dict[staff_code]["actual_attendance"] += float(
-                        row.actual_attendance) if row.actual_attendance is not None else 0.0
+                    additional_expected = float(row.expected_attendance) if row.expected_attendance is not None else 0.0
+                    additional_actual = float(row.actual_attendance) if row.actual_attendance is not None else 0.0
+
+                    if current_expected is not None:
+                        staff_attendance_dict[staff_code][
+                            "expected_attendance"] = current_expected + additional_expected
+                    elif row.expected_attendance is not None:
+                        # 如果当前值为 None 但新增值不为 None，则使用新增值
+                        staff_attendance_dict[staff_code]["expected_attendance"] = additional_expected
+
+                    if current_actual is not None:
+                        staff_attendance_dict[staff_code]["actual_attendance"] = current_actual + additional_actual
+                    elif row.actual_attendance is not None:
+                        # 如果当前值为 None 但新增值不为 None，则使用新增值
+                        staff_attendance_dict[staff_code]["actual_attendance"] = additional_actual
 
                     staff_attendance_dict[staff_code]["sales_value"] += float(
                         row.sales_value) if row.sales_value is not None else 0.0
@@ -1637,13 +1688,31 @@ class TargetStaffService:
 
         try:
 
+            for staff_data in target_data.staffs:
+                # 查询StaffModel中对应的员工记录
+                result = await db.execute(select(StaffModel).where(
+                    StaffModel.staff_code == staff_data.staff_code,
+                    StaffModel.store_code == target_data.store_code
+                ))
+                staff_model = result.scalar_one_or_none()
+
+                if staff_model:
+                    staff_model.del_flag = 0
+                    # 同时更新position和salary_coefficient
+                    if hasattr(staff_data, 'position') and staff_data.position is not None:
+                        staff_model.position = staff_data.position
+                    if hasattr(staff_data, 'salary_coefficient') and staff_data.salary_coefficient is not None:
+                        staff_model.salary_coefficient = staff_data.salary_coefficient
+
+            await db.flush()  # 确保StaffModel的更改已应用
+
             selling_1_staffs = [staff for staff in target_data.staffs if staff.position == 'Selling_1']
-            app_logger.debug(f"Found {len(selling_1_staffs)}  Selling_1 staff members")
+            app_logger.debug(f"Found {len(selling_1_staffs)} Selling_1 staff members")
 
             # 处理 Selling_1 员工
             selling_1_total_sales = 0
             for staff_data in selling_1_staffs:
-                app_logger.debug(f"Processing  Selling_1 staff: {staff_data.staff_code}")
+                app_logger.debug(f"Processing Selling_1 staff: {staff_data.staff_code}")
                 result = await db.execute(select(StaffAttendanceModel).where(
                     StaffAttendanceModel.staff_code == staff_data.staff_code,
                     StaffAttendanceModel.store_code == target_data.store_code,
@@ -1690,7 +1759,7 @@ class TargetStaffService:
                     created_staff_targets.append(target_staff_attendance)
 
             staffs = [staff for staff in target_data.staffs if staff.position != 'Selling_1']
-            app_logger.debug(f"Found {len(staffs)}  staff members")
+            app_logger.debug(f"Found {len(staffs)} non-Selling_1 staff members")
 
             # 获取门店目标值
             result_store = await db.execute(
@@ -1707,72 +1776,74 @@ class TargetStaffService:
 
             # 计算分配给 Selling_1 员工的目标值
             store_target_value = store_target_value - selling_1_total_sales
-            app_logger.debug(f"Adjusted store target value for Selling_1 staff: {store_target_value}")
+            app_logger.debug(f"Adjusted store target value for non-Selling_1 staff: {store_target_value}")
 
-            # 计算权重
-            total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
-            total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
-            app_logger.debug(f"Total expected attendance: {total_expected_attendance}, "
-                             f"total salary coefficient: {total_salary_coefficient}")
+            # 初始化员工目标值和比例数组
+            staff_target_values = [0] * len(staffs)
+            ratios = [0] * len(staffs)
 
-            weights = []
-            for staff_data in staffs:
-                expected_attendance = staff_data.expected_attendance or 0
-                salary_coefficient = staff_data.salary_coefficient or 0
+            # 只有当有员工且门店目标值大于0时才计算权重和比例
+            if staffs and store_target_value > 0:
+                # 计算权重
+                total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
+                total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
+                app_logger.debug(f"Total expected attendance: {total_expected_attendance}, "
+                                 f"total salary coefficient: {total_salary_coefficient}")
 
-                if total_expected_attendance > 0 and total_salary_coefficient > 0:
-                    expected_attendance_ratio = expected_attendance / total_expected_attendance
-                    salary_coefficient_ratio = salary_coefficient / total_salary_coefficient
-                    weight = expected_attendance_ratio * salary_coefficient_ratio
-                else:
-                    weight = 0
+                weights = []
+                for staff_data in staffs:
+                    expected_attendance = staff_data.expected_attendance or 0
+                    salary_coefficient = staff_data.salary_coefficient or 0
 
-                weights.append(weight)
-                app_logger.debug(f"Staff {staff_data.staff_code}: weight={weight}")
+                    if total_expected_attendance > 0 and total_salary_coefficient > 0:
+                        expected_attendance_ratio = expected_attendance / total_expected_attendance
+                        salary_coefficient_ratio = salary_coefficient / total_salary_coefficient
+                        weight = expected_attendance_ratio * salary_coefficient_ratio
+                    else:
+                        weight = 0
 
-            # 计算总权重
-            total_weight = sum(weights)
-            app_logger.debug(f"Total weight: {total_weight}")
+                    weights.append(weight)
+                    app_logger.debug(f"Staff {staff_data.staff_code}: weight={weight}")
 
-            # if total_weight <= 0:
-            #     app_logger.warning("Total weight is zero or negative, returning empty list")
-            #     return []
+                # 计算总权重
+                total_weight = sum(weights)
+                app_logger.debug(f"Total weight: {total_weight}")
 
-            # 计算比例
-            ratios = []
-            if total_weight > 0:
-                for i in range(len(weights)):
-                    ratio = round(weights[i] / total_weight, 6)
-                    ratios.append(ratio)
+                # 只有当总权重大于0时才计算比例和分配目标值
+                if total_weight > 0:
+                    for i in range(len(weights)):
+                        ratio = round(weights[i] / total_weight, 6)
+                        ratios[i] = ratio
 
-                app_logger.debug(f"Initial ratios before adjustment: {ratios}")
+                    app_logger.debug(f"Initial ratios before adjustment: {ratios}")
 
-                if ratios:
-                    ratio_sum = sum(ratios)
-                    diff = 1.0 - ratio_sum
-                    app_logger.debug(f"Ratio sum: {ratio_sum}, Difference to 1.0: {diff}")
+                    if ratios:
+                        ratio_sum = sum(ratios)
+                        diff = 1.0 - ratio_sum
+                        app_logger.debug(f"Ratio sum: {ratio_sum}, Difference to 1.0: {diff}")
 
-                    if diff != 0:
-                        # 找到比例最高的员工索引
-                        max_ratio_index = ratios.index(max(ratios))
-                        app_logger.debug(f"Max ratio index: {max_ratio_index}, Max ratio value: {max(ratios)}")
+                        if diff != 0:
+                            # 找到比例最高的员工索引
+                            max_ratio_index = ratios.index(max(ratios)) if ratios else 0
+                            app_logger.debug(f"Max ratio index: {max_ratio_index}, Max ratio value: {max(ratios)}")
 
-                        # 将差额加到比例最高的员工身上
-                        ratios[max_ratio_index] = round(ratios[max_ratio_index] + diff, 6)
-                        app_logger.debug(
-                            f"Adjusted ratio at index {max_ratio_index} from {max(ratios) - diff} to {ratios[max_ratio_index]}")
+                            # 将差额加到比例最高的员工身上
+                            if max_ratio_index < len(ratios):
+                                ratios[max_ratio_index] = round(ratios[max_ratio_index] + diff, 6)
+                                app_logger.debug(
+                                    f"Adjusted ratio at index {max_ratio_index} from {max(ratios) - diff} to {ratios[max_ratio_index]}")
 
-                    app_logger.debug(f"Final ratios after adjustment: {ratios}, Sum: {sum(ratios)}")
+                        app_logger.debug(f"Final ratios after adjustment: {ratios}, Sum: {sum(ratios)}")
+
+                    # 计算员工目标值
+                    staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
 
             app_logger.debug(f"Calculated ratios: {ratios}")
-
-            # 计算员工目标值
-            staff_target_values = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
             app_logger.debug(f"Calculated staff target values: {staff_target_values}")
 
-            # 为 Selling_1 员工创建或更新记录
+            # 为非 Selling_1 员工创建或更新记录
             for i, staff_data in enumerate(staffs):
-                app_logger.debug(f"Processing Selling_1 staff: {staff_data.staff_code}")
+                app_logger.debug(f"Processing non-Selling_1 staff: {staff_data.staff_code}")
                 result = await db.execute(select(StaffAttendanceModel).where(
                     StaffAttendanceModel.staff_code == staff_data.staff_code,
                     StaffAttendanceModel.store_code == target_data.store_code,
@@ -1780,14 +1851,15 @@ class TargetStaffService:
                 ))
                 existing_target = result.scalar_one_or_none()
 
-                target_value_ratio = ratios[i] if ratios else 0
-                staff_target_value = staff_target_values[i]
+                # 安全地获取比例和目标值
+                target_value_ratio = ratios[i] if i < len(ratios) else None
+                staff_target_value = staff_target_values[i] if i < len(staff_target_values) else None
                 app_logger.debug(f"Staff {staff_data.staff_code}: ratio={target_value_ratio}, "
                                  f"target_value={staff_target_value}")
 
                 if existing_target:
                     # 如果存在，更新记录
-                    app_logger.debug(f"Updating existing record for Selling_1 staff: {staff_data.staff_code}")
+                    app_logger.debug(f"Updating existing record for non-Selling_1 staff: {staff_data.staff_code}")
                     for key, value in staff_data.dict().items():
                         if key not in ['store_code', 'fiscal_month', 'staff_code']:  # 不更新主键
                             setattr(existing_target, key, value)
@@ -1796,7 +1868,7 @@ class TargetStaffService:
                     existing_target.updated_at = datetime.now()
                     created_staff_targets.append(existing_target)
                 else:
-                    app_logger.debug(f"Creating new record for Selling_1 staff: {staff_data.staff_code}")
+                    app_logger.debug(f"Creating new record for non-Selling_1 staff: {staff_data.staff_code}")
                     target_staff_attendance = StaffAttendanceModel(
                         staff_code=staff_data.staff_code,
                         store_code=target_data.store_code,
@@ -1842,24 +1914,68 @@ class TargetStaffService:
 
     @staticmethod
     async def delete_staff_attendance(db: AsyncSession, fiscal_month: str, store_code: str, staff_code: str):
-        result = await db.execute(select(StaffAttendanceModel).where(
-            StaffAttendanceModel.fiscal_month == fiscal_month,
-            StaffAttendanceModel.store_code == store_code,
-            StaffAttendanceModel.staff_code == staff_code
-        ))
-        target_staff = result.scalars().all()
-        for staff in target_staff:
-            if staff.sales_value is not None and staff.sales_value > 0:
-                # 不删除记录，而是设置 del_flag 为 1，并清空相关字段
-                staff.del_flag = 1
-                staff.expected_attendance = None
-                staff.target_value = None
-                staff.target_value_ratio = None
-            else:
-                # 如果 sales_value 为空或等于 0，则删除记录
-                await db.delete(staff)
-        await db.commit()
-        return target_staff
+        """
+        删除员工考勤记录
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财月
+            store_code: 门店代码
+            staff_code: 员工代码
+        """
+        app_logger.info(f"Starting delete_staff_attendance for fiscal_month={fiscal_month}, "
+                        f"store_code={store_code}, staff_code={staff_code}")
+
+        try:
+            result = await db.execute(select(StaffAttendanceModel).where(
+                StaffAttendanceModel.fiscal_month == fiscal_month,
+                StaffAttendanceModel.store_code == store_code,
+                StaffAttendanceModel.staff_code == staff_code
+            ))
+            target_staff = result.scalars().all()
+
+            app_logger.debug(f"Found {len(target_staff)} staff attendance records to process")
+
+            deleted_count = 0
+            soft_deleted_count = 0
+
+            for staff in target_staff:
+                if staff.sales_value is not None and staff.sales_value > 0:
+                    # 不删除记录，而是设置 del_flag 为 1，并清空相关字段
+                    app_logger.debug(f"Soft deleting staff record for {staff_code} (sales_value={staff.sales_value})")
+                    staff.del_flag = 1
+                    staff.expected_attendance = None
+                    staff.target_value = None
+                    staff.target_value_ratio = None
+                    soft_deleted_count += 1
+                else:
+                    # 如果 sales_value 为空或等于 0，则删除记录
+                    app_logger.debug(f"Permanently deleting staff record for {staff_code}")
+                    await db.delete(staff)
+                    deleted_count += 1
+
+            # 查询StaffModel中的员工信息并设置del_flag为1
+            result_staff = await db.execute(select(StaffModel).where(
+                StaffModel.staff_code == staff_code,
+                StaffModel.store_code == store_code
+            ))
+            staff_model = result_staff.scalar_one_or_none()
+
+            if staff_model:
+                staff_model.del_flag = 1
+                app_logger.debug(f"Set del_flag=1 for staff {staff_code} in StaffModel")
+
+            await db.commit()
+
+            app_logger.info(f"Completed delete_staff_attendance: {deleted_count} permanently deleted, "
+                            f"{soft_deleted_count} soft deleted")
+
+            return target_staff
+
+        except Exception as e:
+            app_logger.error(f"Error in delete_staff_attendance: {str(e)}")
+            await db.rollback()
+            raise e
 
     @staticmethod
     async def update_staff(db: AsyncSession, target_data: StaffAttendanceCreate):

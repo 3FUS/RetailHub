@@ -229,7 +229,7 @@ class CommissionRPTService:
                         "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
                         # "store_target_value": float(
                         #     row.store_target_value) if row.store_target_value is not None else 0.0,
-                        "store_achievement_rate": f"{round(row.store_achievement_rate,2)}%",
+                        "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%",
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",
                         "manage_channel": row.manage_channel or '',
@@ -247,7 +247,8 @@ class CommissionRPTService:
                     staff_commissions[staff_code]['commission_only'] += amount
                     staff_commissions[staff_code]['total_commission'] += amount
                     staff_commissions[staff_code]['amount_individual'] += amount
-                    staff_commissions[staff_code]['individual_commission_percent'] = f"{row.individual_commission_percent}%"
+                    staff_commissions[staff_code][
+                        'individual_commission_percent'] = f"{row.individual_commission_percent}%"
                     staff_commissions[staff_code]['individual_rule'] = row.rule_code
                 elif rule_class == 'team':
                     staff_commissions[staff_code]['commission_only'] += amount
@@ -450,40 +451,65 @@ class CommissionRPTService:
                 select(
                     store_alias.c.store_name.label('store_name'),
                     CommissionStoreModel.store_code.label('store_code'),
-                    CommissionStaffModel.staff_code.label('staff_code'),
+                    CommissionStaffDetailModel.staff_code.label('staff_code'),
                     func.concat(StaffModel.first_name, StaffModel.last_name).label('full_name'),
                     StaffModel.position_code.label('position_code'),
                     func.sum(
                         case(
-                            (CommissionRuleModel.rule_class != 'incentive', CommissionStaffModel.amount),
+                            (CommissionRuleModel.rule_class == 'individual', CommissionStaffDetailModel.amount),
+                            else_=0
+                        )
+                    ).label('amount_individual'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class == 'team', CommissionStaffDetailModel.amount),
+                            else_=0
+                        )
+                    ).label('amount_team'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class == 'operational', CommissionStaffDetailModel.amount),
+                            else_=0
+                        )
+                    ).label('amount_operational'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class == 'incentive', CommissionStaffDetailModel.amount),
+                            else_=0
+                        )
+                    ).label('amount_incentive'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class == 'adjustment', CommissionStaffDetailModel.amount),
+                            else_=0
+                        )
+                    ).label('amount_adjustment'),
+                    func.sum(
+                        case(
+                            (CommissionRuleModel.rule_class.in_(['individual', 'team']),
+                             CommissionStaffDetailModel.amount),
                             else_=0
                         )
                     ).label('commission_only'),
-                    func.sum(
-                        case(
-                            (CommissionRuleModel.rule_class == 'incentive', CommissionStaffModel.amount),
-                            else_=0
-                        )
-                    ).label('incentive'),
-                    func.sum(CommissionStaffModel.amount).label('total_commission')
+                    func.sum(CommissionStaffDetailModel.amount).label('total_commission')
                 )
                     .select_from(CommissionStoreModel)
-                    .join(CommissionStaffModel,
-                          (CommissionStoreModel.store_code == CommissionStaffModel.store_code) &
-                          (CommissionStoreModel.fiscal_month == CommissionStaffModel.fiscal_month))
+                    .join(CommissionStaffDetailModel,
+                          (CommissionStoreModel.store_code == CommissionStaffDetailModel.store_code) &
+                          (CommissionStoreModel.fiscal_month == CommissionStaffDetailModel.fiscal_month))
                     .join(CommissionRuleDetailModel,
-                          CommissionStaffModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
+                          CommissionStaffDetailModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
                     .join(CommissionRuleModel,
                           CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
                     .join(StaffModel,
-                          CommissionStaffModel.staff_code == StaffModel.staff_code)
+                          CommissionStaffDetailModel.staff_code == StaffModel.staff_code)
                     .join(store_alias,
                           CommissionStoreModel.store_code == store_alias.c.store_code)
                     .where(CommissionStoreModel.fiscal_month == fiscal_month)
                     .group_by(
                     store_alias.c.store_name,
                     CommissionStoreModel.store_code,
-                    CommissionStaffModel.staff_code,
+                    CommissionStaffDetailModel.staff_code,
                     StaffModel.first_name,
                     StaffModel.last_name,
                     StaffModel.position_code
@@ -498,7 +524,7 @@ class CommissionRPTService:
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
                         store_alias.c.store_name.contains(key_word),
-                        CommissionStaffModel.staff_code.contains(key_word),
+                        CommissionStaffDetailModel.staff_code.contains(key_word),
                         StaffModel.first_name.contains(key_word),
                         StaffModel.last_name.contains(key_word)
                     )
@@ -516,19 +542,17 @@ class CommissionRPTService:
             formatted_data = []
             app_logger.debug("Formatting data")
             for idx, row in enumerate(rows):
-                commission_only = float(row.commission_only) if row.commission_only is not None else 0.0
-                incentive = float(row.incentive) if row.incentive is not None else 0.0
-                total_commission = float(row.total_commission) if row.total_commission is not None else 0.0
-
                 formatted_data.append({
                     "store_name": row.store_name if row.store_name is not None else '',
                     "store_code": row.store_code if row.store_code is not None else '',
                     "staff_code": row.staff_code if row.staff_code is not None else '',
                     "full_name": row.full_name if row.full_name is not None else '',
                     "position_code": row.position_code if row.position_code is not None else '',
-                    "commission_only": commission_only,
-                    "incentive": incentive,
-                    "total_commission": total_commission
+                    "commission_only": float(row.commission_only) if row.commission_only is not None else 0.0,
+                    "amount_operational": float(row.amount_operational) if row.amount_operational is not None else 0.0,
+                    "amount_incentive": float(row.amount_incentive) if row.amount_incentive is not None else 0.0,
+                    "amount_adjustment": float(row.amount_adjustment) if row.amount_adjustment is not None else 0.0,
+                    "total_commission": float(row.total_commission) if row.total_commission is not None else 0.0
                 })
 
                 if idx > 0 and idx % 1000 == 0:
@@ -543,9 +567,11 @@ class CommissionRPTService:
                 "staff_code": {"en": "Staff ID", "zh": "员工ID"},
                 "full_name": {"en": "Full Name", "zh": "姓名"},
                 "position_code": {"en": "Position", "zh": "职位"},
-                "commission_only": {"en": "Commission only", "zh": "纯佣金"},
-                "incentive": {"en": "Incentive", "zh": "激励金额"},
-                "total_commission": {"en": "Total Commission", "zh": "总佣金"}
+                "commission_only": {"en": "Commission only", "zh": "仅奖金部分"},
+                "amount_operational": {"en": "Operation", "zh": "运营奖金"},
+                "amount_incentive": {"en": "Incentive", "zh": "激励奖金"},
+                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金"},
+                "total_commission": {"en": "Total Commission", "zh": "总奖金"}
             }
 
             return {

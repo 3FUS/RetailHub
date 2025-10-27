@@ -60,7 +60,7 @@ async def get_document_status(template_type: str = "target"):
                 {"en": "all", "zh": "全部"},
                 {"en": "saved", "zh": "已保存"},
                 {"en": "submitted", "zh": "已提交"},
-                {"en": "approved", "zh": "已审批"},
+                {"en": "approved", "zh": "已审核"},
                 {"en": "rejected", "zh": "已拒绝"}
             ]
         elif template_type == "commission":
@@ -69,7 +69,7 @@ async def get_document_status(template_type: str = "target"):
                 {"en": "all", "zh": "全部"},
                 {"en": "saved", "zh": "已保存"},
                 {"en": "submitted", "zh": "已提交"},
-                {"en": "approved", "zh": "已审批"},
+                {"en": "approved", "zh": "已审核"},
                 {"en": "rejected", "zh": "已拒绝"}
             ]
         else:
@@ -78,7 +78,7 @@ async def get_document_status(template_type: str = "target"):
                 {"en": "all", "zh": "全部"},
                 {"en": "saved", "zh": "已保存"},
                 {"en": "submitted", "zh": "已提交"},
-                {"en": "approved", "zh": "已审批"},
+                {"en": "approved", "zh": "已审核"},
                 {"en": "rejected", "zh": "已拒绝"}
             ]
 

@@ -57,6 +57,7 @@ class StaffModel(Base):
     union_id = Column(String(60))  # 微信UNIONID
     state = Column(String(10))  # 状态 1 在职 0 离职
     store_code = Column(String(30))  # 所在组织
+    del_flag = Column(Boolean, default=False, nullable=False)
     password = Column(String(100))  # 密码
     WORKDAY_ID = Column(String(100))
     CRM_ID = Column(String(100))
