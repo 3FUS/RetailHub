@@ -518,23 +518,39 @@ class TargetRPTService:
 
             # 构建结果数据
             formatted_data = []
+
+            month_names = {
+                1: 'JAN', 2: 'FEB', 3: 'MAR', 4: 'APR', 5: 'MAY', 6: 'JUN',
+                7: 'JUL', 8: 'AUG', 9: 'SEP', 10: 'OCT', 11: 'NOV', 12: 'DEC'
+            }
+
             for row in target_data:
+                fiscal_month_parts = row.fiscal_month.split('-')
+                fiscal_year = fiscal_month_parts[0]
+                fiscal_month_num = int(fiscal_month_parts[1])
+
                 formatted_data.append({
-                    "fiscal_month": row.fiscal_month,
+                    "fiscal_month_Format": f"FY{fiscal_year} P{fiscal_month_num:02d} ({month_names.get(fiscal_month_num, '')})",
+                    "fiscal_month_id": f"{fiscal_year}{fiscal_month_num:02d}",  # 202508 格式
+                    "fiscal_month_num": fiscal_month_num,  # 8 格式
                     "store_code": row.store_code,
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
+                    "Location_Long_Name": row.store_name,
                     "staff_code": row.staff_code,
                     "target_value": row.target_value
                 })
 
             field_translations = {
-                "fiscal_month": {"en": "Fiscal Month (ID)", "zh": "财月"},
+                "fiscal_month_Format":{"en": "Fiscal Month (Format)", "zh": "财月 (Format)"},
+                "fiscal_month_id": {"en": "Fiscal Month (ID)", "zh": "财月 (ID)"},
+                "fiscal_month_num": {"en": "Fiscal Month (Num)", "zh": "财月 (Num)"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
                 "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
-                "store_name": {"en": "Location Short Name", "zh": "店铺名称"},
-                "staff_code": {"en": "Associate Number", "zh": "员工代码"},
-                "target_value": {"en": "Commission Target Local", "zh": "目标值"}
+                "store_name": {"en": "Location Short Name", "zh": "店铺名称 (Short)"},
+                "Location_Long_Name": {"en": "Location Long Name", "zh": "店铺名称 (Long)"},
+                "staff_code": {"en": "Associate Number", "zh": "员工ID"},
+                "target_value": {"en": "Commission Target Local", "zh": "员工指标"}
             }
 
             return {
