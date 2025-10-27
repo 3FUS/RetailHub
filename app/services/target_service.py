@@ -1866,6 +1866,7 @@ class TargetStaffService:
                     existing_target.target_value_ratio = target_value_ratio
                     existing_target.target_value = staff_target_value
                     existing_target.updated_at = datetime.now()
+                    existing_target.del_flag = 0
                     created_staff_targets.append(existing_target)
                 else:
                     app_logger.debug(f"Creating new record for non-Selling_1 staff: {staff_data.staff_code}")
