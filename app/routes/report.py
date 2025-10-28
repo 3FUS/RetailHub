@@ -86,7 +86,7 @@ async def get_report_data(
 
         # 根据格式返回数据
         if format.lower() == 'excel':
-            return _export_to_excel(report_data, report_type)
+            return _export_to_excel(report_data, report_type,status)
         else:
             return {"code": 200, "data": report_data}
 
@@ -95,7 +95,7 @@ async def get_report_data(
         return {"code": 500, "msg": f"Error generating report: {str(e)}"}
 
 
-def _export_to_excel(report_data: dict, report_type: str):
+def _export_to_excel(report_data: dict, report_type: str,status: str):
     """
     将报告数据导出为 Excel 文件，使用 field_translations 的英文字段名作为表头
     """

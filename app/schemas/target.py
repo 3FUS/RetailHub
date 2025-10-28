@@ -73,8 +73,8 @@ class TargetStoreDailyCreate(BaseModel):
 class StaffAttendanceBase(BaseModel):
     staff_code: str
     expected_attendance: Optional[float] = None
-    position: str
-    salary_coefficient: float
+    position: Optional[str] = None
+    salary_coefficient: Optional[float] = None
     deletable: Optional[bool] = False
 
 
@@ -88,7 +88,7 @@ class StaffAttendanceCreate(BaseModel):
 
 class Staff_Actual_Attendance(BaseModel):
     staff_code: str
-    actual_attendance: Optional[float]=None
+    actual_attendance: Optional[float] = None
     deletable: Optional[bool] = False
 
 

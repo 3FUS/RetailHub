@@ -17,8 +17,8 @@ class StaffAttendanceModel(Base):
     fiscal_month = Column(String(50), primary_key=True)  # 财月
     expected_attendance = Column(Float)  # 应出勤天数
     actual_attendance = Column(Float)  # 实际出勤天数
-    position = Column(String(100), nullable=False)  # 职位
-    salary_coefficient = Column(Float, nullable=False)  # 目标系数
+    position = Column(String(100))  # 职位
+    salary_coefficient = Column(Float)  # 目标系数
     target_value_ratio = Column(Float)
     target_value = Column(Float)  # 个人销售目标
     sales_value = Column(Float)  # 个人总销金额 线下+线上

@@ -1087,6 +1087,8 @@ class CommissionService:
             elif commission.rule_type == 'incentive':
                 # 对于激励类型，显示为固定金额
                 formula = f"=> ¥{commission.value}"
+            elif commission.code == 'adjustment':
+                formula = ""
             else:
                 # 默认显示
                 formula = f"{commission.value}"
