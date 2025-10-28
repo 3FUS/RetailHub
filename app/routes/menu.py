@@ -54,8 +54,9 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
                 "id": row.id,
                 "name_cn": row.menu_name_cn,
                 "name_en": row.menu_name,
-                "url": row.menu_url,
-                "icon": row.icon or "",  # 使用数据库中的icon字段
+                "url": row.menu_url.replace("http://", "https://") if row.menu_url.startswith(
+                    "http://") else row.menu_url,
+                "icon": row.icon or "",
             }
             if row.parent_id not in menu_dict:
                 menu_dict[row.parent_id] = []
