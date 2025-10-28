@@ -1268,11 +1268,11 @@ class CommissionService:
         app_logger.debug(
             f"员工 {staff.get('staff_code', 'Unknown')} 出勤信息 - 应出勤: {expected_attendance}, 实际出勤: {actual_attendance}")
 
-        if expected_attendance <= 0:
-            app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 应出勤为0或负数，不发放佣金")
+        if actual_attendance is None or actual_attendance <= 0:
+            app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 应出勤为0或None，不发放佣金")
             return 0  # 应出勤为0，不发放佣金
 
-        if not rule_info.consider_attendance or actual_attendance == 0:
+        if not rule_info.consider_attendance or expected_attendance == 0:
             app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 不考虑出勤率，返回原始佣金金额: {commission_amount}")
             return commission_amount  # 不考虑出勤率
 

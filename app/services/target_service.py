@@ -1957,7 +1957,7 @@ class TargetStaffService:
             soft_deleted_count = 0
 
             for staff in target_staff:
-                if staff.sales_value is not None and staff.sales_value > 0:
+                if staff.sales_value is not None and staff.sales_value is not None:
                     # 不删除记录，而是设置 del_flag 为 1，并清空相关字段
                     app_logger.debug(f"Soft deleting staff record for {staff_code} (sales_value={staff.sales_value})")
                     staff.del_flag = 1
