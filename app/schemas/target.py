@@ -72,10 +72,11 @@ class TargetStoreDailyCreate(BaseModel):
 
 class StaffAttendanceBase(BaseModel):
     staff_code: str
-    expected_attendance: float
+    expected_attendance: Optional[float] = None
     position: str
     salary_coefficient: float
     deletable: Optional[bool] = False
+
 
 class StaffAttendanceCreate(BaseModel):
     store_code: str
@@ -84,10 +85,12 @@ class StaffAttendanceCreate(BaseModel):
     staff_status: str = "saved"
     creator_code: Optional[str] = None
 
+
 class Staff_Actual_Attendance(BaseModel):
     staff_code: str
-    actual_attendance: float
+    actual_attendance: Optional[float]=None
     deletable: Optional[bool] = False
+
 
 class StaffAttendanceUpdate(BaseModel):
     store_code: str
@@ -95,10 +98,11 @@ class StaffAttendanceUpdate(BaseModel):
     staff_actual_attendance: list[Staff_Actual_Attendance]
     staff_status: str = "saved"
 
+
 class BatchApprovedTarget(BaseModel):
     fiscal_month: str
     store_codes: List[str]
-    store_status:  Optional[str] = None
+    store_status: Optional[str] = None
     staff_status: Optional[str] = None
     remarks: Optional[str] = None
 
@@ -106,5 +110,5 @@ class BatchApprovedTarget(BaseModel):
 class WithdrawnTarget(BaseModel):
     fiscal_month: str
     store_code: str
-    store_status:  Optional[str] = None
+    store_status: Optional[str] = None
     staff_status: Optional[str] = None

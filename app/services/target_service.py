@@ -314,7 +314,7 @@ class TargetRPTService:
 
                 # 格式化各字段
                 formatted_data.append({
-                    "Date_Format":row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None,
+                    "Date_Format": row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None,
                     "date_number": row.date.strftime('%Y%m%d') if row.date else None,
                     "Fiscal_Week_Format": f"FY{row.finance_year} WK {row.week_number}",  # FY2025 WK 31 格式
                     "fiscal_week_id": row.fiscal_week,
@@ -542,7 +542,7 @@ class TargetRPTService:
                 })
 
             field_translations = {
-                "fiscal_month_Format":{"en": "Fiscal Month (Format)", "zh": "财月 (Format)"},
+                "fiscal_month_Format": {"en": "Fiscal Month (Format)", "zh": "财月 (Format)"},
                 "fiscal_month_id": {"en": "Fiscal Month (ID)", "zh": "财月 (ID)"},
                 "fiscal_month_num": {"en": "Fiscal Month (Num)", "zh": "财月 (Num)"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
