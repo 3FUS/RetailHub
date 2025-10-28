@@ -22,7 +22,45 @@ from app.utils.logger import app_logger
 class TargetRPTService:
 
     @staticmethod
-    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str):
+    async def _check_should_display_target_values(db: AsyncSession, fiscal_month: str,
+                                                  has_approved: bool = False) -> bool:
+        """
+        检查是否应该显示目标值
+
+        Args:
+            db: 数据库会话
+            fiscal_month: 财务月份
+            has_approved: 是否已批准
+
+        Returns:
+            bool: 是否应该显示目标值
+        """
+        # 默认显示目标值
+        should_display = True
+
+        # 如果已批准，始终显示目标值
+        if has_approved:
+            return should_display
+
+        # 查询财月的日期范围
+        date_range_result = await db.execute(
+            select(
+                func.min(DimensionDayWeek.actual_date).label('min_date')
+            )
+                .where(DimensionDayWeek.fiscal_month == fiscal_month)
+        )
+        date_range = date_range_result.fetchone()
+
+        # 如果最小日期在今天之后，则隐藏目标值
+        if date_range and date_range.min_date and date_range.min_date.date() > datetime.now().date():
+            should_display = False
+            app_logger.debug("Minimum date is in the future, hiding target values")
+
+        return should_display
+
+    @staticmethod
+    async def get_rpt_target_by_store(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str,
+                                      has_approved: bool = False):
         """
         获取门店目标报表数据
         """
@@ -31,6 +69,9 @@ class TargetRPTService:
             f"Starting get_rpt_target_by_store with fiscal_month={fiscal_month}, key_word={key_word}, role_code={role_code}")
 
         try:
+
+            should_values = await TargetRPTService._check_should_display_target_values(db, fiscal_month, has_approved)
+
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
@@ -47,11 +88,8 @@ class TargetRPTService:
                 (DimensionDayWeek.finance_year.cast(String) + DimensionDayWeek.week_number.cast(String)).label(
                     'fiscal_week'),
                 TargetStoreWeek.percentage.label('week_percentage'),
-                # (TargetStoreWeek.percentage / 100 * TargetStoreMain.target_value).label('week_value'),
                 TargetStoreWeek.target_value.label('week_value'),
                 TargetStoreDaily.percentage.label('day_percentage'),
-                # (TargetStoreMain.target_value * (TargetStoreWeek.percentage / 100) * (
-                #         TargetStoreDaily.percentage / 100)).label('day_value')
                 TargetStoreDaily.target_value.label('day_value')
             ).select_from(
                 TargetStoreMain.__table__.join(
@@ -103,24 +141,24 @@ class TargetRPTService:
                     "week_number": row.fiscal_week,
                     "week": row.day_of_week,
                     "week_percentage": f"{row.week_percentage}%" if row.week_percentage is not None else 0.0,
-                    "week_value": float(row.week_value) if row.week_value is not None else 0.0,
+                    "week_value": float(row.week_value) if row.week_value is not None and should_values else 0.0,
                     "day_percentage": f"{row.day_percentage}%" if row.day_percentage is not None else 0.0,
-                    "day_value": float(row.day_value) if row.day_value is not None else 0.0
+                    "day_value": float(row.day_value) if row.day_value is not None and should_values else 0.0
                 })
 
             app_logger.debug(f"Formatted {len(formatted_data)} rows of data")
 
             field_translations = {
-                "date": {"en": "Date (Number)", "zh": "日期"},
+                "date": {"en": "Date", "zh": "日期"},
                 "store_code": {"en": "Location Code", "zh": "店铺代码"},
                 "Location_ID": {"en": "Location ID", "zh": "店铺ID"},
                 "store_name": {"en": "Location Name", "zh": "店铺名称"},
-                "week_number": {"en": "Week Number", "zh": "周数"},
-                "week": {"en": "Week", "zh": "周"},
-                "week_percentage": {"en": "Week Percentage", "zh": "周百分比"},
-                "week_value": {"en": "Week Value", "zh": "周目标值"},
-                "day_percentage": {"en": "Day Percentage", "zh": "日百分比"},
-                "day_value": {"en": "Day Value", "zh": "日目标值"}
+                "week_number": {"en": "Fiscal Week", "zh": "周数"},
+                "week": {"en": "Weekday", "zh": "星期"},
+                "week_percentage": {"en": "Weekly%", "zh": "周占比"},
+                "week_value": {"en": "Weekly Target", "zh": "周指标"},
+                "day_percentage": {"en": "Daily%", "zh": "日占比"},
+                "day_value": {"en": "Daily Target", "zh": "日指标"}
             }
 
             app_logger.info(f"Successfully completed get_rpt_target_by_store with {len(formatted_data)} records")
@@ -234,7 +272,7 @@ class TargetRPTService:
 
     @staticmethod
     async def get_rpt_target_bi_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
-                                        role_code: str):
+                                        role_code: str, has_approved: bool = False):
         """
         获取门店目标报表数据 - BI版本
         格式: Date (Number)	Fiscal Week (ID)	Fiscal Month (ID)	Location Code	Location ID	Location Short Name	Commission Target Local
@@ -249,6 +287,8 @@ class TargetRPTService:
             dict: 报表数据
         """
         try:
+            should_values = await TargetRPTService._check_should_display_target_values(db, fiscal_month, has_approved)
+
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
@@ -288,7 +328,8 @@ class TargetRPTService:
             if key_word:
                 query = query.where(
                     TargetStoreMain.store_code.contains(key_word) |
-                    store_alias.c.store_name.contains(key_word)
+                    store_alias.c.store_name.contains(key_word) |
+                    store_alias.c.manage_channel.contains(key_word)
                 )
 
             if status != 'All':
@@ -327,7 +368,7 @@ class TargetRPTService:
                     "location_short_name": row.store_name,
                     "Location_Long_Name": row.store_name,
                     "commission_target_local": float(
-                        row.commission_target_local) if row.commission_target_local is not None else 0.0
+                        row.commission_target_local) if row.commission_target_local is not None and should_values else 0.0
                 })
 
             field_translations = {
@@ -360,7 +401,7 @@ class TargetRPTService:
 
     @staticmethod
     async def get_rpt_target_date_horizontal_version(db: AsyncSession, fiscal_month: str, key_word: str, status: str,
-                                                     role_code: str):
+                                                     role_code: str, has_approved: bool = False):
         """
         获取门店目标报表数据 - 日期横向版本
         格式: Store	20250803	20250804	20250805	20250806	20250807	20250808	20250809	20250810
@@ -375,6 +416,7 @@ class TargetRPTService:
             dict: 报表数据
         """
         try:
+            should_values = await TargetRPTService._check_should_display_target_values(db, fiscal_month, has_approved)
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
@@ -421,7 +463,7 @@ class TargetRPTService:
                 date_str = row.date.strftime('%Y%m%d') if row.date else None
                 store_code = row.store_code
                 # store_name = row.store_name
-                target_value = float(row.target_date_value) if row.target_date_value is not None else 0.0
+                target_value = float(row.target_date_value) if row.target_date_value is not None and should_values else 0.0
 
                 if date_str:
                     date_groups[date_str][store_code] = target_value
@@ -466,7 +508,8 @@ class TargetRPTService:
             }
 
     @staticmethod
-    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str):
+    async def get_rpt_target_by_staff(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str,
+                                      has_approved: bool = False):
         """
         获取员工目标报表数据
 
@@ -479,6 +522,7 @@ class TargetRPTService:
             dict: 报表数据
         """
         try:
+            should_values = await TargetRPTService._check_should_display_target_values(db, fiscal_month, has_approved)
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
             # 执行SQL查询逻辑
@@ -538,7 +582,7 @@ class TargetRPTService:
                     "store_name": row.store_name,
                     "Location_Long_Name": row.store_name,
                     "staff_code": row.staff_code,
-                    "target_value": row.target_value
+                    "target_value": row.target_value if should_values else 0
                 })
 
             field_translations = {
@@ -725,7 +769,9 @@ class TargetStoreService:
         if key_word:
             query = query.where(
                 store_alias.c.store_code.contains(key_word) |
-                store_alias.c.store_name.contains(key_word)
+                store_alias.c.store_name.contains(key_word) |
+                store_alias.c.manage_channel.contains(key_word) |
+                store_alias.c.manage_region.contains(key_word)
             )
 
         result = await db.execute(query)

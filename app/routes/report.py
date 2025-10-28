@@ -32,6 +32,7 @@ async def get_report_data(
     - financial_month: 财月（必需）
     - keyword: 门店代码或名称模糊查询（可选）
     """
+    approve = current_user['approve']
     if report_type not in REPORT_TYPES:
         return {"code": 400, "msg": f"Invalid report_type. Must be one of: {', '.join(REPORT_TYPES)}"}
 
@@ -42,24 +43,24 @@ async def get_report_data(
     try:
         if report_type == "target_by_store":
             report_data["target_by_store"] = await TargetRPTService.get_rpt_target_by_store(
-                session, financial_month, keyword, status, role_code)
+                session, financial_month, keyword, status, role_code, approve)
 
         elif report_type == "target_percentage_version":
             report_data["target_percentage_version"] = await TargetRPTService.get_rpt_target_by_store(
-                session, financial_month, keyword, status, role_code)
+                session, financial_month, keyword, status, role_code, approve)
 
         elif report_type == "target_bi_version":
             report_data["target_bi_version"] = await TargetRPTService.get_rpt_target_bi_version(
-                session, financial_month, keyword, status, role_code)
+                session, financial_month, keyword, status, role_code, approve)
 
         elif report_type == "target_date_horizontal_version":
             report_data[
                 "target_date_horizontal_version"] = await TargetRPTService.get_rpt_target_date_horizontal_version(
-                session, financial_month, keyword, status, role_code)
+                session, financial_month, keyword, status, role_code, approve)
 
         elif report_type == "target_by_staff":
             report_data["target_by_staff"] = await TargetRPTService.get_rpt_target_by_staff(
-                session, financial_month, keyword, status, role_code)
+                session, financial_month, keyword, status, role_code, approve)
 
         elif report_type == "commission":
             report_data["commission"] = await CommissionRPTService.get_rpt_commission_by_store(
@@ -86,7 +87,7 @@ async def get_report_data(
 
         # 根据格式返回数据
         if format.lower() == 'excel':
-            return _export_to_excel(report_data, report_type,status)
+            return _export_to_excel(report_data, report_type, status)
         else:
             return {"code": 200, "data": report_data}
 
@@ -95,7 +96,7 @@ async def get_report_data(
         return {"code": 500, "msg": f"Error generating report: {str(e)}"}
 
 
-def _export_to_excel(report_data: dict, report_type: str,status: str):
+def _export_to_excel(report_data: dict, report_type: str, status: str):
     """
     将报告数据导出为 Excel 文件，使用 field_translations 的英文字段名作为表头
     """

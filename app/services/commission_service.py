@@ -81,6 +81,8 @@ class CommissionRPTService:
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
                         store_alias.c.store_name.contains(key_word),
+                        store_alias.c.manage_channel.contains(key_word),
+                        store_alias.c.manage_region.contains(key_word),
                         StaffModel.staff_code.contains(key_word)
                     )
                 )
@@ -367,8 +369,8 @@ class CommissionRPTService:
                         CommissionStoreModel.store_code.contains(key_word),
                         store_alias.c.store_name.contains(key_word),
                         StaffAttendanceModel.staff_code.contains(key_word),
-                        StaffModel.first_name.contains(key_word),
-                        StaffModel.last_name.contains(key_word)
+                        store_alias.c.manage_channel.contains(key_word),
+                        store_alias.c.manage_region.contains(key_word)
                     )
                 )
 
@@ -525,8 +527,8 @@ class CommissionRPTService:
                         CommissionStoreModel.store_code.contains(key_word),
                         store_alias.c.store_name.contains(key_word),
                         CommissionStaffDetailModel.staff_code.contains(key_word),
-                        StaffModel.first_name.contains(key_word),
-                        StaffModel.last_name.contains(key_word)
+                        store_alias.c.manage_channel.contains(key_word),
+                        store_alias.c.manage_region.contains(key_word)
                     )
                 )
             if status != 'All':
@@ -916,7 +918,9 @@ class CommissionService:
                 query = query.where(
                     or_(
                         CommissionStoreModel.store_code.contains(key_word),
-                        store_alias.c.store_name.contains(key_word)
+                        store_alias.c.store_name.contains(key_word),
+                        store_alias.c.manage_channel.contains(key_word),
+                        store_alias.c.manage_region.contains(key_word)
                     )
                 )
             if status != 'All':
@@ -1059,6 +1063,7 @@ class CommissionService:
     async def get_commission_by_staff_code(db: AsyncSession, staff_code: str, store_code: str, fiscal_month: str):
         result = await db.execute(
             select(
+                CommissionRuleModel.rule_code,
                 CommissionRuleModel.rule_name,
                 CommissionRuleModel.rule_class,
                 CommissionRuleModel.rule_type,
@@ -1087,8 +1092,6 @@ class CommissionService:
             elif commission.rule_type == 'incentive':
                 # 对于激励类型，显示为固定金额
                 formula = f"=> ¥{commission.value}"
-            elif commission.code == 'adjustment':
-                formula = ""
             else:
                 # 默认显示
                 formula = f"{commission.value}"
@@ -1107,7 +1110,7 @@ class CommissionService:
                 "rule_class": commission.rule_class,
                 "rule_type": commission.rule_type,
                 "rule_basis": commission.rule_basis,
-                "formula": formula,
+                "formula": formula if commission.rule_code != 'adjustment' else '',
                 "amount": float(commission.amount) if commission.amount is not None else 0.0
             })
 
@@ -1674,7 +1677,7 @@ class CommissionService:
 
                     # 只有佣金金额大于0时才保存
 
-                    if commission_amount and commission_amount > 0:
+                    if commission_amount >= 0:
                         position_stat = position_stats.get(staff['position'], {})
                         app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
                         commission_amount = round(commission_amount, -1)
@@ -1711,7 +1714,7 @@ class CommissionService:
 
                         db.add(commission_detail_record)
                     else:
-                        app_logger.debug(f"员工 {staff['staff_code']} 计算的佣金金额为0或负数，跳过记录")
+                        app_logger.debug(f"员工 {staff['staff_code']} 计算的佣金金额为 <=0，跳过记录")
 
             # 8. 批量添加佣金记录
             if commission_records:
