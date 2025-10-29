@@ -63,8 +63,9 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
                 "id": row.id,
                 "name_cn": row.menu_name_cn,
                 "name_en": row.menu_name,
-                "url": remove_port_from_url(row.menu_url.replace("http://", "https://") if row.menu_url.startswith(
-                    "http://") else row.menu_url),
+                # "url": remove_port_from_url(row.menu_url.replace("http://", "https://") if row.menu_url.startswith(
+                #     "http://") else row.menu_url),
+                "url": row.menu_url or "",
                 "icon": row.icon or "",
             }
             if row.parent_id not in menu_dict:
