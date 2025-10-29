@@ -376,7 +376,7 @@ class CommissionRPTService:
 
             if status != 'All':
                 app_logger.debug(f"Applying status filter: {status}")
-                query = query.where(TargetStoreMain.status == status)
+                query = query.where(TargetStoreMain.store_status == status)
 
             app_logger.debug("Executing main query")
             result = await db.execute(query)
