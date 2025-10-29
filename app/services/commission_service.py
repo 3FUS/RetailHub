@@ -336,8 +336,8 @@ class CommissionRPTService:
             # 构建主查询
             query = (
                 select(
-                    CommissionStoreModel.fiscal_month.label('fiscal_month'),
-                    CommissionStoreModel.store_code.label('store_code'),
+                    TargetStoreMain.fiscal_month.label('fiscal_month'),
+                    TargetStoreMain.store_code.label('store_code'),
                     store_alias.c.manage_region.label('manage_region'),
                     store_alias.c.store_name.label('store_name'),
                     StaffAttendanceModel.staff_code.label('staff_code'),
@@ -349,16 +349,16 @@ class CommissionRPTService:
                     StaffModel.position_code.label('position_code'),
                     StaffAttendanceModel.position.label('position')
                 )
-                    .select_from(CommissionStoreModel)
+                    .select_from(TargetStoreMain)
                     .join(StaffAttendanceModel,
-                          (CommissionStoreModel.store_code == StaffAttendanceModel.store_code) &
-                          (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month))
+                          (TargetStoreMain.store_code == StaffAttendanceModel.store_code) &
+                          (TargetStoreMain.fiscal_month == StaffAttendanceModel.fiscal_month))
                     .join(StaffModel,
                           StaffAttendanceModel.staff_code == StaffModel.staff_code)
                     .join(store_alias,
-                          CommissionStoreModel.store_code == store_alias.c.store_code)
-                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
-                    .order_by(CommissionStoreModel.store_code)
+                          TargetStoreMain.store_code == store_alias.c.store_code)
+                    .where(TargetStoreMain.fiscal_month == fiscal_month)
+                    .order_by(TargetStoreMain.store_code)
             )
 
             # 如果提供了关键词，则添加过滤条件
@@ -366,7 +366,7 @@ class CommissionRPTService:
                 app_logger.debug(f"Applying keyword filter: {key_word}")
                 query = query.where(
                     or_(
-                        CommissionStoreModel.store_code.contains(key_word),
+                        TargetStoreMain.store_code.contains(key_word),
                         store_alias.c.store_name.contains(key_word),
                         StaffAttendanceModel.staff_code.contains(key_word),
                         store_alias.c.manage_channel.contains(key_word),
@@ -376,7 +376,7 @@ class CommissionRPTService:
 
             if status != 'All':
                 app_logger.debug(f"Applying status filter: {status}")
-                query = query.where(CommissionStoreModel.status == status)
+                query = query.where(TargetStoreMain.status == status)
 
             app_logger.debug("Executing main query")
             result = await db.execute(query)

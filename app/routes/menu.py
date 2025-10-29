@@ -1,4 +1,5 @@
 from typing import List
+import re
 
 from fastapi import APIRouter, Depends
 
@@ -9,6 +10,14 @@ router = APIRouter()
 from app.database import get_sqlserver_db
 from app.utils.logger import app_logger
 from sqlalchemy import text
+
+
+def remove_port_from_url(url: str) -> str:
+    """
+    移除URL中的端口号（如 :8084, :8081, :8002 等）
+    """
+    # 使用正则表达式匹配并移除端口号
+    return re.sub(r':\d+', '', url)
 
 
 @router.get("/list")
@@ -54,8 +63,8 @@ async def get_menus(current_user: dict = Depends(get_current_user), db=Depends(g
                 "id": row.id,
                 "name_cn": row.menu_name_cn,
                 "name_en": row.menu_name,
-                "url": row.menu_url.replace("http://", "https://") if row.menu_url.startswith(
-                    "http://") else row.menu_url,
+                "url": remove_port_from_url(row.menu_url.replace("http://", "https://") if row.menu_url.startswith(
+                    "http://") else row.menu_url),
                 "icon": row.icon or "",
             }
             if row.parent_id not in menu_dict:
