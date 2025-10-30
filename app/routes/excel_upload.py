@@ -92,7 +92,7 @@ class ExcelImportService:
                 target_updates.append({
                     'store_code': str(store_code),
                     'fiscal_month': str(fiscal_month),
-                    'target_value': float(target_value)
+                    'target_value': float(target_value) if target_value else 0
                 })
 
         updated_targets = await TargetStoreService.batch_update_target_value(db, target_updates)
@@ -166,7 +166,7 @@ class ExcelImportService:
                 budget_updates.append({
                     'store_code': str(store_code),
                     'fiscal_month': str(fiscal_month),
-                    'budget_value': float(budget_value)
+                    'budget_value': float(budget_value) if budget_value else 0
                 })
 
         updated_budgets = await BudgetService.batch_update_budget_value(db, budget_updates)
