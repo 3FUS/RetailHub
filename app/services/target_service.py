@@ -1845,7 +1845,7 @@ class TargetStaffService:
             ratios = [0] * len(staffs)
 
             # 只有当有员工且门店目标值大于0时才计算权重和比例
-            if staffs and store_target_value > 0:
+            if staffs:
                 # 计算权重
                 total_expected_attendance = sum(staff_data.expected_attendance or 0 for staff_data in staffs)
                 total_salary_coefficient = sum(staff_data.salary_coefficient or 0 for staff_data in staffs)
