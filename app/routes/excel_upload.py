@@ -88,7 +88,7 @@ class ExcelImportService:
             fiscal_month = row.get('财月') or row.get('fiscal_month')
             target_value = row.get('目标金额') or row.get('target_value')
 
-            if store_code and fiscal_month and target_value is not None:
+            if store_code and fiscal_month:
                 target_updates.append({
                     'store_code': str(store_code),
                     'fiscal_month': str(fiscal_month),
@@ -162,7 +162,7 @@ class ExcelImportService:
             fiscal_month = row.get('财月') or row.get('fiscal_month')
             budget_value = row.get('预算金额') or row.get('budget_value')
 
-            if store_code and fiscal_month and budget_value is not None:
+            if store_code and fiscal_month:
                 budget_updates.append({
                     'store_code': str(store_code),
                     'fiscal_month': str(fiscal_month),

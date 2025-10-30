@@ -650,7 +650,7 @@ class TargetStoreService:
             if target_store:
                 # 更新现有记录
                 target_store.target_value = target_value
-                target_store.updated_at = datetime.utcnow()
+                target_store.updated_at = datetime.now()
                 updated_targets.append(target_store)
             else:
                 # 创建新记录
