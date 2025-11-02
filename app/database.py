@@ -1,14 +1,48 @@
+import yaml
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import create_engine
+import pyodbc
 from app.utils.logger import app_logger
+import os
 
-# 创建数据库引擎
-# engine = create_async_engine("mysql+aiomysql://root:1qazXSW%40@192.168.0.30:3306/datahub_dev")
-engine = create_async_engine("mysql+aiomysql://datahub:4rfvBGT#6yhn@APCHALIVPPOS06:3306/datahub")
 
-# 创建会话工厂
+# 修改配置文件加载逻辑
+def load_config():
+    """加载配置文件，优先使用外部配置"""
+    # 优先从exe文件所在目录查找配置文件
+    exe_dir = os.path.dirname(os.path.abspath(__file__ if not getattr(sys, 'frozen', False) else sys.executable))
+    external_config_path = os.path.join(exe_dir, 'app', 'config', 'config.yml')
+
+    if os.path.exists(external_config_path):
+        config_path = external_config_path
+        app_logger.info(f"Loading external config from: {config_path}")
+    else:
+        # 如果外部配置不存在，则使用默认包内配置
+        config_path = os.path.join(os.path.dirname(__file__), 'config', 'config.yml')
+        app_logger.info(f"Loading internal config from: {config_path}")
+
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return yaml.safe_load(f)
+
+
+# 添加sys导入
+import sys
+
+config = load_config()
+
+# 获取当前环境配置
+current_env = config['current_env']
+db_config = config['environments'][current_env]['database']
+sqlserver_config = config['environments'][current_env]['sqlserver']
+
+# 创建MySQL数据库引擎
+mysql_url = f"mysql+aiomysql://{db_config['username']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['name']}"
+engine = create_async_engine(mysql_url)
+
+# 创建MySQL会话工厂
 SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 # 基类
@@ -19,7 +53,6 @@ async def get_db():
     """获取MySQL数据库会话"""
     async_session = SessionLocal()
     try:
-        # app_logger.debug("Acquiring MySQL database session")
         yield async_session
     except SQLAlchemyError as e:
         app_logger.error(f"MySQL database operation error: {e}")
@@ -30,27 +63,15 @@ async def get_db():
     finally:
         try:
             await async_session.close()
-            # app_logger.debug("MySQL database session closed")
         except Exception as e:
             app_logger.error(f"Error closing MySQL session: {e}")
 
-#
-from sqlalchemy import create_engine
 
-import pyodbc
-
-db_config = {
-    'host': 'apchalivpxcdb01',
-    'port': 1433,
-    'user': 'sa',
-    'password': 'Xstore123',
-    'database': 'xcenter'
-}
-
+# 创建SQL Server数据库引擎
 try:
     ms_engine = create_engine(
-        f'mssql+pyodbc://{db_config["user"]}:{db_config["password"]}'
-        f'@{db_config["host"]}:{db_config["port"]}/{db_config["database"]}'
+        f'mssql+pyodbc://{sqlserver_config["username"]}:{sqlserver_config["password"]}'
+        f'@{sqlserver_config["host"]}:{sqlserver_config["port"]}/{sqlserver_config["name"]}'
         f'?driver=ODBC+Driver+17+for+SQL+Server',
         pool_size=10,
         max_overflow=10,
@@ -81,7 +102,6 @@ async def get_sqlserver_db():
     """获取SQL Server数据库会话"""
     ms_session = SQLServerSessionLocal()
     try:
-        # app_logger.debug("Acquiring SQL Server database session")
         yield ms_session
     except SQLAlchemyError as e:
         app_logger.error(f"SQL Server database operation error: {e}")
@@ -92,6 +112,5 @@ async def get_sqlserver_db():
     finally:
         try:
             ms_session.close()
-            # app_logger.debug("SQL Server database session closed")
         except Exception as e:
             app_logger.error(f"Error closing SQL Server session: {e}")

@@ -305,6 +305,38 @@ class ExcelImportService:
 
             store_sales_summary = {}
 
+            fiscal_months = set([fiscal_month for (_, _, fiscal_month) in ec_sales_summary.keys()])
+            if fiscal_months:
+                app_logger.debug(f"重置以下财月的员工电商销售数据: {fiscal_months}")
+                # 查询这些财月的所有员工考勤记录
+                reset_stmt = select(StaffAttendanceModel).where(
+                    StaffAttendanceModel.fiscal_month.in_(list(fiscal_months))
+                )
+                reset_result = await db.execute(reset_stmt)
+                reset_records = reset_result.scalars().all()
+
+                # 重置所有相关记录的电商销售数据
+                for record in reset_records:
+                    record.sales_value_ec = 0.0
+                    # 销售总额设为线下销售额(如果没有则为0)
+                    record.sales_value = record.sales_value_store or 0.0
+
+                reset_store_stmt = select(TargetStoreMain).where(
+                    TargetStoreMain.fiscal_month.in_(list(fiscal_months))
+                )
+                reset_store_result = await db.execute(reset_store_stmt)
+                reset_store_records = reset_store_result.scalars().all()
+
+                # 重置所有相关门店记录的电商销售数据
+                for record in reset_store_records:
+                    record.sales_value_ec = 0.0
+                    # 销售总额设为线下销售额(如果没有则为0)
+                    record.sales_value = record.sales_value_store or 0.0
+
+                # 提交重置操作
+                await db.commit()
+                app_logger.debug(f"已重置 {len(reset_records)} 条员工考勤记录")
+
             for (staff_code, store_code, fiscal_month), sales_value_ec in ec_sales_summary.items():
                 # 更新或创建员工考勤记录
                 query = select(StaffAttendanceModel).where(
