@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Date
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Date,DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -15,7 +15,7 @@ class TargetStoreMain(Base):
     store_code = Column(String(30), primary_key=True)
     fiscal_month = Column(String(50), primary_key=True)
     store_type = Column(String(50))
-    target_value = Column(Float)
+    target_value = Column(DECIMAL(12, 2))
     sales_value = Column(Float)
     sales_value_ec = Column(Float)
     sales_value_store = Column(Float)  # 线下门店销售金额
@@ -56,7 +56,7 @@ class TargetStoreWeek(Base):
     fiscal_month = Column(String(50), primary_key=True)
     week_number = Column(Integer, primary_key=True)
     percentage = Column(Float, nullable=False)  # 每周目标占比
-    target_value = Column(Float)  # 每周目标数值
+    target_value = Column(DECIMAL(12, 2))  # 每周目标数值
     sales_value_ly = Column(Float)
     sales_value_ly_percentage = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -77,7 +77,7 @@ class TargetStoreDaily(Base):
     week_number = Column(Integer)
     percentage = Column(Float, nullable=False)  # 每日目标占比
     monthly_percentage = Column(Float)
-    target_value = Column(Float)  # 每日目标数值
+    target_value = Column(DECIMAL(12, 2))   # 每日目标数值
     budget_value = Column(Float)
     sales_value_ly = Column(Float)
     sales_value_ly_percentage = Column(Float)

@@ -628,11 +628,21 @@ class CommissionService:
                 # 如果记录已存在，添加到结果列表
                 created_commissions.append(existing_commission)
             else:
+
+                store_result = await db.execute(
+                    select(StoreModel.store_type)
+                        .where(StoreModel.store_code == store_code)
+                )
+                store_record = store_result.fetchone()
+
+                store_type = store_record.store_type if store_record else None
+
                 # 如果记录不存在，则创建新记录
                 commission = CommissionStoreModel(
                     fiscal_month=fiscal_month,
                     store_code=store_code,
                     fiscal_period=fiscal_month,
+                    store_type=store_type,
                     status=None,  # 示例默认值
                     created_at=datetime.now()
                 )

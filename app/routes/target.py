@@ -193,10 +193,10 @@ async def batch_audit_target(request: BatchApprovedTarget, db: AsyncSession = De
         role_code = current_user['user_code']
         await CommissionService.create_commission(db, request.fiscal_month, request.store_codes)
 
-        if request.store_status and request.store_status == "approved":
-            for store in request.store_codes:
-                await TargetStoreDailyService.update_target_monthly_percentage(db, store,
-                                                                               request.fiscal_month)
+        # if request.store_status and request.store_status == "approved":
+        #     for store in request.store_codes:
+        #         await TargetStoreDailyService.update_target_monthly_percentage(db, store,
+        #                                                                        request.fiscal_month)
 
         result = await TargetStoreService.batch_approved_target_by_store_codes(
             db, request, role_code

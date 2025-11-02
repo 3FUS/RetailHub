@@ -238,10 +238,10 @@ class TargetRPTService:
                     "location_name": row.store_name,
                     "fiscal_week": row.fiscal_week,
                     "week": row.week_number,
-                    "week_percentage": float(row.week_percentage) if row.week_percentage is not None else 0.0,
-                    "week_value": float(row.week_target_value) if row.week_target_value is not None else 0.0,
-                    "day_percentage": float(row.day_percentage) if row.day_percentage is not None else 0.0,
-                    "day_value": float(row.day_target_value) if row.day_target_value is not None else 0.0
+                    "week_percentage": row.week_percentage if row.week_percentage is not None else 0.0,
+                    "week_value": row.week_target_value if row.week_target_value is not None else 0.0,
+                    "day_percentage": row.day_percentage if row.day_percentage is not None else 0.0,
+                    "day_value": row.day_target_value if row.day_target_value is not None else 0.0
                 })
 
             field_translations = {
@@ -367,8 +367,8 @@ class TargetRPTService:
                     "location_id": row.Location_ID,
                     "location_short_name": row.store_name,
                     "Location_Long_Name": row.store_name,
-                    "commission_target_local": float(
-                        row.commission_target_local) if row.commission_target_local is not None and should_values else 0.0
+                    "commission_target_local":
+                        row.commission_target_local if row.commission_target_local is not None and should_values else 0.0
                 })
 
             field_translations = {
@@ -463,7 +463,7 @@ class TargetRPTService:
                 date_str = row.date.strftime('%Y%m%d') if row.date else None
                 store_code = row.store_code
                 # store_name = row.store_name
-                target_value = float(row.target_date_value) if row.target_date_value is not None and should_values else 0.0
+                target_value = row.target_date_value if row.target_date_value is not None and should_values else 0.0
 
                 if date_str:
                     date_groups[date_str][store_code] = target_value
@@ -1205,6 +1205,15 @@ class TargetStoreDailyService:
         created_targets = []
         for day_data in target_data.days:
 
+            dimension_result = await db.execute(
+                select(DimensionDayWeek.week_number)
+                    .where(
+                    DimensionDayWeek.actual_date == day_data.target_date
+                )
+            )
+            dimension_data = dimension_result.fetchone()
+            week_number = dimension_data.week_number if dimension_data else None
+
             result = await db.execute(select(TargetStoreDaily).where(
                 TargetStoreDaily.store_code == target_data.store_code,
                 TargetStoreDaily.fiscal_month == target_data.fiscal_month,
@@ -1216,15 +1225,16 @@ class TargetStoreDailyService:
                 for key, value in day_data.dict().items():
                     if key not in ['store_code', 'fiscal_month', 'target_date']:  # 不更新主键
                         setattr(existing_target, key, value)
-                existing_target.updated_at = datetime.utcnow()
+                existing_target.updated_at = datetime.now()
                 created_targets.append(existing_target)
             else:
                 target_store_daily = TargetStoreDaily(
                     store_code=target_data.store_code,
                     fiscal_month=target_data.fiscal_month,
                     target_date=day_data.target_date,
+                    week_number=week_number,
                     percentage=day_data.percentage,
-                    creator_code=target_data.creator_code
+                    creator_code=role_code
                 )
                 db.add(target_store_daily)
                 created_targets.append(target_store_daily)
@@ -1235,7 +1245,7 @@ class TargetStoreDailyService:
             store_code=target_data.store_code,
             fiscal_month=target_data.fiscal_month,
             store_status=target_data.store_status,
-            creator_code=target_data.creator_code
+            creator_code=role_code
         )
         await TargetStoreService.update_target_store(db, target_data.store_code, target_data.fiscal_month,
                                                      target_store_update, role_code)
@@ -1359,10 +1369,8 @@ class TargetStaffService:
                 )
                 merged_data = result_merged.fetchone()
 
-                store_target_value = float(
-                    merged_data.total_target_value) if merged_data.total_target_value is not None else 0.0
-                store_sales_value = float(
-                    merged_data.total_sales_value) if merged_data.total_sales_value is not None else 0.0
+                store_target_value = merged_data.total_target_value if merged_data.total_target_value is not None else 0.0
+                store_sales_value = merged_data.total_sales_value if merged_data.total_sales_value is not None else 0.0
 
             fiscal_period, min_date = await TargetStaffService._fetch_fiscal_period(db,
                                                                                     merged_months if module == "commission" else [
@@ -1516,8 +1524,7 @@ class TargetStaffService:
                             row.expected_attendance) if row.expected_attendance is not None else None,
                         "actual_attendance": float(
                             row.actual_attendance) if row.actual_attendance is not None else None,
-                        "target_value": float(
-                            row.target_value) if row.target_value is not None and should_values else 0.0,
+                        "target_value": row.target_value if row.target_value is not None and should_values else 0.0,
                         "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
                         "deletable": row.deletable
@@ -1546,8 +1553,7 @@ class TargetStaffService:
                     staff_attendance_dict[staff_code]["sales_value"] += float(
                         row.sales_value) if row.sales_value is not None else 0.0
 
-                    staff_attendance_dict[staff_code]["target_value"] += float(
-                        row.target_value) if row.target_value is not None else 0.0
+                    staff_attendance_dict[staff_code]["target_value"] += row.target_value if row.target_value is not None else 0.0
 
                 if row.fiscal_month == fiscal_month:
                     # staff_attendance_dict[staff_code]["actual_attendance"] = float(
@@ -1664,7 +1670,7 @@ class TargetStaffService:
     def _extract_store_info(store_target_record):
         """从门店记录中提取关键信息"""
         if store_target_record:
-            store_target_value = float(store_target_record.target_value) if store_target_record.target_value else 0.0
+            store_target_value = store_target_record.target_value if store_target_record.target_value else 0.0
             store_sales_value = float(store_target_record.sales_value) if store_target_record.sales_value else 0.0
             staff_status = store_target_record.staff_status
             store_status = store_target_record.store_status
@@ -1832,8 +1838,7 @@ class TargetStaffService:
                 )
             )
             store_target_record = result_store.fetchone()
-            store_target_value = float(
-                store_target_record.target_value) if store_target_record and store_target_record.target_value else 0.0
+            store_target_value = store_target_record.target_value if store_target_record and store_target_record.target_value else 0.0
             app_logger.debug(f"Store target value: {store_target_value}")
 
             # 计算分配给 Selling_1 员工的目标值

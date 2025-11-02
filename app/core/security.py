@@ -15,7 +15,7 @@ from app.utils.logger import app_logger
 # OAuth2配置
 SECRET_KEY = "secret"
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 720
+ACCESS_TOKEN_EXPIRE_MINUTES = 1440
 
 # OAuth2密码流
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="retail_hub_api/token")
