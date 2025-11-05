@@ -1676,7 +1676,7 @@ class CommissionService:
                         else:
                             app_logger.debug(f"保底金额不考虑出勤或应出勤为0, 最终金额 {commission_amount}")
 
-                    # 只有佣金金额大于0时才保存
+                    # 只有佣金金额大于等0时才保存
 
                     if commission_amount >= 0:
                         position_stat = position_stats.get(staff['position'], {})
