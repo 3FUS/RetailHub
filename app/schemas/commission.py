@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 from datetime import datetime
 from typing import Optional, List
-
+from decimal import Decimal
 
 class CommissionBase(BaseModel):
     fiscal_month: str
@@ -22,7 +22,7 @@ class CommissionStaffCreate(BaseModel):
     fiscal_month: str
     staff_code: str
     store_code: str
-    amount: float
+    amount: Decimal
 
 
 class BatchApprovedCommission(BaseModel):

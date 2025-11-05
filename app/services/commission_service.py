@@ -379,8 +379,8 @@ class CommissionRPTService:
             app_logger.debug("Formatting data")
             for idx, row in enumerate(rows):
                 # 计算达成率，避免除零错误
-                target_value = float(row.target_value) if row.target_value is not None else 0.0
-                sales_value = row.sales_value if row.sales_value is not None else 0.0
+                target_value = row.target_value if row.target_value is not None else 0
+                sales_value = row.sales_value if row.sales_value is not None else 0
                 achievement_rate = 0.0
                 if target_value > 0:
                     achievement_rate = (sales_value / target_value) * 100

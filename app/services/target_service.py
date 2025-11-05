@@ -1672,8 +1672,8 @@ class TargetStaffService:
     def _extract_store_info(store_target_record):
         """从门店记录中提取关键信息"""
         if store_target_record:
-            store_target_value = store_target_record.target_value if store_target_record.target_value else 0.0
-            store_sales_value = float(store_target_record.sales_value) if store_target_record.sales_value else 0.0
+            store_target_value = store_target_record.target_value if store_target_record.target_value else 0
+            store_sales_value = store_target_record.sales_value if store_target_record.sales_value else 0
             staff_status = store_target_record.staff_status
             store_status = store_target_record.store_status
             commission_status = store_target_record.commission_status

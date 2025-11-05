@@ -2,11 +2,11 @@ from pydantic import BaseModel
 from datetime import datetime, date
 from typing import Optional, List
 from pydantic import field_validator, model_validator
-
+from decimal import Decimal
 
 class TargetBase(BaseModel):
     name: str
-    value: float
+    value: Decimal
     period: Optional[str] = None
     status: Optional[str] = "saved"
     remarks: Optional[str] = None
@@ -24,7 +24,7 @@ class TargetUpdate(TargetBase):
 class TargetStoreBase(BaseModel):
     store_code: str
     fiscal_month: str
-    target_value: Optional[float] = None
+    target_value: Optional[Decimal] = None
     staff_status: Optional[str] = "saved"
     store_status: Optional[str] = "saved"
     creator_code: Optional[str] = None
