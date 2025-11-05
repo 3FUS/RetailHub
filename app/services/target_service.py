@@ -543,7 +543,8 @@ class TargetRPTService:
                     store_alias.c.store_code == TargetStoreMain.store_code
                 )
             ).where(
-                TargetStoreMain.fiscal_month == fiscal_month
+                TargetStoreMain.fiscal_month == fiscal_month,
+                StaffAttendanceModel.target_value > 0
             ).order_by(TargetStoreMain.store_code, StaffAttendanceModel.staff_code)
 
             # 如果有关键字过滤条件
@@ -1553,7 +1554,8 @@ class TargetStaffService:
                     staff_attendance_dict[staff_code]["sales_value"] += float(
                         row.sales_value) if row.sales_value is not None else 0.0
 
-                    staff_attendance_dict[staff_code]["target_value"] += row.target_value if row.target_value is not None else 0.0
+                    staff_attendance_dict[staff_code][
+                        "target_value"] += row.target_value if row.target_value is not None else 0.0
 
                 if row.fiscal_month == fiscal_month:
                     # staff_attendance_dict[staff_code]["actual_attendance"] = float(
