@@ -163,7 +163,7 @@ class CommissionRPTService:
             }
             app_logger.debug(f"Retrieved {len(channel_achievements)} channel achievements")
 
-            # 按员工分组并汇总不同规则类型的佣金
+            # 按store_code和staff_code分组并汇总不同规则类型的佣金
             from collections import defaultdict
             staff_commissions = defaultdict(lambda: {
                 'staff_no': '',
@@ -190,7 +190,6 @@ class CommissionRPTService:
                 'store_code': '',
                 'store_name': '',
                 'store_sales_value': 0.0,
-                # 'store_target_value': 0.0,
                 'store_achievement_rate': 0,
                 'manage_region': '',
                 'region_achievement_rate': '',
@@ -200,16 +199,17 @@ class CommissionRPTService:
                 'city_tier': ''
             })
 
-            # 处理每行数据，按员工和规则类型分类汇总
+            # 处理每行数据，按store_code和staff_code分类汇总
             for row in rows:
-                staff_code = row.staff_code
+                # 使用store_code和staff_code组合作为键
+                key = (row.store_code, row.staff_code)
 
                 # 初始化员工信息（只设置一次）
-                if staff_commissions[staff_code]['staff_no'] == '':
+                if staff_commissions[key]['staff_no'] == '':
                     region_achievement = region_achievements.get(row.manage_region, 0.0)
                     channel_achievement = channel_achievements.get(row.manage_channel, 0.0)
 
-                    staff_commissions[staff_code].update({
+                    staff_commissions[key].update({
                         "staff_no": row.staff_code or '',
                         "full_name": row.full_name or '',
                         "position_from_wd": row.position_code or '',
@@ -229,8 +229,6 @@ class CommissionRPTService:
                         "store_code": row.store_code or '',
                         "store_name": row.store_name or '',
                         "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
-                        # "store_target_value": float(
-                        #     row.store_target_value) if row.store_target_value is not None else 0.0,
                         "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%",
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",
@@ -238,7 +236,6 @@ class CommissionRPTService:
                         "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
                         "city": row.city or '',
                         "city_tier": row.city_tier or ''
-
                     })
 
                 # 根据规则类型累加金额
@@ -246,32 +243,26 @@ class CommissionRPTService:
                 amount = float(row.amount) if row.amount is not None else 0.0
 
                 if rule_class == 'individual':
-                    staff_commissions[staff_code]['commission_only'] += amount
-                    staff_commissions[staff_code]['total_commission'] += amount
-                    staff_commissions[staff_code]['amount_individual'] += amount
-                    staff_commissions[staff_code][
+                    staff_commissions[key]['commission_only'] += amount
+                    staff_commissions[key]['total_commission'] += amount
+                    staff_commissions[key]['amount_individual'] += amount
+                    staff_commissions[key][
                         'individual_commission_percent'] = f"{row.individual_commission_percent}%"
-                    staff_commissions[staff_code]['individual_rule'] = row.rule_code
+                    staff_commissions[key]['individual_rule'] = row.rule_code
                 elif rule_class == 'team':
-                    staff_commissions[staff_code]['commission_only'] += amount
-                    staff_commissions[staff_code]['total_commission'] += amount
-                    staff_commissions[staff_code]['amount_team'] += amount
-                    staff_commissions[staff_code]['team_rule'] = row.rule_code
+                    staff_commissions[key]['commission_only'] += amount
+                    staff_commissions[key]['total_commission'] += amount
+                    staff_commissions[key]['amount_team'] += amount
+                    staff_commissions[key]['team_rule'] = row.rule_code
                 elif rule_class == 'incentive':
-                    staff_commissions[staff_code]['total_commission'] += amount
-                    staff_commissions[staff_code]['amount_incentive'] += amount
+                    staff_commissions[key]['total_commission'] += amount
+                    staff_commissions[key]['amount_incentive'] += amount
                 elif rule_class == 'adjustment':
-                    staff_commissions[staff_code]['total_commission'] += amount
-                    staff_commissions[staff_code]['amount_adjustment'] += amount
+                    staff_commissions[key]['total_commission'] += amount
+                    staff_commissions[key]['amount_adjustment'] += amount
                 elif rule_class == 'operational':
-                    staff_commissions[staff_code]['total_commission'] += amount
-                    staff_commissions[staff_code]['amount_operational'] += amount
-
-                # # 保留最高的佣金百分比（如果有多个规则）
-                # individual_commission_percent = float(
-                #     row.individual_commission_percent) if row.individual_commission_percent is not None else 0.0
-                # if individual_commission_percent > staff_commissions[staff_code]['individual_commission_percent']:
-                #     staff_commissions[staff_code]['individual_commission_percent'] = individual_commission_percent
+                    staff_commissions[key]['total_commission'] += amount
+                    staff_commissions[key]['amount_operational'] += amount
 
             # 转换为列表格式
             formatted_data = list(staff_commissions.values())
