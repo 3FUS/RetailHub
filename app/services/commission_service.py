@@ -228,7 +228,7 @@ class CommissionRPTService:
                             row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
                         "store_code": row.store_code or '',
                         "store_name": row.store_name or '',
-                        "store_sales_value": float(row.store_sales_value) if row.store_sales_value is not None else 0.0,
+                        "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0.0,
                         "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%",
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",
@@ -380,7 +380,7 @@ class CommissionRPTService:
             for idx, row in enumerate(rows):
                 # 计算达成率，避免除零错误
                 target_value = float(row.target_value) if row.target_value is not None else 0.0
-                sales_value = float(row.sales_value) if row.sales_value is not None else 0.0
+                sales_value = row.sales_value if row.sales_value is not None else 0.0
                 achievement_rate = 0.0
                 if target_value > 0:
                     achievement_rate = (sales_value / target_value) * 100

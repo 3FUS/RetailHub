@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Date,DECIMAL
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, Date, DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -16,9 +16,9 @@ class TargetStoreMain(Base):
     fiscal_month = Column(String(50), primary_key=True)
     store_type = Column(String(50))
     target_value = Column(DECIMAL(12, 2))
-    sales_value = Column(Float)
-    sales_value_ec = Column(Float)
-    sales_value_store = Column(Float)  # 线下门店销售金额
+    sales_value = Column(DECIMAL(12, 2))
+    sales_value_ec = Column(DECIMAL(12, 2))
+    sales_value_store = Column(DECIMAL(12, 2))  # 线下门店销售金额
     store_status = Column(String(20), default="draft")  # draft, submitted, approved, rejected
     staff_status = Column(String(20), default="draft")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -77,7 +77,7 @@ class TargetStoreDaily(Base):
     week_number = Column(Integer)
     percentage = Column(Float, nullable=False)  # 每日目标占比
     monthly_percentage = Column(Float)
-    target_value = Column(DECIMAL(12, 2))   # 每日目标数值
+    target_value = Column(DECIMAL(12, 2))  # 每日目标数值
     budget_value = Column(Float)
     sales_value_ly = Column(Float)
     sales_value_ly_percentage = Column(Float)

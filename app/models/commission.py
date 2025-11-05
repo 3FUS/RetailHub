@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -47,7 +47,7 @@ class CommissionStaffModel(Base):
     fiscal_month = Column(String(50), primary_key=True)
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)
-    amount = Column(Float, nullable=False)
+    amount = Column(DECIMAL(12, 2))
     rule_detail_code = Column(String(60), primary_key=True)  # rule_detail_code
     total_days_store_work = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -60,11 +60,11 @@ class CommissionStaffDetailModel(Base):
     fiscal_month = Column(String(50), primary_key=True)
     store_code = Column(String(30), primary_key=True)
     staff_code = Column(String(30), primary_key=True)
-    store_target_value = Column(Float)
-    store_sales_value = Column(Float)
+    store_target_value = Column(DECIMAL(12, 2))
+    store_sales_value = Column(DECIMAL(12, 2))
     store_achievement_rate = Column(Float)
-    staff_target_value = Column(Float)
-    staff_sales_value = Column(Float)
+    staff_target_value = Column(DECIMAL(12, 2))
+    staff_sales_value = Column(DECIMAL(12, 2))
     staff_achievement_rate = Column(Float)
     expected_attendance = Column(Float, nullable=False)  # 应出勤天数
     actual_attendance = Column(Float)  # 实际出勤天数
