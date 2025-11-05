@@ -274,7 +274,8 @@ class ExcelImportService:
 
                     # 根据付款日期查找财月
                     query = select(DimensionDayWeek.fiscal_month).where(
-                        DimensionDayWeek.actual_date == payment_time.date()
+                        DimensionDayWeek.week_number == week,
+                        DimensionDayWeek.finance_year == 2025
                     )
                     result = await db.execute(query)
                     fiscal_month_result = result.fetchone()
@@ -377,7 +378,8 @@ class ExcelImportService:
                     target_store_record.sales_value_ec = total_sales_value_ec
                     # 总销售金额 = 线下销售金额 + 电商销售金额
                     # sales_value_store = target_store_record.sales_value_store or 0.0
-                    target_store_record.sales_value = (target_store_record.sales_value_store or 0) + total_sales_value_ec
+                    target_store_record.sales_value = (
+                                                                  target_store_record.sales_value_store or 0) + total_sales_value_ec
                 else:
                     app_logger.warning(
                         f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")
