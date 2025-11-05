@@ -948,11 +948,11 @@ class CommissionService:
                 'store_type': '',
                 'fiscal_period': '',
                 'status': '',
-                'amount_individual': 0.0,
-                'amount_team': 0.0,
-                'amount_operational': 0.0,
-                'amount_incentive': 0.0,
-                'amount_adjustment': 0.0
+                'amount_individual': 0,
+                'amount_team': 0,
+                'amount_operational': 0,
+                'amount_incentive': 0,
+                'amount_adjustment': 0
             })
 
             fiscal_periods = set(commission.fiscal_period for commission in commissions if commission.fiscal_period)
@@ -997,7 +997,7 @@ class CommissionService:
 
                 # 根据规则类别累加金额
                 rule_class = commission.rule_class
-                amount = commission.amount if commission.amount is not None else 0.0
+                amount = commission.amount if commission.amount is not None else 0
 
                 if rule_class == 'individual':
                     commission_dict[store_code]['amount_individual'] += amount

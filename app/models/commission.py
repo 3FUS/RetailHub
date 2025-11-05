@@ -70,7 +70,7 @@ class CommissionStaffDetailModel(Base):
     actual_attendance = Column(Float)  # 实际出勤天数
     position = Column(String(100))  # 职位
     salary_coefficient = Column(Float)  # 目标系数
-    amount = Column(Float, nullable=False)
+    amount = Column(DECIMAL(12, 2))
     rule_code = Column(String(30), primary_key=True)
     rule_detail_code = Column(String(60), primary_key=True)
     total_days_store_work = Column(Float, default=0.0)
