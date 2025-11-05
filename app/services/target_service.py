@@ -1526,7 +1526,7 @@ class TargetStaffService:
                         "actual_attendance": float(
                             row.actual_attendance) if row.actual_attendance is not None else None,
                         "target_value": row.target_value if row.target_value is not None and should_values else 0.0,
-                        "sales_value": float(row.sales_value) if row.sales_value is not None else 0.0,
+                        "sales_value": row.sales_value if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
                         "deletable": row.deletable
                     }

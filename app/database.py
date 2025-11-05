@@ -40,7 +40,11 @@ sqlserver_config = config['environments'][current_env]['sqlserver']
 
 # 创建MySQL数据库引擎
 mysql_url = f"mysql+aiomysql://{db_config['username']}:{db_config['password']}@{db_config['host']}:{db_config['port']}/{db_config['name']}"
-engine = create_async_engine(mysql_url)
+engine = create_async_engine(mysql_url, pool_size=10,
+                             max_overflow=20,
+                             pool_pre_ping=True,
+                             pool_recycle=3600,
+                             echo=False)
 
 # 创建MySQL会话工厂
 SessionLocal = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
@@ -51,8 +55,11 @@ Base = declarative_base()
 
 async def get_db():
     """获取MySQL数据库会话"""
-    async_session = SessionLocal()
+    async_session = None
     try:
+        async_session = SessionLocal()
+        if async_session is None:
+            raise Exception("Failed to create database session")
         yield async_session
     except SQLAlchemyError as e:
         app_logger.error(f"MySQL database operation error: {e}")
@@ -61,10 +68,11 @@ async def get_db():
         app_logger.error(f"Unknown error occurred while acquiring MySQL session: {e}")
         raise
     finally:
-        try:
-            await async_session.close()
-        except Exception as e:
-            app_logger.error(f"Error closing MySQL session: {e}")
+        if async_session is not None:
+            try:
+                await async_session.close()
+            except Exception as e:
+                app_logger.error(f"Error closing MySQL session: {e}")
 
 
 # 创建SQL Server数据库引擎

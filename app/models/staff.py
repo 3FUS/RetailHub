@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text,DECIMAL
+from sqlalchemy import Column, Integer, String, Float, DateTime, Boolean, Text, DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -20,10 +20,10 @@ class StaffAttendanceModel(Base):
     position = Column(String(100))  # 职位
     salary_coefficient = Column(Float)  # 目标系数
     target_value_ratio = Column(Float)
-    target_value = Column(DECIMAL(12, 2))   # 个人销售目标
-    sales_value = Column(Float)  # 个人总销金额 线下+线上
-    sales_value_ec = Column(Float)  # 线上销售金额
-    sales_value_store = Column(Float)  # 线下门店销售金额
+    target_value = Column(DECIMAL(12, 2))  # 个人销售目标
+    sales_value = Column(DECIMAL(12, 2))  # 个人总销金额 线下+线上
+    sales_value_ec = Column(DECIMAL(12, 2))  # 线上销售金额
+    sales_value_store = Column(DECIMAL(12, 2))  # 线下门店销售金额
     del_flag = Column(Boolean, default=False, nullable=False)
     deletable = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
