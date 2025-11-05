@@ -88,9 +88,9 @@ class CommissionRuleModel(Base):
     rule_basis = Column(String(30), nullable=False)  # 'individual' (个人), 'store' (店铺)
     # 规则分类 - 团队、个人、人工调整、Incentive等
     rule_class = Column(String(30))  # 'individual', 'team', 'adjustment', 'incentive'
-    minimum_guarantee = Column(Float, default=0.0)  # 保底金额字段
+    minimum_guarantee = Column(DECIMAL(12, 2))  # 保底金额字段
     consider_attendance = Column(Integer, default=0)  # 是否考虑出勤比例
-    minimum_guarantee_on_attendance = Column(Float, default=0)
+    minimum_guarantee_on_attendance = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -101,9 +101,9 @@ class CommissionRuleDetailModel(Base):
 
     rule_detail_code = Column(String(60), primary_key=True)
     rule_code = Column(String(30), nullable=False)  # 关联到 commissions_rule 的 rule_code
-    start_value = Column(Float, nullable=False)  # 区间起始值，例如 0.0, 80.0
-    end_value = Column(Float, nullable=True)  # 区间结束值，>=140% 时可为 None
-    value = Column(Float, nullable=False)  # 对应的数值，如 0.5%, 1500 RMB
+    start_value = Column(DECIMAL(12, 2))  # 区间起始值，例如 0.0, 80.0
+    end_value = Column(DECIMAL(12, 2))  # 区间结束值，>=140% 时可为 None
+    value = Column(DECIMAL(12, 2))  # 对应的数值，如 0.5%, 1500 RMB
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

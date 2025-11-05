@@ -17,7 +17,7 @@ from datetime import datetime
 from app.services.commission_service import CommissionUtil
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
-
+from decimal import Decimal
 
 class TargetRPTService:
 
@@ -141,9 +141,9 @@ class TargetRPTService:
                     "week_number": row.fiscal_week,
                     "week": row.day_of_week,
                     "week_percentage": f"{row.week_percentage}%" if row.week_percentage is not None else 0.0,
-                    "week_value": float(row.week_value) if row.week_value is not None and should_values else 0.0,
+                    "week_value": row.week_value if row.week_value is not None and should_values else 0.0,
                     "day_percentage": f"{row.day_percentage}%" if row.day_percentage is not None else 0.0,
-                    "day_value": float(row.day_value) if row.day_value is not None and should_values else 0.0
+                    "day_value": row.day_value if row.day_value is not None and should_values else 0.0
                 })
 
             app_logger.debug(f"Formatted {len(formatted_data)} rows of data")
@@ -1280,7 +1280,7 @@ class TargetStoreDailyService:
 # 在 target_service.py 中添加以下工具类
 class StaffTargetCalculator:
     @staticmethod
-    def calculate_staff_targets(store_target_value: float, ratios: list) -> list:
+    def calculate_staff_targets(store_target_value: Decimal, ratios: list) -> list:
         """
         根据门店目标值和员工比例计算每个员工的目标值
 
@@ -1312,7 +1312,7 @@ class StaffTargetCalculator:
         return staff_target_values
 
     @staticmethod
-    def calculate_staff_target_from_ratio(store_target_value: float, ratio: float) -> int:
+    def calculate_staff_target_from_ratio(store_target_value: Decimal, ratio: float) -> int:
         """
         根据门店目标值和单个员工比例计算员工目标值
 

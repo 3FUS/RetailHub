@@ -15,7 +15,7 @@ from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
-
+from decimal import Decimal
 
 class CommissionRPTService:
 
@@ -1112,7 +1112,7 @@ class CommissionService:
                 "rule_type": commission.rule_type,
                 "rule_basis": commission.rule_basis,
                 "formula": formula if commission.rule_code != 'adjustment' else '',
-                "amount": float(commission.amount) if commission.amount is not None else 0.0
+                "amount": commission.amount if commission.amount is not None else 0.0
             })
 
         return formatted_commissions
@@ -1252,7 +1252,7 @@ class CommissionService:
         return position_stats
 
     @staticmethod
-    def apply_attendance_adjustment(commission_amount: float, staff: dict,
+    def apply_attendance_adjustment(commission_amount: Decimal, staff: dict,
                                     rule_info, position_stats: dict) -> float:
         """
         应用出勤率调整
