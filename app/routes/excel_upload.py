@@ -230,11 +230,13 @@ class ExcelImportService:
                 product_sku = str(row.get('商品SKU编码', row.get('product_sku', '')))[:30] or ''
                 product_name = str(row.get('商品名称', row.get('product_name', '')))[:80] or None
                 product_size = str(row.get('商品尺码', row.get('product_size', '')))[:30] or None
-                total_amount = float(row.get('订单总金额', row.get('total_amount', 0.0)) or 0.0)
+                total_amount_with_tax = row.get('订单含税金额', row.get('total_amount_tax', 0.0)) or 0.0
+                total_amount = row.get('订单不含税金额', row.get('total_amount', 0.0)) or 0.0
                 staff_code = str(row.get('员工ID', row.get('staff_code', '')))[:30] or ''
                 store_code = str(row.get('门店ID', row.get('store_code', '')))[:30] or ''
                 area = str(row.get('Area', row.get('area', '')))[:30] or None
                 week = row.get('Week') or row.get('week')
+                year = row.get('年份') or row.get('year')
                 is_wechat = bool(row.get('是否企微', row.get('is_wechat', False)))
 
                 # 处理时间字段
@@ -254,6 +256,7 @@ class ExcelImportService:
                     product_sku=product_sku,
                     product_name=product_name,
                     product_size=product_size,
+                    total_amount_with_tax=total_amount_with_tax,
                     total_amount=total_amount,
                     staff_code=staff_code,
                     store_code=store_code,
@@ -261,6 +264,7 @@ class ExcelImportService:
                     payment_time=payment_time,
                     # shipping_time=shipping_time,
                     week=week,
+                    year=year,
                     is_wechat=is_wechat
                 )
 
@@ -268,14 +272,14 @@ class ExcelImportService:
                 processed_count += 1
 
                 # 如果有付款时间，则计算财月并汇总线上销售数据
-                if payment_time and staff_code and store_code:
+                if payment_time and staff_code and store_code and week and year:
                     # 格式化付款时间为年月日格式
                     payment_date_str = payment_time.strftime('%Y-%m-%d')
 
                     # 根据付款日期查找财月
                     query = select(DimensionDayWeek.fiscal_month).where(
                         DimensionDayWeek.week_number == week,
-                        DimensionDayWeek.finance_year == 2025
+                        DimensionDayWeek.finance_year == year
                     )
                     result = await db.execute(query)
                     fiscal_month_result = result.fetchone()

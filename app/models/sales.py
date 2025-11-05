@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Date, Integer, DECIMAL, TIMESTAMP, func, Boolean, DateTime, Float
+from sqlalchemy import Column, String, Date, Integer, DECIMAL, TIMESTAMP, func, Boolean, DateTime, Float, DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 
 Base = declarative_base()
@@ -51,13 +51,15 @@ class ECSalesModel(Base):
     product_sku = Column(String(30), primary_key=True)  # 商品SKU编码
     product_name = Column(String(80))  # 商品名称
     product_size = Column(String(30))  # 商品尺码
-    total_amount = Column(Float)  # 订单总金额
+    total_amount_with_tax = Column(DECIMAL(12, 2))
+    total_amount = Column(DECIMAL(12, 2))  # 订单总金额
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)  # 门店ID
     area = Column(String(30))  # Area
     payment_time = Column(DateTime)  # 付款时间
     shipping_time = Column(DateTime)  # 发货时间/退货时间
     week = Column(String(30))  # Week
+    year = Column(String(30))
     is_wechat = Column(Boolean)  # 是否企微
     created_at = Column(TIMESTAMP, nullable=True, default=func.current_timestamp())
     updated_at = Column(TIMESTAMP, nullable=True, default=func.current_timestamp())
