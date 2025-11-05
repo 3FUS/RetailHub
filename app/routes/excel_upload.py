@@ -44,7 +44,7 @@ def identify_excel_type(df: pd.DataFrame) -> str:
 
     target_indicators = ['门店ID', '财月', '目标金额']
     budget_indicators = ['门店ID', '财月', '预算金额']
-    ec_sales_indicators = ['订单号', '数量', '订单总金额', '员工ID', '门店ID', 'Week']
+    ec_sales_indicators = ['订单号', '数量', '订单不含税金额', '员工ID', '门店ID', 'Week', '年份']
 
     if all(indicator.lower() in headers for indicator in target_indicators):
         return 'target'
@@ -383,7 +383,7 @@ class ExcelImportService:
                     # 总销售金额 = 线下销售金额 + 电商销售金额
                     # sales_value_store = target_store_record.sales_value_store or 0.0
                     target_store_record.sales_value = (
-                                                                  target_store_record.sales_value_store or 0) + total_sales_value_ec
+                                                              target_store_record.sales_value_store or 0) + total_sales_value_ec
                 else:
                     app_logger.warning(
                         f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")
