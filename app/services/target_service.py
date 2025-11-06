@@ -1312,7 +1312,7 @@ class StaffTargetCalculator:
         return staff_target_values
 
     @staticmethod
-    def calculate_staff_target_from_ratio(store_target_value: Decimal, ratio: float) -> int:
+    def calculate_staff_target_from_ratio(store_target_value: Decimal, ratio: Decimal) -> int:
         """
         根据门店目标值和单个员工比例计算员工目标值
 
@@ -1501,9 +1501,6 @@ class TargetStaffService:
             staff_attendance_data = result.all()
             app_logger.debug(f"Retrieved {len(staff_attendance_data)} staff records")
 
-            # total_target_value = sum(
-            #     float(row.target_value) if row.target_value is not None else 0 for row in staff_attendance_data)
-
             staff_attendance_dict = {}
             for row in staff_attendance_data:
                 staff_code = row.staff_code
@@ -1521,10 +1518,10 @@ class TargetStaffService:
                         "avatar": row.avatar,
                         "staff_code": staff_code,
                         "first_name": row.first_name,
-                        "expected_attendance": float(
-                            row.expected_attendance) if row.expected_attendance is not None else None,
-                        "actual_attendance": float(
-                            row.actual_attendance) if row.actual_attendance is not None else None,
+                        "expected_attendance":
+                            row.expected_attendance if row.expected_attendance is not None else None,
+                        "actual_attendance":
+                            row.actual_attendance if row.actual_attendance is not None else None,
                         "target_value": row.target_value if row.target_value is not None and should_values else 0.0,
                         "sales_value": row.sales_value if row.sales_value is not None else 0.0,
                         "target_value_ratio": row.target_value_ratio,
@@ -1535,8 +1532,8 @@ class TargetStaffService:
                     current_expected = staff_attendance_dict[staff_code]["expected_attendance"]
                     current_actual = staff_attendance_dict[staff_code]["actual_attendance"]
 
-                    additional_expected = float(row.expected_attendance) if row.expected_attendance is not None else 0.0
-                    additional_actual = float(row.actual_attendance) if row.actual_attendance is not None else 0.0
+                    additional_expected = row.expected_attendance if row.expected_attendance is not None else 0.0
+                    additional_actual = row.actual_attendance if row.actual_attendance is not None else 0.0
 
                     if current_expected is not None:
                         staff_attendance_dict[staff_code][
@@ -1551,18 +1548,15 @@ class TargetStaffService:
                         # 如果当前值为 None 但新增值不为 None，则使用新增值
                         staff_attendance_dict[staff_code]["actual_attendance"] = additional_actual
 
-                    staff_attendance_dict[staff_code]["sales_value"] += float(
-                        row.sales_value) if row.sales_value is not None else 0.0
+                    staff_attendance_dict[staff_code]["sales_value"] += row.sales_value if row.sales_value is not None else 0.0
 
                     staff_attendance_dict[staff_code][
                         "target_value"] += row.target_value if row.target_value is not None else 0.0
 
                 if row.fiscal_month == fiscal_month:
-                    # staff_attendance_dict[staff_code]["actual_attendance"] = float(
-                    #     row.actual_attendance) if row.actual_attendance is not None else None
+
                     staff_attendance_dict[staff_code]["position"] = position
-                    staff_attendance_dict[staff_code]["salary_coefficient"] = float(
-                        salary_coefficient) if salary_coefficient is not None else None
+                    staff_attendance_dict[staff_code]["salary_coefficient"] = salary_coefficient if salary_coefficient is not None else None
 
             # 计算每个员工的目标值和达成率
             for staff_code, staff_info in staff_attendance_dict.items():

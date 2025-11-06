@@ -215,7 +215,7 @@ class CommissionRPTService:
                         "position_from_wd": row.position_code or '',
                         "position": row.position or '',
                         "expected_attendance": row.expected_attendance,
-                        "actual_attendance": float(row.actual_attendance) if row.actual_attendance is not None else 0.0,
+                        "actual_attendance": row.actual_attendance if row.actual_attendance is not None else 0.0,
                         "monthly_target": row.staff_target_value,
                         "Sales": row.staff_sales_value,
                         "achievement_rate": f"{row.staff_achievement_rate:.2f}%",
@@ -224,8 +224,8 @@ class CommissionRPTService:
                         "fiscal_month": row.fiscal_month or '',
                         "individual_rule": '',
                         "team_rule": '',
-                        "total_days_store_work": float(
-                            row.total_days_store_work) if row.total_days_store_work is not None else 0.0,
+                        "total_days_store_work":
+                            row.total_days_store_work if row.total_days_store_work is not None else 0.0,
                         "store_code": row.store_code or '',
                         "store_name": row.store_name or '',
                         "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0.0,
@@ -1185,7 +1185,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    def calculate_discount_factor(achievement_rate: float) -> float:
+    def calculate_discount_factor(achievement_rate: Decimal):
         """
         根据达成率计算折扣因子
 
@@ -1202,7 +1202,7 @@ class CommissionService:
         return 1.0
 
     @staticmethod
-    async def process_position_attendance_stats(staff_attendances: list) -> Dict[str, Dict[str, float]]:
+    async def process_position_attendance_stats(staff_attendances: list) -> Dict[str, Dict[str, Decimal]]:
         """
         处理各岗位的出勤统计数据
 
@@ -1253,7 +1253,7 @@ class CommissionService:
 
     @staticmethod
     def apply_attendance_adjustment(commission_amount: Decimal, staff: dict,
-                                    rule_info, position_stats: dict) -> float:
+                                    rule_info, position_stats: dict):
         """
         应用出勤率调整
 

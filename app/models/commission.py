@@ -49,7 +49,7 @@ class CommissionStaffModel(Base):
     store_code = Column(String(30), primary_key=True)
     amount = Column(DECIMAL(12, 2))
     rule_detail_code = Column(String(60), primary_key=True)  # rule_detail_code
-    total_days_store_work = Column(Float, default=0.0)
+    total_days_store_work = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -62,18 +62,18 @@ class CommissionStaffDetailModel(Base):
     staff_code = Column(String(30), primary_key=True)
     store_target_value = Column(DECIMAL(12, 2))
     store_sales_value = Column(DECIMAL(12, 2))
-    store_achievement_rate = Column(Float)
+    store_achievement_rate = Column(DECIMAL(12, 2))
     staff_target_value = Column(DECIMAL(12, 2))
     staff_sales_value = Column(DECIMAL(12, 2))
-    staff_achievement_rate = Column(Float)
-    expected_attendance = Column(Float, nullable=False)  # 应出勤天数
-    actual_attendance = Column(Float)  # 实际出勤天数
+    staff_achievement_rate = Column(DECIMAL(12, 2))
+    expected_attendance = Column(DECIMAL(12, 2))
+    actual_attendance = Column(DECIMAL(12, 2))
     position = Column(String(100))  # 职位
-    salary_coefficient = Column(Float)  # 目标系数
+    salary_coefficient = Column(DECIMAL(12, 2))
     amount = Column(DECIMAL(12, 2))
     rule_code = Column(String(30), primary_key=True)
     rule_detail_code = Column(String(60), primary_key=True)
-    total_days_store_work = Column(Float, default=0.0)
+    total_days_store_work = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
 

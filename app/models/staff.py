@@ -15,11 +15,11 @@ class StaffAttendanceModel(Base):
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)
     fiscal_month = Column(String(50), primary_key=True)  # 财月
-    expected_attendance = Column(Float)  # 应出勤天数
-    actual_attendance = Column(Float)  # 实际出勤天数
+    expected_attendance = Column(DECIMAL(12, 2))   # 应出勤天数
+    actual_attendance = Column(DECIMAL(12, 2))   # 实际出勤天数
     position = Column(String(100))  # 职位
-    salary_coefficient = Column(Float)  # 目标系数
-    target_value_ratio = Column(Float)
+    salary_coefficient = Column(DECIMAL(12, 2))   # 目标系数
+    target_value_ratio = Column(DECIMAL(12, 6))
     target_value = Column(DECIMAL(12, 2))  # 个人销售目标
     sales_value = Column(DECIMAL(12, 2))  # 个人总销金额 线下+线上
     sales_value_ec = Column(DECIMAL(12, 2))  # 线上销售金额
@@ -45,7 +45,7 @@ class StaffModel(Base):
     join_date = Column(DateTime)  # 入职日期
     position_code = Column(String(60))  # 职位代码
     position = Column(String(60))
-    salary_coefficient = Column(Float)
+    salary_coefficient = Column(DECIMAL(12, 2))
     gender = Column(String(10))  # 性别
     birth_date = Column(DateTime)  # 生日
     suffix = Column(String(10))
@@ -77,7 +77,7 @@ class PositionModel(Base):
     position = Column(String(30), primary_key=True)  # 岗位代码
     position_code = Column(String(60), primary_key=True)
     description = Column(String(255))  # 岗位描述
-    default_coefficient = Column(Float, default=1.0)  # 默认计算系数
+    default_coefficient = Column(DECIMAL(12, 2))  # 默认计算系数
     is_active = Column(Boolean, default=True)  # 是否启用该规则分配
     # allocation_type = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
