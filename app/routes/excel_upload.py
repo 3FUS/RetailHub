@@ -289,6 +289,7 @@ class ExcelImportService:
 
                         # 汇总线上销售数据
                         key = (staff_code, store_code, fiscal_month)
+                        total_amount = Decimal(str(total_amount))
                         if key in ec_sales_summary:
                             ec_sales_summary[key] += total_amount
                         else:
@@ -354,8 +355,10 @@ class ExcelImportService:
 
                 if attendance_record:
                     # 如果记录存在，更新线上销售金额
-                    attendance_record.sales_value_ec = sales_value_ec
-                    attendance_record.sales_value = (attendance_record.sales_value_store or 0) + sales_value_ec
+                    attendance_record.sales_value_ec = Decimal(str(sales_value_ec))
+                    attendance_record.sales_value = (Decimal(
+                        str(attendance_record.sales_value_store)) if attendance_record.sales_value_store else Decimal(
+                        '0')) + Decimal(str(sales_value_ec))
                     updated_attendances += 1
                 else:
                     app_logger.warning(

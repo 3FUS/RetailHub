@@ -171,25 +171,25 @@ class CommissionRPTService:
                 'position_from_wd': '',
                 'position': '',
                 'expected_attendance': 0,
-                'actual_attendance': 0.0,
+                'actual_attendance': 0,
                 'monthly_target': 0,
                 'Sales': 0,
                 'achievement_rate': 0,
                 'individual_commission_percent': 0,
-                'amount_individual': 0.0,
-                'amount_team': 0.0,
-                'amount_operational': 0.0,
-                'amount_incentive': 0.0,
-                'amount_adjustment': 0.0,
-                "commission_only": 0,
-                "total_commission": 0,
+                'amount_individual': Decimal('0'),
+                'amount_team': Decimal('0'),
+                'amount_operational': Decimal('0'),
+                'amount_incentive': Decimal('0'),
+                'amount_adjustment': Decimal('0'),
+                'commission_only': Decimal('0'),
+                'total_commission': Decimal('0'),
                 'fiscal_month': '',
                 "individual_rule": "",
                 "team_rule": "",
                 'total_days_store_work': 0.0,
                 'store_code': '',
                 'store_name': '',
-                'store_sales_value': 0.0,
+                'store_sales_value': 0,
                 'store_achievement_rate': 0,
                 'manage_region': '',
                 'region_achievement_rate': '',
@@ -206,8 +206,8 @@ class CommissionRPTService:
 
                 # 初始化员工信息（只设置一次）
                 if staff_commissions[key]['staff_no'] == '':
-                    region_achievement = region_achievements.get(row.manage_region, 0.0)
-                    channel_achievement = channel_achievements.get(row.manage_channel, 0.0)
+                    region_achievement = region_achievements.get(row.manage_region, 0)
+                    channel_achievement = channel_achievements.get(row.manage_channel, 0)
 
                     staff_commissions[key].update({
                         "staff_no": row.staff_code or '',
@@ -215,7 +215,7 @@ class CommissionRPTService:
                         "position_from_wd": row.position_code or '',
                         "position": row.position or '',
                         "expected_attendance": row.expected_attendance,
-                        "actual_attendance": row.actual_attendance if row.actual_attendance is not None else 0.0,
+                        "actual_attendance": row.actual_attendance if row.actual_attendance is not None else 0,
                         "monthly_target": row.staff_target_value,
                         "Sales": row.staff_sales_value,
                         "achievement_rate": f"{row.staff_achievement_rate:.2f}%",
@@ -225,10 +225,10 @@ class CommissionRPTService:
                         "individual_rule": '',
                         "team_rule": '',
                         "total_days_store_work":
-                            row.total_days_store_work if row.total_days_store_work is not None else 0.0,
+                            row.total_days_store_work if row.total_days_store_work is not None else 0,
                         "store_code": row.store_code or '',
                         "store_name": row.store_name or '',
-                        "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0.0,
+                        "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0,
                         "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%",
                         "manage_region": row.manage_region or '',
                         "region_achievement_rate": f"{round(region_achievement, 2)}%",

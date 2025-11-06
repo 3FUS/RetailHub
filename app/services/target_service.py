@@ -1302,8 +1302,8 @@ class StaffTargetCalculator:
         staff_target_values = []
         for ratio in ratios:
             # 确保 ratio 也是 Decimal 类型
-            ratio = Decimal(str(ratio)) if ratio else Decimal('0')
-            staff_target_value = round(float(store_target_value * ratio), 0) if ratio else 0.0
+            ratio = Decimal(str(ratio)) if ratio else Decimal('0.000000')
+            staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
             staff_target_values.append(int(staff_target_value))
 
         # 计算总和与门店目标值的差异
