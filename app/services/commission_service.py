@@ -1185,7 +1185,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    def calculate_discount_factor(achievement_rate: Decimal):
+    def calculate_discount_factor(achievement_rate: Decimal) -> Decimal:
         """
         根据达成率计算折扣因子
 
@@ -1193,13 +1193,13 @@ class CommissionService:
             achievement_rate: 达成率
 
         Returns:
-            float: 折扣因子
+            Decimal: 折扣因子
         """
         if achievement_rate < 80:
-            return 0.75
+            return Decimal('0.75')
         elif achievement_rate < 100:
-            return 0.85
-        return 1.0
+            return Decimal('0.85')
+        return Decimal('1.0')
 
     @staticmethod
     async def process_position_attendance_stats(staff_attendances: list) -> Dict[str, Dict[str, Decimal]]:
@@ -1217,9 +1217,9 @@ class CommissionService:
 
         for idx, staff in enumerate(staff_attendances):
             position = staff['position']
-            actual_attendance = staff.get('actual_attendance', 0)
-            target_value = staff['target_value']
-            sales_value = staff['sales_value'] or 0
+            actual_attendance = Decimal(str(staff.get('actual_attendance', 0)))
+            target_value = Decimal(str(staff['target_value']))
+            sales_value = Decimal(str(staff['sales_value'] or 0))
 
             app_logger.debug(
                 f"处理员工[{idx + 1}/{len(staff_attendances)}] - 岗位: {position}, 实际出勤: {actual_attendance}, 目标值: {target_value}, 销售额: {sales_value}")
@@ -1253,7 +1253,7 @@ class CommissionService:
 
     @staticmethod
     def apply_attendance_adjustment(commission_amount: Decimal, staff: dict,
-                                    rule_info, position_stats: dict):
+                                    rule_info, position_stats: dict) -> Decimal:
         """
         应用出勤率调整
 
@@ -1268,8 +1268,8 @@ class CommissionService:
         """
         app_logger.debug(f"开始应用出勤调整，员工: {staff.get('staff_code', 'Unknown')}, 原始佣金金额: {commission_amount}")
 
-        expected_attendance = staff['expected_attendance'] or 0
-        actual_attendance = staff['actual_attendance'] or 0
+        expected_attendance = Decimal(str(staff['expected_attendance'] or 0))
+        actual_attendance = Decimal(str(staff['actual_attendance'] or 0))
 
         app_logger.debug(
             f"员工 {staff.get('staff_code', 'Unknown')} 出勤信息 - 应出勤: {expected_attendance}, 实际出勤: {actual_attendance}")
@@ -1294,8 +1294,8 @@ class CommissionService:
             total_attendance = position_stat.get('total_attendance', 0)
             if total_attendance > 0:
                 # 重新计算当前员工的折扣因子
-                target_value = staff['target_value']
-                sales_value = staff['sales_value'] or 0
+                target_value = Decimal(str(staff['target_value']))
+                sales_value = Decimal(str(staff['sales_value'] or 0))
                 achievement_rate = 0
                 if sales_value is not None and target_value > 0:
                     achievement_rate = (sales_value / target_value) * 100
@@ -1639,7 +1639,7 @@ class CommissionService:
                             commission_amount = sales_value * (Decimal(str(rule_detail_value)) / Decimal(100))
                             app_logger.debug(f"佣金计算: {sales_value} * ({rule_detail_value}/100) = {commission_amount}")
                     elif rule_info.rule_type == 'incentive':
-                        commission_amount = rule_detail_value
+                        commission_amount = Decimal(str(rule_detail_value))
                         app_logger.debug(f"激励金额: {commission_amount}")
 
                     # 考虑出勤率

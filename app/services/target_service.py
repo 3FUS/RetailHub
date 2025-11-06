@@ -981,7 +981,10 @@ class TargetStoreWeekService:
 
             calculated_target_value = None
             if store_target_value > 0 and week_data.percentage is not None:
-                calculated_target_value = round(store_target_value * week_data.percentage / 100)
+                # calculated_target_value = round(store_target_value * week_data.percentage / 100)
+                store_target_value = Decimal(str(store_target_value))
+                percentage = Decimal(str(week_data.percentage))
+                calculated_target_value = round(float(store_target_value * percentage / 100))
                 total_target_value += calculated_target_value
                 if i == len(weeks_data) - 1:
                     # 最后一条记录使用剩余值
@@ -1298,7 +1301,9 @@ class StaffTargetCalculator:
         store_target_value = Decimal(str(store_target_value))
         staff_target_values = []
         for ratio in ratios:
-            staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
+            # 确保 ratio 也是 Decimal 类型
+            ratio = Decimal(str(ratio)) if ratio else Decimal('0')
+            staff_target_value = round(float(store_target_value * ratio), 0) if ratio else 0.0
             staff_target_values.append(int(staff_target_value))
 
         # 计算总和与门店目标值的差异
@@ -1568,12 +1573,14 @@ class TargetStaffService:
                 app_logger.debug(
                     f"staff_info[target_value]: {staff_info['target_value']} (type: {type(staff_info['target_value'])})")
 
-                # 使用汇总后的数据计算达成率
                 achievement_rate = None
                 if (staff_info["sales_value"] is not None and
                         staff_info['target_value'] is not None and
                         staff_info['target_value'] > 0):
-                    achievement_rate = f"{staff_info['sales_value'] / staff_info['target_value']:.2%}"
+
+                    sales_value = Decimal(str(staff_info['sales_value']))
+                    target_value = Decimal(str(staff_info['target_value']))
+                    achievement_rate = f"{sales_value / target_value:.2%}"
 
                 staff_info["achievement_rate"] = achievement_rate
                 staff_info["target_value_ratio"] = f"{staff_info['target_value_ratio']:.4%}" if staff_info[

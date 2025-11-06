@@ -40,7 +40,7 @@ class TargetStoreUpdate(TargetStoreBase):
 
 class TargetStoreWeekBase(BaseModel):
     week_number: int
-    percentage: float
+    percentage: Decimal
 
     # @field_validator('week_number')
     # @classmethod
@@ -59,7 +59,7 @@ class TargetStoreWeekCreate(BaseModel):
 
 class TargetStoreDailyBase(BaseModel):
     target_date: date
-    percentage: float
+    percentage: Decimal
 
 
 class TargetStoreDailyCreate(BaseModel):
@@ -72,9 +72,9 @@ class TargetStoreDailyCreate(BaseModel):
 
 class StaffAttendanceBase(BaseModel):
     staff_code: str
-    expected_attendance: Optional[float] = None
+    expected_attendance: Optional[Decimal] = None
     position: Optional[str] = None
-    salary_coefficient: Optional[float] = None
+    salary_coefficient: Optional[Decimal] = None
     deletable: Optional[bool] = False
 
 
@@ -88,7 +88,7 @@ class StaffAttendanceCreate(BaseModel):
 
 class Staff_Actual_Attendance(BaseModel):
     staff_code: str
-    actual_attendance: Optional[float] = None
+    actual_attendance: Optional[Decimal] = None
     deletable: Optional[bool] = False
 
 
