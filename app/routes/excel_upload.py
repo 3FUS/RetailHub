@@ -17,7 +17,7 @@ from app.models.target import TargetStoreMain
 from app.services.budget_service import BudgetService
 from app.services.target_service import TargetStoreService, StaffTargetCalculator
 from app.utils.logger import app_logger
-
+from decimal import Decimal
 router = APIRouter(prefix="/excel", tags=["excel"])
 
 
@@ -166,7 +166,7 @@ class ExcelImportService:
                 budget_updates.append({
                     'store_code': str(store_code),
                     'fiscal_month': str(fiscal_month),
-                    'budget_value': float(budget_value) if budget_value else 0
+                    'budget_value': budget_value if budget_value else 0
                 })
 
         updated_budgets = await BudgetService.batch_update_budget_value(db, budget_updates)
@@ -322,9 +322,9 @@ class ExcelImportService:
 
                 # 重置所有相关记录的电商销售数据
                 for record in reset_records:
-                    record.sales_value_ec = 0.0
+                    record.sales_value_ec = Decimal('0')
                     # 销售总额设为线下销售额(如果没有则为0)
-                    record.sales_value = record.sales_value_store or 0.0
+                    record.sales_value = Decimal(str(record.sales_value_store or 0))
 
                 reset_store_stmt = select(TargetStoreMain).where(
                     TargetStoreMain.fiscal_month.in_(list(fiscal_months))
@@ -334,9 +334,9 @@ class ExcelImportService:
 
                 # 重置所有相关门店记录的电商销售数据
                 for record in reset_store_records:
-                    record.sales_value_ec = 0.0
+                    record.sales_value_ec = Decimal('0')
                     # 销售总额设为线下销售额(如果没有则为0)
-                    record.sales_value = record.sales_value_store or 0.0
+                    record.sales_value = Decimal(str(record.sales_value_store or 0))
 
                 # 提交重置操作
                 await db.commit()
@@ -379,11 +379,11 @@ class ExcelImportService:
 
                 if target_store_record:
                     # 更新电商销售金额和总销售金额
-                    target_store_record.sales_value_ec = total_sales_value_ec
-                    # 总销售金额 = 线下销售金额 + 电商销售金额
-                    # sales_value_store = target_store_record.sales_value_store or 0.0
-                    target_store_record.sales_value = (
-                                                              target_store_record.sales_value_store or 0) + total_sales_value_ec
+                    target_store_record.sales_value_ec = Decimal(str(total_sales_value_ec))
+                    # 统一使用 Decimal 类型进行计算
+                    store_sales_value = Decimal(str(target_store_record.sales_value_store or 0))
+                    ec_sales_value = Decimal(str(total_sales_value_ec))
+                    target_store_record.sales_value = store_sales_value + ec_sales_value
                 else:
                     app_logger.warning(
                         f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")

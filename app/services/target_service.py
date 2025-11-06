@@ -984,7 +984,7 @@ class TargetStoreWeekService:
                 # calculated_target_value = round(store_target_value * week_data.percentage / 100)
                 store_target_value = Decimal(str(store_target_value))
                 percentage = Decimal(str(week_data.percentage))
-                calculated_target_value = round(float(store_target_value * percentage / 100))
+                calculated_target_value = round(store_target_value * percentage / 100)
                 total_target_value += calculated_target_value
                 if i == len(weeks_data) - 1:
                     # 最后一条记录使用剩余值

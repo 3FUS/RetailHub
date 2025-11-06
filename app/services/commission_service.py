@@ -240,7 +240,7 @@ class CommissionRPTService:
 
                 # 根据规则类型累加金额
                 rule_class = row.rule_class
-                amount =row.amount if row.amount is not None else 0.0
+                amount = Decimal(str(row.amount)) if row.amount is not None else Decimal('0')
 
                 if rule_class == 'individual':
                     staff_commissions[key]['commission_only'] += amount
