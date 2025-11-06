@@ -364,6 +364,19 @@ class ExcelImportService:
                     app_logger.warning(
                         f"未找到员工考勤记录，将创建新的记录: staff_code={staff_code}, store_code={store_code}, fiscal_month={fiscal_month}")
 
+                    new_attendance_record = StaffAttendanceModel(
+                        staff_code=staff_code,
+                        store_code=store_code,
+                        fiscal_month=fiscal_month,
+                        sales_value_ec=Decimal(str(sales_value_ec)),
+                        sales_value=Decimal(str(sales_value_ec)),  # 初始总销售额等于电商销售额
+                        deletable=True,
+                        created_at=datetime.now()
+                        # 其他必要字段需要根据业务需求设置默认值
+                    )
+                    db.add(new_attendance_record)
+                    updated_attendances += 1
+
                 store_key = (store_code, fiscal_month)
                 if store_key in store_sales_summary:
                     store_sales_summary[store_key] += sales_value_ec
@@ -390,6 +403,7 @@ class ExcelImportService:
                 else:
                     app_logger.warning(
                         f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")
+
 
             # 提交员工考勤更新和门店目标更新
             if ec_sales_summary:
