@@ -57,8 +57,8 @@ class TargetStoreWeek(Base):
     week_number = Column(Integer, primary_key=True)
     percentage = Column(Float, nullable=False)  # 每周目标占比
     target_value = Column(DECIMAL(12, 2))  # 每周目标数值
-    sales_value_ly = Column(Float)
-    sales_value_ly_percentage = Column(Float)
+    sales_value_ly = Column(DECIMAL(12, 2))
+    sales_value_ly_percentage = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -78,8 +78,8 @@ class TargetStoreDaily(Base):
     percentage = Column(Float, nullable=False)  # 每日目标占比
     monthly_percentage = Column(Float)
     target_value = Column(DECIMAL(12, 2))  # 每日目标数值
-    budget_value = Column(Float)
-    sales_value_ly = Column(Float)
+    budget_value = Column(DECIMAL(12, 2))
+    sales_value_ly = Column(DECIMAL(12, 2))
     sales_value_ly_percentage = Column(Float)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))

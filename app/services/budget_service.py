@@ -88,7 +88,7 @@ class BudgetService:
             for idx, row in enumerate(budget_data):
                 date_str =row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None
                 store_code = row.store_code
-                budget_value = float(row.budget_date_value) if row.budget_date_value is not None else 0.0
+                budget_value = row.budget_date_value if row.budget_date_value is not None else 0.0
 
                 if date_str:
                     date_groups[date_str][store_code] = budget_value

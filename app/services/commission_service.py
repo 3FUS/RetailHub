@@ -240,7 +240,7 @@ class CommissionRPTService:
 
                 # 根据规则类型累加金额
                 rule_class = row.rule_class
-                amount = float(row.amount) if row.amount is not None else 0.0
+                amount =row.amount if row.amount is not None else 0.0
 
                 if rule_class == 'individual':
                     staff_commissions[key]['commission_only'] += amount
@@ -541,11 +541,11 @@ class CommissionRPTService:
                     "staff_code": row.staff_code if row.staff_code is not None else '',
                     "full_name": row.full_name if row.full_name is not None else '',
                     "position_code": row.position_code if row.position_code is not None else '',
-                    "commission_only": float(row.commission_only) if row.commission_only is not None else 0.0,
-                    "amount_operational": float(row.amount_operational) if row.amount_operational is not None else 0.0,
-                    "amount_incentive": float(row.amount_incentive) if row.amount_incentive is not None else 0.0,
-                    "amount_adjustment": float(row.amount_adjustment) if row.amount_adjustment is not None else 0.0,
-                    "total_commission": float(row.total_commission) if row.total_commission is not None else 0.0
+                    "commission_only": row.commission_only if row.commission_only is not None else 0.0,
+                    "amount_operational": row.amount_operational if row.amount_operational is not None else 0.0,
+                    "amount_incentive": row.amount_incentive if row.amount_incentive is not None else 0.0,
+                    "amount_adjustment": row.amount_adjustment if row.amount_adjustment is not None else 0.0,
+                    "total_commission": row.total_commission if row.total_commission is not None else 0.0
                 })
 
                 if idx > 0 and idx % 1000 == 0:
