@@ -1635,7 +1635,8 @@ class CommissionService:
 
                     if rule_info.rule_type == 'commission':
                         if sales_value is not None:
-                            commission_amount = sales_value * (rule_detail_value / 100)
+                            # commission_amount = sales_value * (rule_detail_value / 100)
+                            commission_amount = sales_value * (Decimal(str(rule_detail_value)) / Decimal(100))
                             app_logger.debug(f"佣金计算: {sales_value} * ({rule_detail_value}/100) = {commission_amount}")
                     elif rule_info.rule_type == 'incentive':
                         commission_amount = rule_detail_value

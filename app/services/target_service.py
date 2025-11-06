@@ -1295,6 +1295,7 @@ class StaffTargetCalculator:
             return [0] * len(ratios) if ratios else []
 
         # 计算每个员工的初始目标值（整数）
+        store_target_value = Decimal(str(store_target_value))
         staff_target_values = []
         for ratio in ratios:
             staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
@@ -1560,6 +1561,12 @@ class TargetStaffService:
 
             # 计算每个员工的目标值和达成率
             for staff_code, staff_info in staff_attendance_dict.items():
+
+                app_logger.debug(f"Processing staff {staff_code} for achievement rate calculation")
+                app_logger.debug(
+                    f"staff_info[sales_value]: {staff_info['sales_value']} (type: {type(staff_info['sales_value'])})")
+                app_logger.debug(
+                    f"staff_info[target_value]: {staff_info['target_value']} (type: {type(staff_info['target_value'])})")
 
                 # 使用汇总后的数据计算达成率
                 achievement_rate = None
@@ -1881,9 +1888,9 @@ class TargetStaffService:
                     app_logger.debug(f"Initial ratios before adjustment: {ratios}")
 
                     if ratios:
-                        ratio_sum = sum(ratios)
-                        diff = 1.0 - ratio_sum
-                        app_logger.debug(f"Ratio sum: {ratio_sum}, Difference to 1.0: {diff}")
+                        ratio_sum = sum(Decimal(str(r)) for r in ratios)
+                        diff = 1 - ratio_sum
+                        app_logger.debug(f"Ratio sum: {ratio_sum}, Difference to 1: {diff}")
 
                         if diff != 0:
                             # 找到比例最高的员工索引
