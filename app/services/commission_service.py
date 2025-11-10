@@ -1337,6 +1337,48 @@ class CommissionService:
         return {"message": "Commission approved successfully"}
 
     @staticmethod
+    def _create_default_commission_detail(fiscal_month: str, staff: dict, store_code: str,
+                                          store_target_value: float, store_sales_value: float,
+                                          store_achievement_rate: float, staff_target_value: float,
+                                          staff_sales_value: float,
+                                          staff_achievement_rate: float) -> CommissionStaffDetailModel:
+        """
+        创建默认的佣金明细记录
+
+        Args:
+            fiscal_month: 财月
+            staff: 员工信息字典
+            store_code: 店铺代码
+            store_target_value: 店铺目标值
+            store_sales_value: 店铺销售额
+            store_achievement_rate: 店铺达成率
+            staff_target_value: 员工目标值
+            staff_sales_value: 员工销售额
+            staff_achievement_rate: 员工达成率
+
+        Returns:
+            CommissionStaffDetailModel: 佣金明细模型实例
+        """
+        return CommissionStaffDetailModel(
+            fiscal_month=fiscal_month,
+            staff_code=staff['staff_code'],
+            store_code=store_code,
+            position=staff['position'],
+            store_target_value=store_target_value,
+            store_sales_value=store_sales_value,
+            store_achievement_rate=store_achievement_rate,
+            staff_target_value=staff_target_value,
+            staff_sales_value=staff_sales_value,
+            staff_achievement_rate=staff_achievement_rate,
+            expected_attendance=staff['expected_attendance'] or 0,
+            actual_attendance=staff['actual_attendance'] or 0,
+            rule_code='R-00',
+            rule_detail_code='R-00-0',
+            amount=0,
+            total_days_store_work=0
+        )
+
+    @staticmethod
     async def calculate_commissions_for_store(db: AsyncSession, store_code: str, fiscal_month: str):
         """
         为指定店铺计算员工佣金，支持一个岗位对应多个规则的情况
@@ -1581,7 +1623,12 @@ class CommissionService:
                 app_logger.debug(f"员工 {staff['staff_code']} 岗位 {staff['position']} 适用的规则: {rule_codes}")
 
                 if not rule_codes:
-                    app_logger.warning(f"员工 {staff['staff_code']} 没有适用的规则，跳过计算")
+                    app_logger.warning(f"员工 {staff['staff_code']} 没有适用的规则，跳过计算 并记录")
+                    commission_detail_record = CommissionService._create_default_commission_detail(
+                        fiscal_month, staff, store_code, store_target_value, store_sales_value,
+                        store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate
+                    )
+                    db.add(commission_detail_record)
                     continue
 
                 # 为每个适用的规则计算佣金
@@ -1624,7 +1671,12 @@ class CommissionService:
                     matching_detail = rule_detail_result.fetchone()
 
                     if not matching_detail:
-                        app_logger.warning(f"未找到规则 {rule_code} 匹配达成率 {target_achievement_rate}% 的详情")
+                        app_logger.warning(f"未找到规则 {rule_code} 匹配达成率 {target_achievement_rate}% 的详情 并记录")
+                        commission_detail_record = CommissionService._create_default_commission_detail(
+                            fiscal_month, staff, store_code, store_target_value, store_sales_value,
+                            store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate
+                        )
+                        db.add(commission_detail_record)
                         continue
 
                     app_logger.debug(f"匹配的规则详情: {matching_detail}")
