@@ -18,6 +18,7 @@ from app.services.budget_service import BudgetService
 from app.services.target_service import TargetStoreService, StaffTargetCalculator
 from app.utils.logger import app_logger
 from decimal import Decimal
+
 router = APIRouter(prefix="/excel", tags=["excel"])
 
 
@@ -356,9 +357,9 @@ class ExcelImportService:
                 if attendance_record:
                     # 如果记录存在，更新线上销售金额
                     attendance_record.sales_value_ec = Decimal(str(sales_value_ec))
-                    attendance_record.sales_value = (Decimal(
+                    attendance_record.sales_value = round((Decimal(
                         str(attendance_record.sales_value_store)) if attendance_record.sales_value_store else Decimal(
-                        '0')) + Decimal(str(sales_value_ec))
+                        '0')) + Decimal(str(sales_value_ec)))
                     updated_attendances += 1
                 else:
                     app_logger.warning(
@@ -369,7 +370,7 @@ class ExcelImportService:
                         store_code=store_code,
                         fiscal_month=fiscal_month,
                         sales_value_ec=Decimal(str(sales_value_ec)),
-                        sales_value=Decimal(str(sales_value_ec)),  # 初始总销售额等于电商销售额
+                        sales_value=round(Decimal(str(sales_value_ec))),  # 初始总销售额等于电商销售额
                         deletable=True,
                         created_at=datetime.now()
                         # 其他必要字段需要根据业务需求设置默认值
@@ -399,11 +400,10 @@ class ExcelImportService:
                     # 统一使用 Decimal 类型进行计算
                     store_sales_value = Decimal(str(target_store_record.sales_value_store or 0))
                     ec_sales_value = Decimal(str(total_sales_value_ec))
-                    target_store_record.sales_value = store_sales_value + ec_sales_value
+                    target_store_record.sales_value = round(store_sales_value + ec_sales_value)
                 else:
                     app_logger.warning(
                         f"未找到门店目标记录: store_code={store_code}, fiscal_month={fiscal_month}")
-
 
             # 提交员工考勤更新和门店目标更新
             if ec_sales_summary:
