@@ -4,6 +4,7 @@ from typing import Optional, List
 from pydantic import field_validator, model_validator
 from decimal import Decimal
 
+
 class TargetBase(BaseModel):
     name: str
     value: Decimal
@@ -40,14 +41,7 @@ class TargetStoreUpdate(TargetStoreBase):
 
 class TargetStoreWeekBase(BaseModel):
     week_number: int
-    percentage: Decimal
-
-    # @field_validator('week_number')
-    # @classmethod
-    # def week_number_must_be_between_1_and_5(cls, v: int) -> int:
-    #     if v not in [1, 2, 3, 4, 5]:
-    #         raise ValueError('week_number must be one of 1, 2, 3, 4, 5')
-    #     return v
+    percentage: Optional[Decimal] = None
 
 
 class TargetStoreWeekCreate(BaseModel):
@@ -59,7 +53,7 @@ class TargetStoreWeekCreate(BaseModel):
 
 class TargetStoreDailyBase(BaseModel):
     target_date: date
-    percentage: Decimal
+    percentage: Optional[Decimal] = None
 
 
 class TargetStoreDailyCreate(BaseModel):
