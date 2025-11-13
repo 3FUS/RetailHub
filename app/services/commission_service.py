@@ -170,9 +170,9 @@ class CommissionRPTService:
             staff_commissions = defaultdict(lambda: {
                 'staff_no': '',
                 'full_name': '',
-                'terminated_date': '',
                 'position_from_wd': '',
                 'position': '',
+                'terminated_date': '',
                 'expected_attendance': 0,
                 'actual_attendance': 0,
                 'monthly_target': 0,
@@ -1038,9 +1038,9 @@ class CommissionService:
 
             field_translations = {
                 "store_code": {"en": "Store Code", "zh": "店铺代码", "width": 100},
-                "store_name": {"en": "Store Name", "zh": "店铺名称", "width": 120},
-                "store_type": {"en": "Store Type", "zh": "店铺类型", "width": 100},
-                "fiscal_period": {"en": "Period", "zh": "计算期间", "width": 150},
+                "store_name": {"en": "Store Name", "zh": "店铺名称", "width": 180},
+                "store_type": {"en": "Store Type", "zh": "店铺类型", "width": 150},
+                "fiscal_period": {"en": "Period", "zh": "计算期间", "width": 200},
                 "status": {"en": "Status", "zh": "状态", "width": 80},
                 "amount_individual": {"en": "Individual", "zh": "个人提成", "width": 100},
                 "amount_team": {"en": "Pool", "zh": "团队提成", "width": 100},
