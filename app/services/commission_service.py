@@ -17,6 +17,7 @@ from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
 from decimal import Decimal
 
+
 class CommissionRPTService:
 
     @staticmethod
@@ -36,6 +37,7 @@ class CommissionRPTService:
                     CommissionStaffDetailModel.staff_code.label('staff_code'),
                     func.concat(StaffModel.first_name, StaffModel.last_name).label('full_name'),
                     StaffModel.position_code.label('position_code'),
+                    StaffModel.terminated_date.label('terminated_date'),
                     CommissionStaffDetailModel.position.label('position'),
                     CommissionStaffDetailModel.expected_attendance,
                     CommissionStaffDetailModel.actual_attendance,
@@ -168,6 +170,7 @@ class CommissionRPTService:
             staff_commissions = defaultdict(lambda: {
                 'staff_no': '',
                 'full_name': '',
+                'terminated_date': '',
                 'position_from_wd': '',
                 'position': '',
                 'expected_attendance': 0,
@@ -212,6 +215,7 @@ class CommissionRPTService:
                     staff_commissions[key].update({
                         "staff_no": row.staff_code or '',
                         "full_name": row.full_name or '',
+                        "terminated_date": row.terminated_date or '',
                         "position_from_wd": row.position_code or '',
                         "position": row.position or '',
                         "expected_attendance": row.expected_attendance,
@@ -270,38 +274,40 @@ class CommissionRPTService:
             app_logger.info(f"Returning {len(formatted_data)} formatted records")
 
             # 更新后的 field_translations
+            # 在 get_rpt_commission_by_store 方法中，将原来的 field_translations 替换为包含宽度的版本
             field_translations = {
-                "staff_no": {"en": "Staff No.", "zh": "员工ID"},
-                "full_name": {"en": "Staff Name", "zh": "员工姓名"},
-                "position_from_wd": {"en": "Workday Position", "zh": "员工职位"},
-                "position": {"en": "Position", "zh": "职位类型"},
-                "expected_attendance": {"en": "Required Attendance", "zh": "应出勤"},
-                "actual_attendance": {"en": "Actual Attendance", "zh": "实出勤"},
-                "monthly_target": {"en": "Monthly Target", "zh": "月度指标"},
-                "Sales": {"en": "Sales", "zh": "销售额"},
-                "achievement_rate": {"en": "Achievement Rate", "zh": "销售达成率"},
-                "individual_commission_percent": {"en": "Individual Rate", "zh": "个提比例"},
-                "amount_individual": {"en": "Individual", "zh": "个人提成"},
-                "amount_team": {"en": "Pool", "zh": "团队提成"},
-                "commission_only": {"en": "Commission Only", "zh": "仅奖金部分"},
-                "amount_operational": {"en": "Operation", "zh": "运营奖金"},
-                "amount_incentive": {"en": "Incentive", "zh": "激励奖金"},
-                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金"},
-                "total_commission": {"en": "Total Commission", "zh": "总奖金"},
-                "store_code": {"en": "Store Code", "zh": "店铺代码"},
-                "store_name": {"en": "Store Name", "zh": "店铺名称"},
-                "fiscal_month": {"en": "Fiscal Month", "zh": "财月"},
-                "individual_rule": {"en": "Individual Type", "zh": "个提规则"},
-                "team_rule": {"en": "Pool Type", "zh": "团提规则"},
-                "total_days_store_work": {"en": "Total Store Actual Attendance", "zh": "店铺总实出勤"},
-                "store_sales_value": {"en": "Store Sales", "zh": "店铺销售"},
-                "store_achievement_rate": {"en": "Store Achieved Rate", "zh": "店铺达成率"},
-                "manage_region": {"en": "Region", "zh": "店铺区域"},
-                "region_achievement_rate": {"en": "Regional Achieved Rate", "zh": "区域达成率"},
-                "manage_channel": {"en": "Channel", "zh": "渠道"},
-                "channel_achievement_rate": {"en": "Channel Achieved Rate", "zh": "渠道达成率"},
-                "city": {"en": "City", "zh": "城市"},
-                "city_tier": {"en": "City Tier", "zh": "城市等级"}
+                "staff_no": {"en": "Staff No.", "zh": "员工ID", "width": 100},
+                "full_name": {"en": "Staff Name", "zh": "员工姓名", "width": 120},
+                "position_from_wd": {"en": "Workday Position", "zh": "员工职位", "width": 120},
+                "position": {"en": "Position", "zh": "职位类型", "width": 100},
+                "terminated_date": {"en": "Terminated Date", "zh": "离职日期", "width": 120},
+                "expected_attendance": {"en": "Required Attendance", "zh": "应出勤", "width": 100},
+                "actual_attendance": {"en": "Actual Attendance", "zh": "实出勤", "width": 100},
+                "monthly_target": {"en": "Monthly Target", "zh": "月度指标", "width": 110},
+                "Sales": {"en": "Sales", "zh": "销售额", "width": 110},
+                "achievement_rate": {"en": "Achievement Rate", "zh": "销售达成率", "width": 120},
+                "individual_commission_percent": {"en": "Individual Rate", "zh": "个提比例", "width": 100},
+                "amount_individual": {"en": "Individual", "zh": "个人提成", "width": 100},
+                "amount_team": {"en": "Pool", "zh": "团队提成", "width": 100},
+                "commission_only": {"en": "Commission Only", "zh": "仅奖金部分", "width": 120},
+                "amount_operational": {"en": "Operation", "zh": "运营奖金", "width": 100},
+                "amount_incentive": {"en": "Incentive", "zh": "激励奖金", "width": 100},
+                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金", "width": 100},
+                "total_commission": {"en": "Total Commission", "zh": "总奖金", "width": 110},
+                "store_code": {"en": "Store Code", "zh": "店铺代码", "width": 100},
+                "store_name": {"en": "Store Name", "zh": "店铺名称", "width": 120},
+                "fiscal_month": {"en": "Fiscal Month", "zh": "财月", "width": 100},
+                "individual_rule": {"en": "Individual Type", "zh": "个提规则", "width": 100},
+                "team_rule": {"en": "Pool Type", "zh": "团提规则", "width": 100},
+                "total_days_store_work": {"en": "Total Store Actual Attendance", "zh": "店铺总实出勤", "width": 150},
+                "store_sales_value": {"en": "Store Sales", "zh": "店铺销售", "width": 100},
+                "store_achievement_rate": {"en": "Store Achieved Rate", "zh": "店铺达成率", "width": 130},
+                "manage_region": {"en": "Region", "zh": "店铺区域", "width": 100},
+                "region_achievement_rate": {"en": "Regional Achieved Rate", "zh": "区域达成率", "width": 140},
+                "manage_channel": {"en": "Channel", "zh": "渠道", "width": 100},
+                "channel_achievement_rate": {"en": "Channel Achieved Rate", "zh": "渠道达成率", "width": 140},
+                "city": {"en": "City", "zh": "城市", "width": 100},
+                "city_tier": {"en": "City Tier", "zh": "城市等级", "width": 100}
             }
 
             return {
@@ -498,7 +504,8 @@ class CommissionRPTService:
                           CommissionStaffDetailModel.staff_code == StaffModel.staff_code)
                     .join(store_alias,
                           CommissionStoreModel.store_code == store_alias.c.store_code)
-                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month,
+                           CommissionStaffDetailModel.amount > 0)
                     .group_by(
                     store_alias.c.store_name,
                     CommissionStoreModel.store_code,
@@ -1030,16 +1037,16 @@ class CommissionService:
             status_count_dict = {row.status: row.count for row in status_counts}
 
             field_translations = {
-                "store_code": {"en": "Store Code", "zh": "店铺代码"},
-                "store_name": {"en": "Store Name", "zh": "店铺名称"},
-                "store_type": {"en": "Store Type", "zh": "店铺类型"},
-                "fiscal_period": {"en": "Period", "zh": "计算期间"},
-                "status": {"en": "Status", "zh": "状态"},
-                "amount_individual": {"en": "Individual", "zh": "个人提成"},
-                "amount_team": {"en": "Pool", "zh": "团队提成"},
-                "amount_operational": {"en": "Operation", "zh": "运营奖金"},
-                "amount_incentive": {"en": "Incentive", "zh": "激励奖金"},
-                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金"}
+                "store_code": {"en": "Store Code", "zh": "店铺代码", "width": 100},
+                "store_name": {"en": "Store Name", "zh": "店铺名称", "width": 120},
+                "store_type": {"en": "Store Type", "zh": "店铺类型", "width": 100},
+                "fiscal_period": {"en": "Period", "zh": "计算期间", "width": 150},
+                "status": {"en": "Status", "zh": "状态", "width": 80},
+                "amount_individual": {"en": "Individual", "zh": "个人提成", "width": 100},
+                "amount_team": {"en": "Pool", "zh": "团队提成", "width": 100},
+                "amount_operational": {"en": "Operation", "zh": "运营奖金", "width": 100},
+                "amount_incentive": {"en": "Incentive", "zh": "激励奖金", "width": 100},
+                "amount_adjustment": {"en": "Adjustment", "zh": "调整奖金", "width": 100}
             }
 
             month_end_value = await CommissionUtil.get_month_end_value(db, fiscal_month)
@@ -1072,7 +1079,8 @@ class CommissionService:
                 CommissionRuleDetailModel.start_value,
                 CommissionRuleDetailModel.end_value,
                 CommissionRuleDetailModel.value,
-                CommissionStaffModel.amount
+                CommissionStaffModel.amount,
+                CommissionStaffModel.remarks
             )
                 .select_from(CommissionStaffModel)
                 .join(CommissionRuleDetailModel,
@@ -1111,7 +1119,7 @@ class CommissionService:
                 "rule_class": commission.rule_class,
                 "rule_type": commission.rule_type,
                 "rule_basis": commission.rule_basis,
-                "formula": formula if commission.rule_code != 'adjustment' else '',
+                "formula": formula if commission.rule_code != 'adjustment' else commission.remarks,
                 "amount": commission.amount if commission.amount is not None else 0.0
             })
 
@@ -1125,6 +1133,7 @@ class CommissionService:
                 staff_code=adjustment.staff_code,
                 store_code=adjustment.store_code,
                 amount=adjustment.amount,
+                remarks=adjustment.remarks,
                 rule_detail_code="Z-01"  # 设置为调整类型
             )
 

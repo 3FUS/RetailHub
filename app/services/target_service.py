@@ -1294,27 +1294,39 @@ class StaffTargetCalculator:
         Returns:
             list: 员工目标值列表
         """
+        app_logger.debug(f"Calculating staff targets - store_target_value: {store_target_value}, ratios: {ratios}")
+
         if store_target_value <= 0 or not ratios:
-            return [0] * len(ratios) if ratios else []
+            app_logger.debug("Invalid input: store_target_value <= 0 or empty ratios, returning zeros")
+            result = [0] * len(ratios) if ratios else []
+            app_logger.debug(f"Returning result: {result}")
+            return result
 
         # 计算每个员工的初始目标值（整数）
         store_target_value = Decimal(str(store_target_value))
+        app_logger.debug(f"Converted store_target_value to Decimal: {store_target_value}")
+
         staff_target_values = []
-        for ratio in ratios:
+        for i, ratio in enumerate(ratios):
             # 确保 ratio 也是 Decimal 类型
             ratio = Decimal(str(ratio)) if ratio else Decimal('0.000000')
             staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
             staff_target_values.append(int(staff_target_value))
+            app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={int(staff_target_value)}")
 
         # 计算总和与门店目标值的差异
         total_staff_target = sum(staff_target_values)
         difference = int(store_target_value) - total_staff_target
+        app_logger.debug(f"Total staff target: {total_staff_target}, difference: {difference}")
 
         # 找到目标值最大的员工索引，将差异加到该员工身上
         if difference != 0 and staff_target_values:
             max_target_index = staff_target_values.index(max(staff_target_values))
             staff_target_values[max_target_index] += difference
+            app_logger.debug(
+                f"Adjusted staff {max_target_index} target by {difference}, new value: {staff_target_values[max_target_index]}")
 
+        app_logger.debug(f"Final staff target values: {staff_target_values}")
         return staff_target_values
 
     @staticmethod
@@ -1329,10 +1341,18 @@ class StaffTargetCalculator:
         Returns:
             int: 员工目标值
         """
+        app_logger.debug(
+            f"Calculating staff target from ratio - store_target_value: {store_target_value}, ratio: {ratio}")
+
         if store_target_value <= 0 or ratio <= 0:
+            app_logger.debug("Invalid input values - returning 0")
             return 0
 
-        return int(round(store_target_value * ratio, 0))
+        result = int(round(store_target_value * ratio, 0))
+        app_logger.debug(
+            f"Calculated staff target value: {result} from store_target_value: {store_target_value} * ratio: {ratio}")
+
+        return result
 
 
 class TargetStaffService:

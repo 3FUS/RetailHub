@@ -15,10 +15,10 @@ class StaffAttendanceModel(Base):
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)
     fiscal_month = Column(String(50), primary_key=True)  # 财月
-    expected_attendance = Column(DECIMAL(12, 2))   # 应出勤天数
-    actual_attendance = Column(DECIMAL(12, 2))   # 实际出勤天数
+    expected_attendance = Column(DECIMAL(12, 2))  # 应出勤天数
+    actual_attendance = Column(DECIMAL(12, 2))  # 实际出勤天数
     position = Column(String(100))  # 职位
-    salary_coefficient = Column(DECIMAL(12, 2))   # 目标系数
+    salary_coefficient = Column(DECIMAL(12, 2))  # 目标系数
     target_value_ratio = Column(DECIMAL(12, 6))
     target_value = Column(DECIMAL(12, 2))  # 个人销售目标
     sales_value = Column(DECIMAL(12, 2))  # 个人总销金额 线下+线上
@@ -48,6 +48,7 @@ class StaffModel(Base):
     salary_coefficient = Column(DECIMAL(12, 2))
     gender = Column(String(10))  # 性别
     birth_date = Column(DateTime)  # 生日
+    terminated_date = Column(DateTime)
     suffix = Column(String(10))
     mobile = Column(String(20))  # 手机
     telephone = Column(String(20))  # 电话

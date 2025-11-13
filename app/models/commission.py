@@ -49,6 +49,7 @@ class CommissionStaffModel(Base):
     store_code = Column(String(30), primary_key=True)
     amount = Column(DECIMAL(12, 2))
     rule_detail_code = Column(String(60), primary_key=True)  # rule_detail_code
+    remarks = Column(Text)
     total_days_store_work = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
@@ -73,6 +74,7 @@ class CommissionStaffDetailModel(Base):
     amount = Column(DECIMAL(12, 2))
     rule_code = Column(String(30), primary_key=True)
     rule_detail_code = Column(String(60), primary_key=True)
+    remarks = Column(Text)
     total_days_store_work = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))

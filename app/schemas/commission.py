@@ -23,6 +23,7 @@ class CommissionStaffCreate(BaseModel):
     staff_code: str
     store_code: str
     amount: Decimal
+    remarks: Optional[str] = None
 
 
 class BatchApprovedCommission(BaseModel):
