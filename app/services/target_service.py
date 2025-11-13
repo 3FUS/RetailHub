@@ -1311,12 +1311,12 @@ class StaffTargetCalculator:
             # 确保 ratio 也是 Decimal 类型
             ratio = Decimal(str(ratio)) if ratio else Decimal('0.000000')
             staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
-            staff_target_values.append(int(staff_target_value))
-            app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={int(staff_target_value)}")
+            staff_target_values.append(staff_target_value)
+            app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={staff_target_value}")
 
         # 计算总和与门店目标值的差异
         total_staff_target = sum(staff_target_values)
-        difference = int(store_target_value) - total_staff_target
+        difference = store_target_value - total_staff_target
         app_logger.debug(f"Total staff target: {total_staff_target}, difference: {difference}")
 
         # 找到目标值最大的员工索引，将差异加到该员工身上
