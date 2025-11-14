@@ -17,7 +17,7 @@ from datetime import datetime
 from app.services.commission_service import CommissionUtil
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
-from decimal import Decimal
+from decimal import Decimal,ROUND_HALF_UP
 
 class TargetRPTService:
 
@@ -1310,7 +1310,9 @@ class StaffTargetCalculator:
         for i, ratio in enumerate(ratios):
             # 确保 ratio 也是 Decimal 类型
             ratio = Decimal(str(ratio)) if ratio else Decimal('0')
-            staff_target_value = round(store_target_value * ratio, 0) if ratio else Decimal('0')
+            # staff_target_value = round(store_target_value * ratio, 0) if ratio else Decimal('0')
+            staff_target_value = Decimal(str(store_target_value * ratio)).quantize(Decimal('1'), rounding=ROUND_HALF_UP) if ratio else Decimal('0')
+
             staff_target_values.append(staff_target_value)
             app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={staff_target_value}")
 
