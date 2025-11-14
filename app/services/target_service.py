@@ -1309,8 +1309,8 @@ class StaffTargetCalculator:
         staff_target_values = []
         for i, ratio in enumerate(ratios):
             # 确保 ratio 也是 Decimal 类型
-            ratio = Decimal(str(ratio)) if ratio else Decimal('0.000000')
-            staff_target_value = round(store_target_value * ratio, 0) if ratio else 0.0
+            ratio = Decimal(str(ratio)) if ratio else Decimal('0')
+            staff_target_value = round(store_target_value * ratio, 0) if ratio else Decimal('0')
             staff_target_values.append(staff_target_value)
             app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={staff_target_value}")
 
@@ -1322,7 +1322,8 @@ class StaffTargetCalculator:
         # 找到目标值最大的员工索引，将差异加到该员工身上
         if difference != 0 and staff_target_values:
             max_target_index = staff_target_values.index(max(staff_target_values))
-            staff_target_values[max_target_index] += difference
+            difference_decimal = Decimal(str(difference))
+            staff_target_values[max_target_index] += difference_decimal
             app_logger.debug(
                 f"Adjusted staff {max_target_index} target by {difference}, new value: {staff_target_values[max_target_index]}")
 
@@ -1330,7 +1331,7 @@ class StaffTargetCalculator:
         return staff_target_values
 
     @staticmethod
-    def calculate_staff_target_from_ratio(store_target_value: Decimal, ratio: Decimal) -> int:
+    def calculate_staff_target_from_ratio(store_target_value: Decimal, ratio: Decimal):
         """
         根据门店目标值和单个员工比例计算员工目标值
 
@@ -1348,7 +1349,7 @@ class StaffTargetCalculator:
             app_logger.debug("Invalid input values - returning 0")
             return 0
 
-        result = int(round(store_target_value * ratio, 0))
+        result = round(store_target_value * ratio, 0)
         app_logger.debug(
             f"Calculated staff target value: {result} from store_target_value: {store_target_value} * ratio: {ratio}")
 
