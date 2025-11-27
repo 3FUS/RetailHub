@@ -1,5 +1,5 @@
 from collections import defaultdict
-from sqlalchemy import String, func, null, cast, Integer,update
+from sqlalchemy import String, func, null, cast, Integer, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_, and_
@@ -656,7 +656,6 @@ class TargetStoreService:
                 .where(TargetStoreMain.fiscal_month == fiscal_month)
                 .values(target_value=0)
         )
-
 
         updated_targets = []
 
@@ -1739,7 +1738,7 @@ class TargetStaffService:
             store_sales_value = store_target_record.sales_value if store_target_record.sales_value else 0
             staff_status = store_target_record.staff_status
             store_status = store_target_record.store_status
-            commission_status = store_target_record.commission_status,
+            commission_status = store_target_record.commission_status
             opening_days = store_target_record.opening_days
 
             commission_status_details = {
@@ -1776,6 +1775,7 @@ class TargetStaffService:
                 'reject_remarks': store_target_record.staff_reject_remarks
             }
         else:
+            opening_days = 0
             store_target_value = 0.0
             store_sales_value = 0.0
             staff_status = None
