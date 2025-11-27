@@ -29,6 +29,7 @@ class CommissionStoreModel(Base):
     remarks = Column(Text)
     merged_store_codes = Column(String(255))
     merged_flag = Column(Boolean, default=False)
+    opening_days = Column(Integer)
     version = Column(Integer, default=1)
     saved_by = Column(String(30))
     saved_at = Column(DateTime, default=datetime.utcnow)
@@ -93,6 +94,7 @@ class CommissionRuleModel(Base):
     minimum_guarantee = Column(DECIMAL(12, 2))  # 保底金额字段
     consider_attendance = Column(Integer, default=0)  # 是否考虑出勤比例
     minimum_guarantee_on_attendance = Column(DECIMAL(12, 2))
+    attendance_calculation_logic = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

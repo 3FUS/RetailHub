@@ -1,5 +1,5 @@
 from collections import defaultdict
-from sqlalchemy import String, func, null, cast, Integer
+from sqlalchemy import String, func, null, cast, Integer,update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_, and_
@@ -17,7 +17,8 @@ from datetime import datetime
 from app.services.commission_service import CommissionUtil
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
-from decimal import Decimal,ROUND_HALF_UP
+from decimal import Decimal, ROUND_HALF_UP
+
 
 class TargetRPTService:
 
@@ -634,6 +635,29 @@ class TargetStoreService:
             db: 数据库会话
             target_updates: 包含 store_code, fiscal_month, target_value 的字典列表
         """
+
+        if not target_updates:
+            return []
+
+            # 获取 fiscal_month（假设所有更新记录具有相同的 fiscal_month）
+        fiscal_month = target_updates[0].get('fiscal_month')
+
+        if not fiscal_month:
+            raise ValueError("fiscal_month is required in target_updates")
+
+            # 第一步：将指定 fiscal_month 的所有 TargetStoreMain 记录的 target_value 设置为 0
+        await db.execute(
+            select(TargetStoreMain)
+                .where(TargetStoreMain.fiscal_month == fiscal_month)
+                .execution_options(synchronize_session=False)
+        )
+        await db.execute(
+            update(TargetStoreMain)
+                .where(TargetStoreMain.fiscal_month == fiscal_month)
+                .values(target_value=0)
+        )
+
+
         updated_targets = []
 
         for update_data in target_updates:
@@ -928,7 +952,8 @@ class TargetStoreWeekService:
                 TargetStoreWeek.percentage,
                 TargetStoreWeek.target_value,
                 TargetStoreWeek.sales_value_ly,
-                TargetStoreWeek.sales_value_ly_percentage
+                TargetStoreWeek.sales_value_ly_percentage,
+                TargetStoreWeek.sales_value_ly_percentage_round
 
             ).where(
                 TargetStoreWeek.store_code == store_code,
@@ -943,7 +968,8 @@ class TargetStoreWeekService:
                 "percentage": row.percentage if row.percentage is not None else None,
                 "target_value": row.target_value if row.target_value is not None else None,
                 "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None,
-                "sales_value_ly_percentage": row.sales_value_ly_percentage if row.sales_value_ly_percentage is not None else None
+                "sales_value_ly_percentage": row.sales_value_ly_percentage if row.sales_value_ly_percentage is not None else None,
+                "sales_value_ly_percentage_round": row.sales_value_ly_percentage_round if row.sales_value_ly_percentage_round is not None else None
             }
             for row in current_weeks
         ]
@@ -1056,7 +1082,8 @@ class TargetStoreDailyService:
                 TargetStoreDaily.percentage,
                 TargetStoreDaily.target_value,
                 TargetStoreDaily.sales_value_ly,
-                TargetStoreDaily.sales_value_ly_percentage
+                TargetStoreDaily.sales_value_ly_percentage,
+                TargetStoreDaily.sales_value_ly_percentage_round
 
             )
                 .select_from(
@@ -1103,7 +1130,8 @@ class TargetStoreDailyService:
                 "percentage": row.percentage if row.percentage is not None else None,
                 "target_value": row.target_value if row.target_value is not None else None,
                 "sales_value_ly_percentage": row.sales_value_ly_percentage if row.sales_value_ly_percentage is not None else None,
-                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None
+                "sales_value_ly": row.sales_value_ly if row.sales_value_ly is not None else None,
+                "sales_value_ly_percentage_round": row.sales_value_ly_percentage_round if row.sales_value_ly_percentage_round is not None else None
             }
             for row in target_daily
         ]
@@ -1311,7 +1339,9 @@ class StaffTargetCalculator:
             # 确保 ratio 也是 Decimal 类型
             ratio = Decimal(str(ratio)) if ratio else Decimal('0')
             # staff_target_value = round(store_target_value * ratio, 0) if ratio else Decimal('0')
-            staff_target_value = Decimal(str(store_target_value * ratio)).quantize(Decimal('1'), rounding=ROUND_HALF_UP) if ratio else Decimal('0')
+            staff_target_value = Decimal(str(store_target_value * ratio)).quantize(Decimal('1'),
+                                                                                   rounding=ROUND_HALF_UP) if ratio else Decimal(
+                '0')
 
             staff_target_values.append(staff_target_value)
             app_logger.debug(f"Staff {i}: ratio={ratio}, calculated_target={staff_target_value}")
@@ -1369,7 +1399,7 @@ class TargetStaffService:
             store_target_record = await TargetStaffService._fetch_store_target_data(db, fiscal_month, store_code)
 
             # Step 2: 提取门店相关基础信息
-            store_target_value, store_sales_value, staff_status, store_status, commission_status, \
+            opening_days, store_target_value, store_sales_value, staff_status, store_status, commission_status, \
             commission_status_details, store_status_details, staff_status_details = \
                 TargetStaffService._extract_store_info(store_target_record)
 
@@ -1577,15 +1607,16 @@ class TargetStaffService:
                         # 如果当前值为 None 但新增值不为 None，则使用新增值
                         staff_attendance_dict[staff_code]["actual_attendance"] = additional_actual
 
-                    staff_attendance_dict[staff_code]["sales_value"] += row.sales_value if row.sales_value is not None else 0.0
+                    staff_attendance_dict[staff_code][
+                        "sales_value"] += row.sales_value if row.sales_value is not None else 0.0
 
                     staff_attendance_dict[staff_code][
                         "target_value"] += row.target_value if row.target_value is not None else 0.0
 
                 if row.fiscal_month == fiscal_month:
-
                     staff_attendance_dict[staff_code]["position"] = position
-                    staff_attendance_dict[staff_code]["salary_coefficient"] = salary_coefficient if salary_coefficient is not None else None
+                    staff_attendance_dict[staff_code][
+                        "salary_coefficient"] = salary_coefficient if salary_coefficient is not None else None
 
             # 计算每个员工的目标值和达成率
             for staff_code, staff_info in staff_attendance_dict.items():
@@ -1600,7 +1631,6 @@ class TargetStaffService:
                 if (staff_info["sales_value"] is not None and
                         staff_info['target_value'] is not None and
                         staff_info['target_value'] > 0):
-
                     sales_value = Decimal(str(staff_info['sales_value']))
                     target_value = Decimal(str(staff_info['target_value']))
                     achievement_rate = f"{sales_value / target_value:.2%}"
@@ -1620,7 +1650,8 @@ class TargetStaffService:
                 "header_info": {
                     "store_target_value": store_target_value if should_values else 0,
                     "store_sales_value": store_sales_value,
-                    "fiscal_period": fiscal_period,  # 新增的财月日期范围
+                    "fiscal_period": fiscal_period,
+                    "opening_days": opening_days,
                     "min_date": min_date,
                     "staff_status": staff_status,
                     "staff_status_details": staff_status_details,
@@ -1682,7 +1713,8 @@ class TargetStaffService:
                 CommissionStoreModel.reject_remarks,
                 CommissionStoreModel.merged_store_codes,
                 CommissionStoreModel.merged_flag,
-                CommissionStoreModel.fiscal_period
+                CommissionStoreModel.fiscal_period,
+                CommissionStoreModel.opening_days
             )
                 .select_from(
                 TargetStoreMain.__table__.join(
@@ -1707,7 +1739,8 @@ class TargetStaffService:
             store_sales_value = store_target_record.sales_value if store_target_record.sales_value else 0
             staff_status = store_target_record.staff_status
             store_status = store_target_record.store_status
-            commission_status = store_target_record.commission_status
+            commission_status = store_target_record.commission_status,
+            opening_days = store_target_record.opening_days
 
             commission_status_details = {
                 'saved_by': store_target_record.saved_by,
@@ -1752,7 +1785,7 @@ class TargetStaffService:
             store_status_details = {}
             staff_status_details = {}
 
-        return (store_target_value, store_sales_value, staff_status, store_status,
+        return (opening_days, store_target_value, store_sales_value, staff_status, store_status,
                 commission_status, commission_status_details, store_status_details, staff_status_details)
 
     @staticmethod

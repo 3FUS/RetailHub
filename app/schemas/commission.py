@@ -3,12 +3,14 @@ from datetime import datetime
 from typing import Optional, List
 from decimal import Decimal
 
+
 class CommissionBase(BaseModel):
     fiscal_month: str
     store_code: str
     fiscal_period: Optional[str] = None
     status: Optional[str] = "saved"
     remarks: Optional[str] = None
+
 
 class CommissionCreate(CommissionBase):
     pass
@@ -32,10 +34,12 @@ class BatchApprovedCommission(BaseModel):
     status: str = "approved"
     remarks: Optional[str] = None
 
+
 class WithdrawnCommission(BaseModel):
     fiscal_month: str
     store_code: str
     status: str = "saved"
+
 
 class StoreTypeUpdate(BaseModel):
     fiscal_month: str
@@ -47,3 +51,9 @@ class FiscalPeriodUpdate(BaseModel):
     fiscal_month: str
     store_code: str
     fiscal_period: List[str]
+
+
+class UpdateOpeningDay(BaseModel):
+    fiscal_month: str
+    store_code: str
+    opening_days: int

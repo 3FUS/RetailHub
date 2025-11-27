@@ -830,6 +830,41 @@ class CommissionService:
             raise e
 
     @staticmethod
+    async def update_opening_day(db: AsyncSession, fiscal_month: str, store_code: str, opening_days: int) -> bool:
+
+        try:
+            app_logger.info(
+                f"开始更新店铺开店天数: fiscal_month={fiscal_month}, store_code={store_code}, opening_days={opening_days}")
+
+            # 查询对应的 CommissionStoreModel 记录
+            result = await db.execute(
+                select(CommissionStoreModel)
+                    .where(CommissionStoreModel.fiscal_month == fiscal_month)
+                    .where(CommissionStoreModel.store_code == store_code)
+            )
+
+            commission_store = result.scalar_one_or_none()
+
+            if commission_store:
+                # 更新开店天数字段
+                commission_store.opening_days = opening_days
+                commission_store.updated_at = datetime.now()
+
+                await db.commit()
+                await db.refresh(commission_store)
+
+                app_logger.info(f"成功更新店铺 {store_code} 在财月 {fiscal_month} 的开店天数为 {opening_days}")
+                return True
+            else:
+                app_logger.warning(f"更新店铺 未找到店铺 {store_code} 在财月 {fiscal_month} 的记录")
+                return False
+
+        except Exception as e:
+            app_logger.error(f"更新开店天数时发生错误: {str(e)}")
+            await db.rollback()
+            raise e
+
+    @staticmethod
     async def batch_approved_commission_by_store_codes(db: AsyncSession, request: BatchApprovedCommission,
                                                        role_code: str = 'system') -> bool:
         try:
@@ -1262,7 +1297,8 @@ class CommissionService:
 
     @staticmethod
     def apply_attendance_adjustment(commission_amount: Decimal, staff: dict,
-                                    rule_info, position_stats: dict) -> Decimal:
+                                    rule_info, position_stats: dict, opening_days: int = 0,
+                                    fiscal_days: int = 0) -> Decimal:
         """
         应用出勤率调整
 
@@ -1323,7 +1359,20 @@ class CommissionService:
         elif rule_info.consider_attendance == 2:
             # 个人出勤模式
             app_logger.debug(f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 使用个人出勤模式")
-            attendance_factor = actual_attendance / expected_attendance
+            # attendance_factor = actual_attendance / expected_attendance
+            if rule_info.attendance_calculation_logic == 1 and opening_days and opening_days > 0:
+                # 使用实际出勤天数/开店天数
+                attendance_factor = actual_attendance / Decimal(str(opening_days))
+                app_logger.debug(f"使用实际出勤/开店天数计算因子: {actual_attendance} / {opening_days} = {attendance_factor}")
+            elif rule_info.attendance_calculation_logic == 2 and fiscal_days and fiscal_days > 0:
+                # 使用实际出勤天数/财月天数
+                attendance_factor = actual_attendance / Decimal(str(fiscal_days))
+                app_logger.debug(f"使用实际出勤/财月天数计算因子: {actual_attendance} / {fiscal_days} = {attendance_factor}")
+            else:
+                # 默认使用实际出勤/应出勤
+                attendance_factor = actual_attendance / expected_attendance
+                app_logger.debug(f"使用实际出勤/应出勤计算因子: {actual_attendance} / {expected_attendance} = {attendance_factor}")
+
             adjusted_amount = commission_amount * attendance_factor
             app_logger.debug(f"个人出勤模式调整 - 出勤因子: {attendance_factor}, 调整后金额: {adjusted_amount}")
             return adjusted_amount
@@ -1405,7 +1454,8 @@ class CommissionService:
 
             commission_store_result = await db.execute(
                 select(CommissionStoreModel.merged_store_codes, CommissionStoreModel.merged_flag,
-                       CommissionStoreModel.store_type, CommissionStoreModel.fiscal_period)
+                       CommissionStoreModel.store_type, CommissionStoreModel.fiscal_period,
+                       CommissionStoreModel.opening_days)
                     .where(
                     CommissionStoreModel.store_code == store_code,
                     CommissionStoreModel.fiscal_month == fiscal_month
@@ -1452,6 +1502,8 @@ class CommissionService:
                 store_sales_value += store_data.sales_value or 0
 
             store_type = commission_store_record.store_type
+            opening_days = commission_store_record.opening_days
+            fiscal_days = await CommissionService.get_fiscal_month_days(db, month_codes)
 
             app_logger.debug(
                 f"店铺 {store_code} -> {merged_codes} 类型: {store_type}, 目标值: {store_target_value}, 销售额: {store_sales_value}")
@@ -1495,7 +1547,8 @@ class CommissionService:
                 delete(CommissionStaffModel)
                     .where(
                     CommissionStaffModel.fiscal_month == fiscal_month,
-                    CommissionStaffModel.store_code == store_code
+                    CommissionStaffModel.store_code == store_code,
+                    CommissionStaffModel.rule_detail_code != "Z-01"
                 )
             )
             app_logger.debug(f"删除了 {delete_result.rowcount} 条现有佣金记录")
@@ -1505,7 +1558,8 @@ class CommissionService:
                 delete(CommissionStaffDetailModel)
                     .where(
                     CommissionStaffDetailModel.fiscal_month == fiscal_month,
-                    CommissionStaffDetailModel.store_code == store_code
+                    CommissionStaffDetailModel.store_code == store_code,
+                    CommissionStaffModel.rule_detail_code != "Z-01"
                 )
             )
             app_logger.debug(f"删除了 {delete_detail_result.rowcount} 条现有佣金明细记录")
@@ -1561,7 +1615,8 @@ class CommissionService:
                     CommissionRuleModel.rule_type,
                     CommissionRuleModel.minimum_guarantee,
                     CommissionRuleModel.consider_attendance,
-                    CommissionRuleModel.minimum_guarantee_on_attendance
+                    CommissionRuleModel.minimum_guarantee_on_attendance,
+                    CommissionRuleModel.attendance_calculation_logic
                 ).where(
                     CommissionRuleModel.rule_code.in_(all_rule_codes)
                 )
@@ -1706,7 +1761,7 @@ class CommissionService:
                     # 考虑出勤率
                     if rule_info.consider_attendance and rule_info.consider_attendance > 0:
                         commission_amount = CommissionService.apply_attendance_adjustment(
-                            commission_amount, staff, rule_info, position_stats
+                            commission_amount, staff, rule_info, position_stats, opening_days, fiscal_days
                         )
                         app_logger.debug(f"应用出勤调整后金额: {commission_amount}")
                     else:
@@ -1722,12 +1777,46 @@ class CommissionService:
                         actual_attendance = staff['actual_attendance'] or 0
 
                         if rule_info.minimum_guarantee_on_attendance == 1 and expected_attendance > 0:
-                            attendance_factor = actual_attendance / expected_attendance
+                            # attendance_factor = actual_attendance / expected_attendance
+
+                            if rule_info.attendance_calculation_logic == 1 and opening_days and opening_days > 0:
+                                # 使用实际出勤天数/开店天数
+                                attendance_factor = actual_attendance / Decimal(str(opening_days))
+                                app_logger.debug(
+                                    f"保底使用实际出勤/开店天数计算因子: {actual_attendance} / {opening_days} = {attendance_factor}")
+                            elif rule_info.attendance_calculation_logic == 2 and fiscal_days and fiscal_days > 0:
+                                # 使用实际出勤天数/财月天数
+                                attendance_factor = actual_attendance / Decimal(str(fiscal_days))
+                                app_logger.debug(
+                                    f"保底使用实际出勤/财月天数计算因子: {actual_attendance} / {fiscal_days} = {attendance_factor}")
+                            else:
+                                # 默认使用实际出勤/应出勤
+                                attendance_factor = actual_attendance / expected_attendance
+                                app_logger.debug(
+                                    f"保底使用实际出勤/应出勤计算因子: {actual_attendance} / {expected_attendance} = {attendance_factor}")
+
                             commission_amount = commission_amount * attendance_factor
                             app_logger.debug(
                                 f"保底金额考虑出勤比例: 保底金额 {rule_info.minimum_guarantee} * 出勤率 {attendance_factor} = 调整后金额 {commission_amount}")
                         elif rule_info.minimum_guarantee_on_attendance > 1 and expected_attendance > 0:
-                            attendance_percentage = (actual_attendance / expected_attendance) * 100
+                            # attendance_percentage = (actual_attendance / expected_attendance) * 100
+
+                            if rule_info.attendance_calculation_logic == 1 and opening_days and opening_days > 0:
+                                # 使用实际出勤天数/开店天数计算出勤率
+                                attendance_percentage = (actual_attendance / Decimal(str(opening_days))) * 100
+                                app_logger.debug(
+                                    f"使用实际出勤/开店天数计算出勤率: {actual_attendance} / {opening_days} * 100 = {attendance_percentage}%")
+                            elif rule_info.attendance_calculation_logic == 2 and fiscal_days and fiscal_days > 0:
+                                # 使用实际出勤天数/财月天数计算出勤率
+                                attendance_percentage = (actual_attendance / Decimal(str(fiscal_days))) * 100
+                                app_logger.debug(
+                                    f"使用实际出勤/财月天数计算出勤率: {actual_attendance} / {fiscal_days} * 100 = {attendance_percentage}%")
+                            else:
+                                # 默认使用实际出勤/应出勤计算出勤率
+                                attendance_percentage = (actual_attendance / expected_attendance) * 100
+                                app_logger.debug(
+                                    f"使用实际出勤/应出勤计算出勤率: {actual_attendance} / {expected_attendance} * 100 = {attendance_percentage}%")
+
                             if attendance_percentage < rule_info.minimum_guarantee_on_attendance:
                                 commission_amount = 0
                                 app_logger.debug(
@@ -1796,6 +1885,32 @@ class CommissionService:
             app_logger.error(f"计算店铺 {store_code} 在财月 {fiscal_month} 的佣金时发生错误: {e}", exc_info=True)
             await db.rollback()
             raise e
+
+    @staticmethod
+    async def get_fiscal_month_days(db: AsyncSession, months: list) -> int:
+
+        try:
+            # 查询指定财月的最小和最大日期
+            date_query = select(
+                func.min(DimensionDayWeek.actual_date).label('min_date'),
+                func.max(DimensionDayWeek.actual_date).label('max_date')
+            ).where(
+                DimensionDayWeek.fiscal_month.in_(months)
+            )
+
+            date_result = await db.execute(date_query)
+            date_row = date_result.fetchone()
+
+            if date_row and date_row.min_date and date_row.max_date:
+                days_diff = (date_row.max_date - date_row.min_date).days + 1
+                return days_diff
+            else:
+                app_logger.warning(f"未能找到财月 {months} 的日期范围")
+                return 0
+
+        except Exception as e:
+            app_logger.error(f"获取财月 {months} 天数时发生错误: {e}")
+            return 0
 
     @staticmethod
     async def update_store_type(db: AsyncSession, fiscal_month: str, store_code: str, store_type: str):

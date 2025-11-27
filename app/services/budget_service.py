@@ -10,7 +10,7 @@ from app.models.dimension import DimensionDayWeek
 from app.models.target import TargetStoreDaily, TargetStoreWeek, TargetStoreMain
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
-
+from sqlalchemy import update
 class BudgetService:
     @staticmethod
     async def get_budget_data(db: AsyncSession, fiscal_month: str, key_word: str, status: str, role_code: str) -> dict:
@@ -141,6 +141,23 @@ class BudgetService:
             db: 数据库会话
             budget_updates: 包含 store_code, fiscal_month, budget_value 的字典列表
         """
+
+        if not budget_updates:
+            return []
+
+            # 获取 fiscal_month（假设所有更新记录具有相同的 fiscal_month）
+        fiscal_month = budget_updates[0].get('fiscal_month')
+
+        if not fiscal_month:
+            raise ValueError("fiscal_month is required in budget_updates")
+
+        # 第一步：将指定 fiscal_month 的所有 BudgetModel 记录的 budget_value 设置为 0
+        await db.execute(
+            update(BudgetModel)
+                .where(BudgetModel.fiscal_month == fiscal_month)
+                .values(budget_value=0)
+        )
+
         updated_budgets = []
 
         for update_data in budget_updates:

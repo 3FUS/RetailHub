@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommission, FiscalPeriodUpdate, StoreTypeUpdate, \
-    WithdrawnCommission
+    WithdrawnCommission, UpdateOpeningDay
 from app.schemas.target import StaffAttendanceUpdate
 from app.services.commission_service import CommissionService
 from app.database import get_db
@@ -134,6 +134,15 @@ async def add_adjustment(add_adjustment: CommissionStaffCreate, db: AsyncSession
         app_logger.error(f"add_adjustment An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": f"An error occurred while fetching targets {str(e)}"}
 
+@router.post("/update_opening_day")
+async def update_opening_day(request: UpdateOpeningDay, db: AsyncSession = Depends(get_db)):
+    try:
+        data = await CommissionService.update_opening_day(db, request.fiscal_month, request.store_code, request.opening_days)
+        return {"code": 200, "data": data, "msg": "Success"}
+
+    except SQLAlchemyError as e:
+        app_logger.error(f"update_opening_day An error occurred while fetching targets: {str(e)}")
+        return {"code": 500, "msg": f"update_opening_day An error occurred while fetching targets"}
 
 @router.post("/batch_Approved")
 async def batch_audit_commission(request: BatchApprovedCommission, db: AsyncSession = Depends(get_db),

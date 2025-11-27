@@ -59,6 +59,7 @@ class TargetStoreWeek(Base):
     target_value = Column(DECIMAL(12, 2))  # 每周目标数值
     sales_value_ly = Column(DECIMAL(12, 2))
     sales_value_ly_percentage = Column(DECIMAL(12, 2))
+    sales_value_ly_percentage_round = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -81,6 +82,7 @@ class TargetStoreDaily(Base):
     budget_value = Column(DECIMAL(12, 2))
     sales_value_ly = Column(DECIMAL(12, 2))
     sales_value_ly_percentage = Column(DECIMAL(12, 2))
+    sales_value_ly_percentage_round = Column(DECIMAL(12, 2))
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
