@@ -1601,10 +1601,16 @@ class TargetStaffService:
                         staff_attendance_dict[staff_code]["expected_attendance"] = additional_expected
 
                     if current_actual is not None:
-                        staff_attendance_dict[staff_code]["actual_attendance"] = current_actual + additional_actual
+                        current_act_decimal = Decimal(str(current_actual)) if not isinstance(current_actual,
+                                                                                             Decimal) else current_actual
+                        additional_act_decimal = Decimal(str(additional_actual)) if not isinstance(additional_actual,
+                                                                                                   Decimal) else additional_actual
+                        staff_attendance_dict[staff_code][
+                            "actual_attendance"] = current_act_decimal + additional_act_decimal
                     elif row.actual_attendance is not None:
-                        # 如果当前值为 None 但新增值不为 None，则使用新增值
-                        staff_attendance_dict[staff_code]["actual_attendance"] = additional_actual
+                        staff_attendance_dict[staff_code]["actual_attendance"] = Decimal(
+                            str(row.actual_attendance)) if not isinstance(row.actual_attendance,
+                                                                          Decimal) else row.actual_attendance
 
                     staff_attendance_dict[staff_code][
                         "sales_value"] += row.sales_value if row.sales_value is not None else 0.0
