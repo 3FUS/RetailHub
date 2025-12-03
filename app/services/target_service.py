@@ -1428,8 +1428,10 @@ class TargetStaffService:
                 )
                 merged_data = result_merged.fetchone()
 
-                store_target_value = merged_data.total_target_value if merged_data.total_target_value is not None else 0.0
-                store_sales_value = merged_data.total_sales_value if merged_data.total_sales_value is not None else 0.0
+                store_target_value = merged_data.total_target_value if merged_data.total_target_value is not None else Decimal(
+                    '0')
+                store_sales_value = merged_data.total_sales_value if merged_data.total_sales_value is not None else Decimal(
+                    '0')
 
             fiscal_period, min_date = await TargetStaffService._fetch_fiscal_period(db,
                                                                                     merged_months if module == "commission" else [
@@ -1440,7 +1442,6 @@ class TargetStaffService:
             if min_date and min_date.date() > datetime.now().date():
                 should_values = False
                 app_logger.debug("Minimum date is in the future, hiding target values")
-
             if has_approved:
                 should_values = True
 
@@ -1580,8 +1581,9 @@ class TargetStaffService:
                             row.expected_attendance if row.expected_attendance is not None else None,
                         "actual_attendance":
                             row.actual_attendance if row.actual_attendance is not None else None,
-                        "target_value": row.target_value if row.target_value is not None and should_values else 0.0,
-                        "sales_value": row.sales_value if row.sales_value is not None else 0.0,
+                        "target_value": Decimal(
+                            str(row.target_value)) if row.target_value is not None and should_values else Decimal('0'),
+                        "sales_value": Decimal(str(row.sales_value)) if row.sales_value is not None else Decimal('0'),
                         "target_value_ratio": row.target_value_ratio,
                         "deletable": row.deletable
                     }
@@ -1590,8 +1592,10 @@ class TargetStaffService:
                     current_expected = staff_attendance_dict[staff_code]["expected_attendance"]
                     current_actual = staff_attendance_dict[staff_code]["actual_attendance"]
 
-                    additional_expected = row.expected_attendance if row.expected_attendance is not None else 0.0
-                    additional_actual = row.actual_attendance if row.actual_attendance is not None else 0.0
+                    additional_expected = Decimal(
+                        str(row.expected_attendance)) if row.expected_attendance is not None else Decimal('0')
+                    additional_actual = Decimal(
+                        str(row.actual_attendance)) if row.actual_attendance is not None else Decimal('0')
 
                     if current_expected is not None:
                         staff_attendance_dict[staff_code][
@@ -1613,10 +1617,11 @@ class TargetStaffService:
                                                                           Decimal) else row.actual_attendance
 
                     staff_attendance_dict[staff_code][
-                        "sales_value"] += row.sales_value if row.sales_value is not None else 0.0
+                        "sales_value"] += Decimal(str(row.sales_value)) if row.sales_value is not None else Decimal('0')
 
                     staff_attendance_dict[staff_code][
-                        "target_value"] += row.target_value if row.target_value is not None else 0.0
+                        "target_value"] += Decimal(str(row.target_value)) if row.target_value is not None else Decimal(
+                        '0')
 
                 if row.fiscal_month == fiscal_month:
                     staff_attendance_dict[staff_code]["position"] = position
@@ -1636,8 +1641,11 @@ class TargetStaffService:
                 if (staff_info["sales_value"] is not None and
                         staff_info['target_value'] is not None and
                         staff_info['target_value'] > 0):
-                    sales_value = Decimal(str(staff_info['sales_value']))
-                    target_value = Decimal(str(staff_info['target_value']))
+                    sales_value = Decimal(str(staff_info['sales_value'])) if not isinstance(staff_info['sales_value'],
+                                                                                            Decimal) else staff_info[
+                        'sales_value']
+                    target_value = Decimal(str(staff_info['target_value'])) if not isinstance(
+                        staff_info['target_value'], Decimal) else staff_info['target_value']
                     achievement_rate = f"{sales_value / target_value:.2%}"
 
                 staff_info["achievement_rate"] = achievement_rate
@@ -1653,8 +1661,8 @@ class TargetStaffService:
             result_data = {
                 "data": staff_attendance_list,
                 "header_info": {
-                    "store_target_value": store_target_value if should_values else 0,
-                    "store_sales_value": store_sales_value,
+                    "store_target_value": Decimal(str(store_target_value)) if should_values else Decimal('0'),
+                    "store_sales_value": Decimal(str(store_sales_value)),
                     "fiscal_period": fiscal_period,
                     "opening_days": opening_days,
                     "min_date": min_date,
