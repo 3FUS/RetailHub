@@ -1768,64 +1768,57 @@ class CommissionService:
                         app_logger.debug(f"未考虑出勤率")
 
                     # 最低保障金额
-                    if rule_info.minimum_guarantee and commission_amount < Decimal(str(rule_info.minimum_guarantee)):
+                    if rule_info.minimum_guarantee and commission_amount < rule_info.minimum_guarantee:
                         old_amount = commission_amount
-                        commission_amount = Decimal(str(rule_info.minimum_guarantee))
+                        commission_amount = rule_info.minimum_guarantee
                         app_logger.debug(f"应用保底金额: 原始金额 {old_amount} < 保底金额 {rule_info.minimum_guarantee}, 调整为保底金额")
 
                         expected_attendance = staff['expected_attendance'] or 0
                         actual_attendance = staff['actual_attendance'] or 0
 
                         if rule_info.minimum_guarantee_on_attendance == 1 and expected_attendance > 0:
-
+                            # attendance_factor = actual_attendance / expected_attendance
 
                             if rule_info.attendance_calculation_logic == 1 and opening_days and opening_days > 0:
                                 # 使用实际出勤天数/开店天数
-                                attendance_factor = Decimal(str(actual_attendance)) / Decimal(str(opening_days))
+                                attendance_factor = actual_attendance / Decimal(str(opening_days))
                                 app_logger.debug(
                                     f"保底使用实际出勤/开店天数计算因子: {actual_attendance} / {opening_days} = {attendance_factor}")
                             elif rule_info.attendance_calculation_logic == 2 and fiscal_days and fiscal_days > 0:
                                 # 使用实际出勤天数/财月天数
-                                attendance_factor = Decimal(str(actual_attendance)) / Decimal(str(fiscal_days))
+                                attendance_factor = actual_attendance / Decimal(str(fiscal_days))
                                 app_logger.debug(
                                     f"保底使用实际出勤/财月天数计算因子: {actual_attendance} / {fiscal_days} = {attendance_factor}")
-                            elif rule_info.attendance_calculation_logic == 0:
+                            else:
                                 # 默认使用实际出勤/应出勤
-                                attendance_factor = Decimal(str(actual_attendance)) / Decimal(str(expected_attendance))
+                                attendance_factor = actual_attendance / expected_attendance
                                 app_logger.debug(
                                     f"保底使用实际出勤/应出勤计算因子: {actual_attendance} / {expected_attendance} = {attendance_factor}")
-                            else:
-                                attendance_factor = 0
-                                app_logger.debug(f"最低保障金额 attendance_factor set 0")
 
                             commission_amount = commission_amount * attendance_factor
                             app_logger.debug(
                                 f"保底金额考虑出勤比例: 保底金额 {rule_info.minimum_guarantee} * 出勤率 {attendance_factor} = 调整后金额 {commission_amount}")
                         elif rule_info.minimum_guarantee_on_attendance > 1 and expected_attendance > 0:
+                            # attendance_percentage = (actual_attendance / expected_attendance) * 100
 
                             if rule_info.attendance_calculation_logic == 1 and opening_days and opening_days > 0:
                                 # 使用实际出勤天数/开店天数计算出勤率
-                                attendance_percentage = (Decimal(str(actual_attendance)) / Decimal(
-                                    str(opening_days))) * 100
+                                attendance_percentage = (actual_attendance / Decimal(str(opening_days))) * 100
                                 app_logger.debug(
                                     f"使用实际出勤/开店天数计算出勤率: {actual_attendance} / {opening_days} * 100 = {attendance_percentage}%")
                             elif rule_info.attendance_calculation_logic == 2 and fiscal_days and fiscal_days > 0:
                                 # 使用实际出勤天数/财月天数计算出勤率
-                                attendance_percentage = (Decimal(str(actual_attendance)) / Decimal(
-                                    str(fiscal_days))) * 100
+                                attendance_percentage = (actual_attendance / Decimal(str(fiscal_days))) * 100
                                 app_logger.debug(
                                     f"使用实际出勤/财月天数计算出勤率: {actual_attendance} / {fiscal_days} * 100 = {attendance_percentage}%")
-                            elif rule_info.attendance_calculation_logic == 0:
+                            else:
                                 # 默认使用实际出勤/应出勤计算出勤率
-                                attendance_percentage = (Decimal(str(actual_attendance)) / Decimal(
-                                    str(expected_attendance))) * 100
+                                attendance_percentage = (actual_attendance / expected_attendance) * 100
                                 app_logger.debug(
                                     f"使用实际出勤/应出勤计算出勤率: {actual_attendance} / {expected_attendance} * 100 = {attendance_percentage}%")
-                            else:
-                                attendance_percentage = 0
 
-                            if attendance_percentage < Decimal(str(rule_info.minimum_guarantee_on_attendance)):
-                                commission_amount = Decimal('0')
+                            if attendance_percentage < rule_info.minimum_guarantee_on_attendance:
+                                commission_amount = 0
                                 app_logger.debug(
                                     f"出勤率 {attendance_percentage}% 低于要求的 {rule_info.minimum_guarantee_on_attendance}%, 保底金额取消")
                             else:

@@ -4,7 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy import or_, and_
 
-from app.models.commission import CommissionStoreModel, CommissionMainModel
+from app.models.commission import CommissionStoreModel, CommissionMainModel, CommissionRuleModel, \
+    CommissionRuleAssignmentModel
 from app.models.target import TargetStoreMain, TargetStoreWeek, TargetStoreDaily
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.target import TargetStoreUpdate, \
@@ -1398,7 +1399,7 @@ class TargetStaffService:
             store_target_record = await TargetStaffService._fetch_store_target_data(db, fiscal_month, store_code)
 
             # Step 2: 提取门店相关基础信息
-            opening_days, store_target_value, store_sales_value, staff_status, store_status, commission_status, \
+            store_type, opening_days, store_target_value, store_sales_value, staff_status, store_status, commission_status, \
             commission_status_details, store_status_details, staff_status_details = \
                 TargetStaffService._extract_store_info(store_target_record)
 
@@ -1665,6 +1666,7 @@ class TargetStaffService:
                     "store_sales_value": Decimal(str(store_sales_value)),
                     "fiscal_period": fiscal_period,
                     "opening_days": opening_days,
+                    "opening_days_flag": await TargetStaffService._get_opening_days_flag_by_store_type(db, store_type),
                     "min_date": min_date,
                     "staff_status": staff_status,
                     "staff_status_details": staff_status_details,
@@ -1727,7 +1729,8 @@ class TargetStaffService:
                 CommissionStoreModel.merged_store_codes,
                 CommissionStoreModel.merged_flag,
                 CommissionStoreModel.fiscal_period,
-                CommissionStoreModel.opening_days
+                CommissionStoreModel.opening_days,
+                CommissionStoreModel.store_type
             )
                 .select_from(
                 TargetStoreMain.__table__.join(
@@ -1754,6 +1757,7 @@ class TargetStaffService:
             store_status = store_target_record.store_status
             commission_status = store_target_record.commission_status
             opening_days = store_target_record.opening_days
+            store_type = store_target_record.store_type
 
             commission_status_details = {
                 'saved_by': store_target_record.saved_by,
@@ -1789,6 +1793,7 @@ class TargetStaffService:
                 'reject_remarks': store_target_record.staff_reject_remarks
             }
         else:
+            store_type = None
             opening_days = 0
             store_target_value = 0.0
             store_sales_value = 0.0
@@ -1799,7 +1804,7 @@ class TargetStaffService:
             store_status_details = {}
             staff_status_details = {}
 
-        return (opening_days, store_target_value, store_sales_value, staff_status, store_status,
+        return (store_type, opening_days, store_target_value, store_sales_value, staff_status, store_status,
                 commission_status, commission_status_details, store_status_details, staff_status_details)
 
     @staticmethod
@@ -1817,6 +1822,34 @@ class TargetStaffService:
             date_range_str = f"{date_range.min_date.strftime('%Y-%m-%d')} to {date_range.max_date.strftime('%Y-%m-%d')}"
             return date_range_str, date_range.min_date
         return "", None
+
+    @staticmethod
+    async def _get_opening_days_flag_by_store_type(db: AsyncSession, store_type: str):
+
+        try:
+            app_logger.info(f"Getting opening days flag for store type: {store_type}")
+            result = await db.execute(
+                select(func.max(CommissionRuleModel.attendance_calculation_logic))
+                    .select_from(
+                    CommissionRuleModel.__table__.join(
+                        CommissionRuleAssignmentModel.__table__,
+                        CommissionRuleModel.rule_code == CommissionRuleAssignmentModel.rule_code
+                    )
+                )
+                    .where(
+                    CommissionRuleModel.attendance_calculation_logic == 1,
+                    CommissionRuleAssignmentModel.store_type == store_type
+                )
+            )
+
+            max_logic = result.scalar()
+            app_logger.info(f"Max logic for store type {store_type}: {max_logic}")
+            # 如果查询结果为1，返回1；否则返回0
+            return 1 if max_logic == 1 else 0
+
+        except Exception as e:
+            app_logger.error(f"Error in get_opening_days_flag_by_store_type: {str(e)}")
+            return 0
 
     @staticmethod
     async def create_staff_attendance(db: AsyncSession, target_data: StaffAttendanceCreate, user_id: str = 'system'):

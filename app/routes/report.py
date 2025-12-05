@@ -124,7 +124,35 @@ def _export_to_excel(report_data: dict, report_type: str, status: str):
                         }
                         # 重命名列
                         df.rename(columns=column_mapping, inplace=True)
-                    df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+                    # 判断每列是否全为数字并设置格式
+                    workbook = writer.book
+                    worksheet = workbook.create_sheet(sheet_name)
+
+                    # 写入列标题
+                    for col_idx, col_name in enumerate(df.columns, 1):
+                        worksheet.cell(row=1, column=col_idx, value=col_name)
+
+                    # 写入数据并设置列格式
+                    for row_idx, (_, row) in enumerate(df.iterrows(), 2):
+                        for col_idx, (_, value) in enumerate(row.items(), 1):
+                            worksheet.cell(row=row_idx, column=col_idx, value=value)
+
+                    # 设置列格式
+                    for col_idx, col_name in enumerate(df.columns, 1):
+                        # 检查该列是否全为数字
+                        is_numeric_column = pd.api.types.is_numeric_dtype(df[col_name]) or (
+                                df[col_name].notna().all() and
+                                df[col_name].apply(lambda x: isinstance(x, (int, float))).all()
+                        )
+
+                        if is_numeric_column:
+                            # 设置为 general 格式
+                            from openpyxl.styles import numbers
+                            worksheet.column_dimensions[worksheet.cell(row=1,
+                                                                       column=col_idx).column_letter].number_format = numbers.FORMAT_GENERAL
+                    return
+
                 else:
                     df = pd.DataFrame([data])
                     # 如果有 field_translations，使用英文字段名作为表头
@@ -143,7 +171,34 @@ def _export_to_excel(report_data: dict, report_type: str, status: str):
                 if data and isinstance(data[0], dict):
                     # 这里无法直接获取 field_translations，需要在调用时确保传入正确的数据结构
                     pass
-                df.to_excel(writer, sheet_name=sheet_name, index=False)
+
+                # 判断每列是否全为数字并设置格式
+                workbook = writer.book
+                worksheet = workbook.create_sheet(sheet_name)
+
+                # 写入列标题
+                for col_idx, col_name in enumerate(df.columns, 1):
+                    worksheet.cell(row=1, column=col_idx, value=col_name)
+
+                # 写入数据并设置列格式
+                for row_idx, (_, row) in enumerate(df.iterrows(), 2):
+                    for col_idx, (_, value) in enumerate(row.items(), 1):
+                        worksheet.cell(row=row_idx, column=col_idx, value=value)
+
+                # 设置列格式
+                for col_idx, col_name in enumerate(df.columns, 1):
+                    # 检查该列是否全为数字
+                    is_numeric_column = pd.api.types.is_numeric_dtype(df[col_name]) or (
+                            df[col_name].notna().all() and
+                            df[col_name].apply(lambda x: isinstance(x, (int, float))).all()
+                    )
+
+                    if is_numeric_column:
+                        # 设置为 general 格式
+                        from openpyxl.styles import numbers
+                        worksheet.column_dimensions[
+                            worksheet.cell(row=1, column=col_idx).column_letter].number_format = numbers.FORMAT_GENERAL
+                return
             else:
                 df = pd.DataFrame([data])
                 df.to_excel(writer, sheet_name=sheet_name, index=False)
@@ -177,3 +232,4 @@ def _export_to_excel(report_data: dict, report_type: str, status: str):
     }
 
     return Response(content=output.getvalue(), headers=headers)
+
