@@ -99,71 +99,51 @@ class CommissionRPTService:
 
             # 获取区域、渠道和城市层级的聚合数据
             # 区域达成率
-            region_achievement_query = (
-                select(
-                    store_alias.c.manage_region,
-                    func.sum(CommissionStaffDetailModel.store_sales_value).label('region_sales'),
-                    func.sum(CommissionStaffDetailModel.store_target_value).label('region_target')
-                )
-                    .select_from(
+            if rows:
+                region_achievement_query = (
                     select(
                         store_alias.c.manage_region,
-                        CommissionStaffDetailModel.store_code,
-                        CommissionStaffDetailModel.fiscal_month,
-                        func.max(CommissionStaffDetailModel.store_sales_value).label('store_sales_value'),
-                        func.max(CommissionStaffDetailModel.store_target_value).label('store_target_value')
+                        func.sum(CommissionStaffDetailModel.store_sales_value).label('region_sales'),
+                        func.sum(CommissionStaffDetailModel.store_target_value).label('region_target')
                     )
                         .select_from(CommissionStaffDetailModel)
                         .join(store_alias, CommissionStaffDetailModel.store_code == store_alias.c.store_code)
                         .where(CommissionStaffDetailModel.fiscal_month == fiscal_month)
-                        .group_by(store_alias.c.manage_region, CommissionStaffDetailModel.store_code,
-                                  CommissionStaffDetailModel.fiscal_month)
-                        .subquery()
+                        .group_by(store_alias.c.manage_region)
                 )
-                    .group_by(store_alias.c.manage_region)
-            )
 
-            app_logger.debug("Executing region achievement query")
-            region_result = await db.execute(region_achievement_query)
-            region_achievements = {
-                row.manage_region: (row.region_sales / row.region_target * 100)
-                if row.region_target and row.region_target > 0 else 0
-                for row in region_result.fetchall()
-            }
-            app_logger.debug(f"Retrieved {len(region_achievements)} region achievements")
+                app_logger.debug("Executing optimized region achievement query")
+                region_result = await db.execute(region_achievement_query)
+                region_achievements = {
+                    row.manage_region: (row.region_sales / row.region_target * 100)
+                    if row.region_target and row.region_target > 0 else 0
+                    for row in region_result.fetchall()
+                }
+                app_logger.debug(f"Retrieved {len(region_achievements)} region achievements")
 
-            channel_achievement_query = (
-                select(
-                    store_alias.c.manage_channel,
-                    func.sum(CommissionStaffDetailModel.store_sales_value).label('channel_sales'),
-                    func.sum(CommissionStaffDetailModel.store_target_value).label('channel_target')
-                )
-                    .select_from(
+                channel_achievement_query = (
                     select(
                         store_alias.c.manage_channel,
-                        CommissionStaffDetailModel.store_code,
-                        CommissionStaffDetailModel.fiscal_month,
-                        func.max(CommissionStaffDetailModel.store_sales_value).label('store_sales_value'),
-                        func.max(CommissionStaffDetailModel.store_target_value).label('store_target_value')
+                        func.sum(CommissionStaffDetailModel.store_sales_value).label('channel_sales'),
+                        func.sum(CommissionStaffDetailModel.store_target_value).label('channel_target')
                     )
                         .select_from(CommissionStaffDetailModel)
                         .join(store_alias, CommissionStaffDetailModel.store_code == store_alias.c.store_code)
                         .where(CommissionStaffDetailModel.fiscal_month == fiscal_month)
-                        .group_by(store_alias.c.manage_channel, CommissionStaffDetailModel.store_code,
-                                  CommissionStaffDetailModel.fiscal_month)
-                        .subquery()
+                        .group_by(store_alias.c.manage_channel)
                 )
-                    .group_by(store_alias.c.manage_channel)
-            )
 
-            app_logger.debug("Executing channel achievement query")
-            channel_result = await db.execute(channel_achievement_query)
-            channel_achievements = {
-                row.manage_channel: (row.channel_sales / row.channel_target * 100)
-                if row.channel_target and row.channel_target > 0 else 0
-                for row in channel_result.fetchall()
-            }
-            app_logger.debug(f"Retrieved {len(channel_achievements)} channel achievements")
+                app_logger.debug("Executing optimized channel achievement query")
+                channel_result = await db.execute(channel_achievement_query)
+                channel_achievements = {
+                    row.manage_channel: (row.channel_sales / row.channel_target * 100)
+                    if row.channel_target and row.channel_target > 0 else 0
+                    for row in channel_result.fetchall()
+                }
+                app_logger.debug(f"Retrieved {len(channel_achievements)} channel achievements")
+            else:
+                region_achievements = {}
+                channel_achievements = {}
 
             # 按store_code和staff_code分组并汇总不同规则类型的佣金
             from collections import defaultdict
