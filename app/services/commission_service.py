@@ -1691,7 +1691,11 @@ class CommissionService:
                         sales_value = staff_sales_value
                     elif rule_info.rule_basis == 'store':
                         target_achievement_rate = store_achievement_rate
-                        sales_value = store_sales_value
+                        if rule_info.role_code == 'R-05':
+                            sales_value = staff_sales_value
+                            app_logger.debug(f" R-05 使用员工 {staff['staff_code']} 的销售额 计算提成")
+                        else:
+                            sales_value = store_sales_value
                     else:
                         app_logger.warning(f"规则 {rule_code} 的 rule_basis 值无效: {rule_info.rule_basis}")
                         continue
