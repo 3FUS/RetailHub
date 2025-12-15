@@ -1811,8 +1811,11 @@ class CommissionService:
                             else:
                                 app_logger.debug(
                                     f"出勤率 {attendance_percentage}% 满足要求的 {rule_info.minimum_guarantee_on_attendance}%, 保底金额保持 {commission_amount}")
+                        elif expected_attendance == 0:
+                            commission_amount = 0
+                            app_logger.debug(f"出勤 expected_attendance:{expected_attendance}, 保底金额取消")
                         else:
-                            app_logger.debug(f"保底金额不考虑出勤或应出勤为0, 最终金额 {commission_amount}")
+                            app_logger.debug(f"其它情况, 最终金额 {commission_amount}")
 
                     # 只有佣金金额大于等0时才保存
 
