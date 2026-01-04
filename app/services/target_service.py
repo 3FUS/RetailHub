@@ -1529,7 +1529,7 @@ class TargetStaffService:
                             StaffModel.del_flag == 0
                         ),
                         and_(
-                            select(func.count())
+                            select(1)
                                 .select_from(StaffAttendanceModel)
                                 .where(
                                 StaffAttendanceModel.staff_code == StaffModel.staff_code,
@@ -1538,7 +1538,7 @@ class TargetStaffService:
                                 StaffAttendanceModel.del_flag == 0
                             )
                                 .exists(),
-                            ~select(func.count())
+                            ~select(1)
                                 .select_from(StaffAttendanceModel)
                                 .where(
                                 StaffAttendanceModel.staff_code == StaffModel.staff_code,
