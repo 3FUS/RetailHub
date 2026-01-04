@@ -1505,58 +1505,61 @@ class TargetStaffService:
                 else:
                     previous_fiscal_month = f"{fiscal_year}-{fiscal_month_num - 1}"
 
-                result = await db.execute(
-                    select(
-                        StaffModel.avatar,
-                        StaffModel.staff_code,
-                        StaffModel.first_name,
-                        StaffModel.state,
-                        StaffModel.position.label('staff_position'),
-                        StaffModel.salary_coefficient.label('staff_salary_coefficient'),
-                        null().label('expected_attendance'),
-                        null().label('actual_attendance'),
-                        null().label('attendance_position'),
-                        null().label('attendance_salary_coefficient'),
-                        null().label('target_value_ratio'),
-                        null().label('target_value'),
-                        null().label('sales_value'),
-                        cast(0, type_=Integer).label('deletable'),
-                        cast(fiscal_month, type_=String).label('fiscal_month')
-                    )
-                        .where(
-                        or_(
-                            and_(
-                                StaffModel.store_code.in_(merged_codes),
-                                StaffModel.state == 'A',
-                                StaffModel.del_flag == 0
-                            ),
-                            and_(
-                                select(func.count())
-                                    .select_from(StaffAttendanceModel)
-                                    .where(
-                                    StaffAttendanceModel.staff_code == StaffModel.staff_code,
-                                    StaffAttendanceModel.store_code.in_(merged_codes),
-                                    StaffAttendanceModel.fiscal_month == previous_fiscal_month,
-                                    StaffAttendanceModel.del_flag == 0
-                                )
-                                    .exists(),
-                                ~select(func.count())
-                                    .select_from(StaffAttendanceModel)
-                                    .where(
-                                    StaffAttendanceModel.staff_code == StaffModel.staff_code,
-                                    StaffAttendanceModel.store_code.in_(merged_codes),
-                                    StaffAttendanceModel.fiscal_month == previous_fiscal_month,
-                                    StaffAttendanceModel.del_flag == 1
-                                )
-                                    .exists()
+                staff_query = select(
+                    StaffModel.avatar,
+                    StaffModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.state,
+                    StaffModel.position.label('staff_position'),
+                    StaffModel.salary_coefficient.label('staff_salary_coefficient'),
+                    null().label('expected_attendance'),
+                    null().label('actual_attendance'),
+                    null().label('attendance_position'),
+                    null().label('attendance_salary_coefficient'),
+                    null().label('target_value_ratio'),
+                    null().label('target_value'),
+                    null().label('sales_value'),
+                    cast(0, type_=Integer).label('deletable'),
+                    cast(fiscal_month, type_=String).label('fiscal_month')
+                ).where(
+                    or_(
+                        and_(
+                            StaffModel.store_code.in_(merged_codes),
+                            StaffModel.state == 'A',
+                            StaffModel.del_flag == 0
+                        ),
+                        and_(
+                            select(func.count())
+                                .select_from(StaffAttendanceModel)
+                                .where(
+                                StaffAttendanceModel.staff_code == StaffModel.staff_code,
+                                StaffAttendanceModel.store_code.in_(merged_codes),
+                                StaffAttendanceModel.fiscal_month == previous_fiscal_month,
+                                StaffAttendanceModel.del_flag == 0
                             )
+                                .exists(),
+                            ~select(func.count())
+                                .select_from(StaffAttendanceModel)
+                                .where(
+                                StaffAttendanceModel.staff_code == StaffModel.staff_code,
+                                StaffAttendanceModel.store_code.in_(merged_codes),
+                                StaffAttendanceModel.fiscal_month == previous_fiscal_month,
+                                StaffAttendanceModel.del_flag == 1
+                            )
+                                .exists()
                         )
                     )
-                        .order_by(
-                        StaffModel.position.desc(),
-                        StaffModel.staff_code.asc()
-                    )
+                ).order_by(
+                    StaffModel.position.desc(),
+                    StaffModel.staff_code.asc()
                 )
+
+                # 编译并记录SQL语句
+                compiled_query = staff_query.compile(compile_kwargs={"literal_binds": True})
+                app_logger.debug(f"SQL Query: {compiled_query}")
+
+                # 执行查询
+                result = await db.execute(staff_query)
 
             staff_attendance_data = result.all()
             app_logger.debug(f"Retrieved {len(staff_attendance_data)} staff records")
