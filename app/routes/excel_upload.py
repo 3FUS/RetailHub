@@ -306,6 +306,54 @@ class ExcelImportService:
                 db.add_all(records_to_add)
 
             # 提交事务
+
+            if ec_sales_summary:
+                store_codes = set()
+                fiscal_months = set()
+
+                for (staff_code, store_code, fiscal_month) in ec_sales_summary.keys():
+                    store_codes.add(store_code)
+                    fiscal_months.add(fiscal_month)
+
+                if store_codes and fiscal_months:
+                    # 构建动态查询
+                    store_codes_list = list(store_codes)
+                    fiscal_months_list = list(fiscal_months)
+
+                    # 创建占位符
+                    store_placeholders = ','.join([f':store_code_{i}' for i in range(len(store_codes_list))])
+                    month_placeholders = ','.join([f':fiscal_month_{i}' for i in range(len(fiscal_months_list))])
+
+                    commission_query = text(f"""
+                                   SELECT DISTINCT store_code 
+                                   FROM commissions_store 
+                                   WHERE fiscal_month IN ({month_placeholders})
+                                   AND status IN ('approved', 'submitted') 
+                                   AND store_code IN ({store_placeholders})
+                               """)
+
+                    # 准备参数
+                    params = {}
+                    for i, fiscal_month in enumerate(fiscal_months_list):
+                        params[f'fiscal_month_{i}'] = fiscal_month
+                    for i, store_code in enumerate(store_codes_list):
+                        params[f'store_code_{i}'] = store_code
+
+                    result = await db.execute(commission_query, params)
+                    conflicting_stores = result.fetchall()
+
+                    if conflicting_stores:
+                        conflicting_store_codes = [row[0] for row in conflicting_stores]
+                        await db.rollback()
+                        return ImportResult(
+                            success=False,
+                            message=f"导入失败：以下门店的佣金数据已提交或审核通过，无法导入电商销售数据: {conflicting_store_codes}",
+                            data_type="ec_sales",
+                            rows_processed=0,
+                            rows_with_errors=len(conflicting_store_codes),
+                            errors=[f"门店 {store_code} 的佣金数据已提交或审核通过" for store_code in conflicting_store_codes]
+                        )
+
             await db.commit()
 
             updated_attendances = 0
