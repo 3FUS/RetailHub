@@ -360,7 +360,7 @@ class TargetRPTService:
                     "Date_Format": row.date.strftime('%Y/%m/%d').lstrip('0').replace('/0', '/') if row.date else None,
                     "date_number": row.date.strftime('%Y%m%d') if row.date else None,
                     "Fiscal_Week_Format": f"FY{row.finance_year} WK {row.week_number}",  # FY2025 WK 31 格式
-                    "fiscal_week_id": row.fiscal_week,
+                    "fiscal_week_id": f"{row.finance_year}{row.week_number:02d}",
                     "fiscal_month_Format": f"FY{fiscal_year} P{fiscal_month_num:02d} ({month_names.get(fiscal_month_num, '')})",
                     # FY2025 PO8 (AUG) 格式
                     "fiscal_month_id": f"{fiscal_year}{fiscal_month_num:02d}",  # 202508 格式
