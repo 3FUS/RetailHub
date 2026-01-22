@@ -92,7 +92,9 @@ class TargetRPTService:
                 TargetStoreWeek.percentage.label('week_percentage'),
                 TargetStoreWeek.target_value.label('week_value'),
                 TargetStoreDaily.percentage.label('day_percentage'),
-                TargetStoreDaily.target_value.label('day_value')
+                TargetStoreDaily.target_value.label('day_value'),
+                DimensionDayWeek.finance_year.label('finance_year'),
+                DimensionDayWeek.week_number.label('week_number')
             ).select_from(
                 TargetStoreMain.__table__.join(
                     TargetStoreDaily.__table__,
@@ -140,7 +142,7 @@ class TargetRPTService:
                     "store_code": row.store_code,
                     "Location_ID": row.Location_ID,
                     "store_name": row.store_name,
-                    "week_number": row.fiscal_week,
+                    "week_number": f"{row.finance_year}{row.week_number:02d}",#row.fiscal_week,
                     "week": row.day_of_week,
                     "week_percentage": f"{row.week_percentage}%" if row.week_percentage is not None else 0.0,
                     "week_value": row.week_value if row.week_value is not None and should_values else 0.0,
