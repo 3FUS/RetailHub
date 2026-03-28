@@ -118,11 +118,28 @@ class ExcelImportService:
             store_target_value = update_data.get('target_value')
 
             # 获取该门店该财月的所有员工考勤记录
+            # result = await db.execute(
+            #     select(StaffAttendanceModel)
+            #         .where(
+            #         StaffAttendanceModel.store_code == store_code,
+            #         StaffAttendanceModel.fiscal_month == fiscal_month
+            #     )
+            # )
+            # staff_attendances = result.scalars().all()
+            #
+            # if not staff_attendances:
+            #     continue
+            #
+            # # 提取所有员工的比例
+            # ratios = [attendance.target_value_ratio for attendance in staff_attendances if
+            #           attendance.target_value_ratio is not None]
+
             result = await db.execute(
                 select(StaffAttendanceModel)
                     .where(
                     StaffAttendanceModel.store_code == store_code,
-                    StaffAttendanceModel.fiscal_month == fiscal_month
+                    StaffAttendanceModel.fiscal_month == fiscal_month,
+                    StaffAttendanceModel.target_value_ratio.isnot(None)
                 )
             )
             staff_attendances = result.scalars().all()
@@ -131,9 +148,7 @@ class ExcelImportService:
                 continue
 
             # 提取所有员工的比例
-            ratios = [attendance.target_value_ratio for attendance in staff_attendances if
-                      attendance.target_value_ratio is not None]
-
+            ratios = [attendance.target_value_ratio for attendance in staff_attendances]
             # 如果没有比例数据，跳过计算
             if not ratios:
                 continue
