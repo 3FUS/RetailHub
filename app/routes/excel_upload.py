@@ -138,8 +138,8 @@ class ExcelImportService:
                 select(StaffAttendanceModel)
                     .where(
                     StaffAttendanceModel.store_code == store_code,
-                    StaffAttendanceModel.fiscal_month == fiscal_month,
-                    StaffAttendanceModel.target_value_ratio.isnot(None)
+                    StaffAttendanceModel.fiscal_month == fiscal_month
+                    # StaffAttendanceModel.target_value_ratio.isnot(None)
                 )
             )
             staff_attendances = result.scalars().all()
@@ -154,13 +154,21 @@ class ExcelImportService:
                 continue
 
             # 使用工具类计算新的员工目标值
-            new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
+            new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, valid_ratios)
 
             # 更新每个员工的目标值
-            for i, attendance in enumerate(staff_attendances):
-                if i < len(new_staff_targets):
-                    attendance.target_value = new_staff_targets[i]
-                    attendance.updated_at = datetime.now()
+            valid_index = 0
+            for attendance in staff_attendances:
+                if attendance.target_value_ratio is not None and attendance.target_value_ratio != 0:
+                    if valid_index < len(new_staff_targets):
+                        attendance.target_value = new_staff_targets[valid_index]
+                        valid_index += 1
+                    else:
+                        attendance.target_value = 0
+                else:
+                    attendance.target_value = 0
+
+                attendance.updated_at = datetime.now()
 
             await db.commit()
 
