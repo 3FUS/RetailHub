@@ -147,14 +147,16 @@ class ExcelImportService:
             if not staff_attendances:
                 continue
 
+            ratios = [attendance.target_value_ratio for attendance in staff_attendances
+                      if attendance.target_value_ratio is not None and attendance.target_value_ratio != 0]
             # 提取所有员工的比例
-            ratios = [attendance.target_value_ratio for attendance in staff_attendances]
+            # ratios = [attendance.target_value_ratio for attendance in staff_attendances]
             # 如果没有比例数据，跳过计算
             if not ratios:
                 continue
 
             # 使用工具类计算新的员工目标值
-            new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, valid_ratios)
+            new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
 
             # 更新每个员工的目标值
             valid_index = 0
@@ -166,7 +168,7 @@ class ExcelImportService:
                     else:
                         attendance.target_value = 0
                 else:
-                    attendance.target_value = 0
+                    attendance.target_value = None
 
                 attendance.updated_at = datetime.now()
 
