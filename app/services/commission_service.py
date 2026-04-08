@@ -1782,6 +1782,10 @@ class CommissionService:
                             commission_amount = commission_amount * attendance_factor
                             app_logger.debug(
                                 f"保底金额考虑出勤比例: 保底金额 {rule_info.minimum_guarantee} * 出勤率 {attendance_factor} = 调整后金额 {commission_amount}")
+
+                            app_logger.debug(f"打折的保底金额: {commission_amount}, 原始金额 {old_amount} 取高的值")
+                            commission_amount = max(commission_amount, old_amount)
+
                         elif rule_info.minimum_guarantee_on_attendance > 1 and expected_attendance > 0:
                             # attendance_percentage = (actual_attendance / expected_attendance) * 100
 
