@@ -710,6 +710,10 @@ class TargetStoreService:
     @staticmethod
     async def update_target_store(db: AsyncSession, store_code: str, fiscal_month: str,
                                   target_data: TargetStoreUpdate, role_code: str = 'system'):
+
+        app_logger.info(
+            f"Starting update_target_store - store_code: {store_code}, fiscal_month: {fiscal_month}, role_code: {role_code}")
+
         result = await db.execute(select(TargetStoreMain).where(
             TargetStoreMain.store_code == store_code,
             TargetStoreMain.fiscal_month == fiscal_month))
@@ -735,6 +739,8 @@ class TargetStoreService:
             await db.commit()
             await db.refresh(target_store)
             return target_store
+
+        app_logger.debug(f"Found existing target store record - store_code: {store_code}, fiscal_month: {fiscal_month}")
 
         now = datetime.now()
         target_dict = target_data.dict(exclude_unset=True)
@@ -767,6 +773,8 @@ class TargetStoreService:
 
         await db.commit()
         await db.refresh(target_store)
+        app_logger.info(f"Successfully updated target store - store_code: {store_code}, fiscal_month: {fiscal_month}")
+
         return target_store
 
     @staticmethod
@@ -915,7 +923,7 @@ class TargetStoreService:
         store_code = request.store_code
         staff_status = request.staff_status
         store_status = request.store_status
-
+        app_logger.info(f"withdrawn_target {request}")
         if staff_status is not None:
             result = await db.execute(
                 select(TargetStoreMain)

@@ -1701,7 +1701,8 @@ class CommissionService:
                         continue
 
                     app_logger.debug(f"使用达成率: {target_achievement_rate}%, 销售额: {sales_value}")
-
+                    target_achievement_rate = round(target_achievement_rate, 2)
+                    app_logger.debug(f"达成率四舍五入，保留两位小数:{target_achievement_rate}")
                     # 获取匹配的规则详情
                     rule_detail_result = await db.execute(
                         select(
