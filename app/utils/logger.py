@@ -33,7 +33,7 @@ def setup_logger(name: str, log_file: str, level=logging.DEBUG):
             log_file,
             when="midnight",
             interval=1,
-            backupCount=30,  # 保留30天的日志
+            backupCount=90,  # 保留30天的日志
             encoding='utf-8'
         )
         file_handler.setLevel(level)

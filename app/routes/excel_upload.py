@@ -4,18 +4,20 @@ from typing import List, Dict, Any, Tuple
 
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
-from sqlalchemy import delete, text, select
+from sqlalchemy import delete, text, select,update
 from sqlalchemy.ext.asyncio import AsyncSession
 import pandas as pd
 import io
 
 from app.database import get_db
 from app.models.dimension import DimensionDayWeek
+from app.models.dimension import ProductSku, ProductCategory
 from app.models.sales import ECSalesModel
 from app.models.staff import StaffAttendanceModel
 from app.models.target import TargetStoreMain
 from app.services.budget_service import BudgetService
 from app.services.target_service import TargetStoreService, StaffTargetCalculator
+from app.models.commission import StaffSalesCategory
 from app.utils.logger import app_logger
 from decimal import Decimal
 
@@ -37,6 +39,7 @@ class ImportResult(BaseModel):
     rows_processed: int
     rows_with_errors: int = 0
     errors: List[str] = []
+    warning_table: List[dict] = []
 
 
 def identify_excel_type(df: pd.DataFrame) -> str:
@@ -118,28 +121,11 @@ class ExcelImportService:
             store_target_value = update_data.get('target_value')
 
             # 获取该门店该财月的所有员工考勤记录
-            # result = await db.execute(
-            #     select(StaffAttendanceModel)
-            #         .where(
-            #         StaffAttendanceModel.store_code == store_code,
-            #         StaffAttendanceModel.fiscal_month == fiscal_month
-            #     )
-            # )
-            # staff_attendances = result.scalars().all()
-            #
-            # if not staff_attendances:
-            #     continue
-            #
-            # # 提取所有员工的比例
-            # ratios = [attendance.target_value_ratio for attendance in staff_attendances if
-            #           attendance.target_value_ratio is not None]
-
             result = await db.execute(
                 select(StaffAttendanceModel)
                     .where(
                     StaffAttendanceModel.store_code == store_code,
                     StaffAttendanceModel.fiscal_month == fiscal_month
-                    # StaffAttendanceModel.target_value_ratio.isnot(None)
                 )
             )
             staff_attendances = result.scalars().all()
@@ -147,10 +133,10 @@ class ExcelImportService:
             if not staff_attendances:
                 continue
 
-            ratios = [attendance.target_value_ratio for attendance in staff_attendances
-                      if attendance.target_value_ratio is not None and attendance.target_value_ratio != 0]
             # 提取所有员工的比例
-            # ratios = [attendance.target_value_ratio for attendance in staff_attendances]
+            ratios = [attendance.target_value_ratio for attendance in staff_attendances if
+                      attendance.target_value_ratio is not None]
+
             # 如果没有比例数据，跳过计算
             if not ratios:
                 continue
@@ -159,18 +145,10 @@ class ExcelImportService:
             new_staff_targets = StaffTargetCalculator.calculate_staff_targets(store_target_value, ratios)
 
             # 更新每个员工的目标值
-            valid_index = 0
-            for attendance in staff_attendances:
-                if attendance.target_value_ratio is not None and attendance.target_value_ratio != 0:
-                    if valid_index < len(new_staff_targets):
-                        attendance.target_value = new_staff_targets[valid_index]
-                        valid_index += 1
-                    else:
-                        attendance.target_value = 0
-                else:
-                    attendance.target_value = None
-
-                attendance.updated_at = datetime.now()
+            for i, attendance in enumerate(staff_attendances):
+                if i < len(new_staff_targets):
+                    attendance.target_value = new_staff_targets[i]
+                    attendance.updated_at = datetime.now()
 
             await db.commit()
 
@@ -211,7 +189,75 @@ class ExcelImportService:
         error_count = 0
         errors = []
 
+        sku_column = '商品SKU编码' if '商品SKU编码' in df.columns else 'product_sku'
+        unique_skus = df[sku_column].dropna().astype(str).str.strip().unique()
+        unique_skus = [s for s in unique_skus if s]
+
+        warning_data = []
+
+        if unique_skus:
+            sku_query = select(ProductSku.upc, ProductSku.sku_code, ProductSku.level_code_4).where(
+                ProductSku.upc.in_(unique_skus)
+            )
+            sku_result = await db.execute(sku_query)
+            sku_to_level_code_4 = {row[0]: row[2] for row in sku_result.fetchall()}
+
+            level_code_4_values = set(v for v in sku_to_level_code_4.values() if v)
+            if level_code_4_values:
+                cat_query = select(
+                    ProductCategory.level_code_4, ProductCategory.level_value_1
+                ).where(
+                    ProductCategory.level_code_4.in_(level_code_4_values)
+                ).distinct()
+                cat_result = await db.execute(cat_query)
+                cat_rows = cat_result.fetchall()
+                valid_level_code_4_set = {row[0] for row in cat_rows}
+                level_code_4_to_level_value_1 = {row[0]: row[1] for row in cat_rows}
+            else:
+                valid_level_code_4_set = set()
+                level_code_4_to_level_value_1 = {}
+
+            missing_sku_set = set()
+            no_category_sku_set = set()
+            for sku in unique_skus:
+                if sku not in sku_to_level_code_4:
+                    missing_sku_set.add(sku)
+                else:
+                    level_code_4 = sku_to_level_code_4.get(sku)
+                    if not level_code_4 or level_code_4 not in valid_level_code_4_set:
+                        no_category_sku_set.add(sku)
+
+            if missing_sku_set or no_category_sku_set:
+                warning_rows = []
+                for index, row in df.iterrows():
+                    sku_val = str(row.get(sku_column, '') or '').strip()
+                    if sku_val in missing_sku_set:
+                        row_data = row.to_dict()
+                        row_data = {'匹配状态': '未匹配到商品', **row_data}
+                        warning_rows.append(row_data)
+                    elif sku_val in no_category_sku_set:
+                        row_data = row.to_dict()
+                        row_data = {'匹配状态': '未匹配到商品分类', **row_data}
+                        warning_rows.append(row_data)
+
+                warning_data = warning_rows
+
+                error_messages = []
+                if missing_sku_set:
+                    error_messages.append(
+                        f"以下商品SKU编码在系统中不存在({len(missing_sku_set)}个): {', '.join(list(missing_sku_set)[:20])}"
+                    )
+                if no_category_sku_set:
+                    error_messages.append(
+                        f"以下商品SKU未关联商品品类({len(no_category_sku_set)}个): {', '.join(list(no_category_sku_set)[:20])}"
+                    )
+                errors.extend(error_messages)
+
+            df['_level_value_1'] = df[sku_column].astype(str).str.strip().map(
+                lambda upc: level_code_4_to_level_value_1.get(sku_to_level_code_4.get(upc, ''), '')
+            )
         # 收集所有订单号用于批量删除
+        app_logger.debug(f"开始处理电商销售数据{df.head()}")
         order_ids = set()
         valid_rows = []
 
@@ -242,6 +288,7 @@ class ExcelImportService:
         # 第三步：批量插入新数据
         records_to_add = []
         ec_sales_summary = {}
+        ec_sales_category_summary = {}
         for index, row in valid_rows:
             try:
                 # 提取并处理字段数据
@@ -321,6 +368,16 @@ class ExcelImportService:
                         else:
                             ec_sales_summary[key] = total_amount
 
+                        # 按品类维度汇总线上销售数据
+                        level_value_1 = str(row.get('_level_value_1', '') or '').strip()
+                        # app_logger.debug(f"商品品类: {level_value_1}")
+                        if level_value_1:
+                            cat_key = (staff_code, store_code, fiscal_month, level_value_1)
+                            if cat_key in ec_sales_category_summary:
+                                ec_sales_category_summary[cat_key] += Decimal(str(total_amount))
+                            else:
+                                ec_sales_category_summary[cat_key] = Decimal(str(total_amount))
+
             except Exception as e:
                 errors.append(f"第{index + 1}行处理出错: {str(e)}")
                 error_count += 1
@@ -331,54 +388,6 @@ class ExcelImportService:
                 db.add_all(records_to_add)
 
             # 提交事务
-
-            if ec_sales_summary:
-                store_codes = set()
-                fiscal_months = set()
-
-                for (staff_code, store_code, fiscal_month) in ec_sales_summary.keys():
-                    store_codes.add(store_code)
-                    fiscal_months.add(fiscal_month)
-
-                if store_codes and fiscal_months:
-                    # 构建动态查询
-                    store_codes_list = list(store_codes)
-                    fiscal_months_list = list(fiscal_months)
-
-                    # 创建占位符
-                    store_placeholders = ','.join([f':store_code_{i}' for i in range(len(store_codes_list))])
-                    month_placeholders = ','.join([f':fiscal_month_{i}' for i in range(len(fiscal_months_list))])
-
-                    commission_query = text(f"""
-                                   SELECT DISTINCT store_code 
-                                   FROM commissions_store 
-                                   WHERE fiscal_month IN ({month_placeholders})
-                                   AND status IN ('approved', 'submitted') 
-                                   AND store_code IN ({store_placeholders})
-                               """)
-
-                    # 准备参数
-                    params = {}
-                    for i, fiscal_month in enumerate(fiscal_months_list):
-                        params[f'fiscal_month_{i}'] = fiscal_month
-                    for i, store_code in enumerate(store_codes_list):
-                        params[f'store_code_{i}'] = store_code
-
-                    result = await db.execute(commission_query, params)
-                    conflicting_stores = result.fetchall()
-
-                    if conflicting_stores:
-                        conflicting_store_codes = [row[0] for row in conflicting_stores]
-                        await db.rollback()
-                        return ImportResult(
-                            success=False,
-                            message=f"导入失败：以下门店的佣金数据已提交或审核通过，无法导入电商销售数据: {conflicting_store_codes}",
-                            data_type="ec_sales",
-                            rows_processed=0,
-                            rows_with_errors=len(conflicting_store_codes),
-                            errors=[f"门店 {store_code} 的佣金数据已提交或审核通过" for store_code in conflicting_store_codes]
-                        )
-
             await db.commit()
 
             updated_attendances = 0
@@ -481,14 +490,63 @@ class ExcelImportService:
             # 提交员工考勤更新和门店目标更新
             if ec_sales_summary:
                 await db.commit()
+                app_logger.debug(f"已保存 {len(ec_sales_summary)} 条员工电商销售数据")
+
+            # app_logger.debug(f"已更新 {updated_attendances} 条员工考勤记录")
+            if ec_sales_category_summary:
+                category_fiscal_months = set(k[2] for k in ec_sales_category_summary.keys())
+
+                app_logger.debug(f"将重置以下财月的员工品类电商销售数据: {category_fiscal_months}")
+
+                reset_ec_stmt = (
+                    update(StaffSalesCategory)
+                    .where(StaffSalesCategory.fiscal_month.in_(list(category_fiscal_months)))
+                    .values(sales_value_ec=Decimal('0'))
+                )
+                await db.execute(reset_ec_stmt)
+                await db.commit()
+
+                app_logger.debug(f"已重置 {len(category_fiscal_months)} 个财月的员工品类电商销售数据")
+
+                updated_category_count = 0
+                for (staff_code, store_code, fiscal_month,
+                     level_value_1), sales_value_ec in ec_sales_category_summary.items():
+                    query = select(StaffSalesCategory).where(
+                        StaffSalesCategory.staff_code == staff_code,
+                        StaffSalesCategory.store_code == store_code,
+                        StaffSalesCategory.fiscal_month == fiscal_month,
+                        StaffSalesCategory.level_value_1 == level_value_1
+                    )
+                    result = await db.execute(query)
+                    category_record = result.scalar_one_or_none()
+
+                    if category_record:
+                        category_record.sales_value_ec = sales_value_ec
+                        category_record.updated_at = datetime.now()
+                    else:
+                        new_record = StaffSalesCategory(
+                            staff_code=staff_code,
+                            store_code=store_code,
+                            fiscal_month=fiscal_month,
+                            level_value_1=level_value_1,
+                            sales_value_ec=sales_value_ec,
+                            sales_value_store=Decimal('0'),
+                            created_at=datetime.now()
+                        )
+                        db.add(new_record)
+                    updated_category_count += 1
+
+                await db.commit()
+                app_logger.debug(f"已保存 {len(ec_sales_category_summary)} 条员工品类销售数据")
 
             return ImportResult(
                 success=True,
-                message="成功导入电商销售数据",
+                message="成功导入电商销售数据" if not warning_data else "成功导入电商销售数据，但存在警告",
                 data_type="ec_sales",
+                warning_table=warning_data,
                 rows_processed=processed_count,
                 rows_with_errors=error_count,
-                errors=errors[:10]  # 只返回前10个错误信息
+                errors=errors[:10]
             )
         except Exception as e:
             await db.rollback()

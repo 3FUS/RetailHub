@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, CHAR, DateTime, Boolean, Numeric, Text, Date
+from sqlalchemy import Column, Integer, String, CHAR, DateTime, Boolean, Numeric, Text, Date,DECIMAL
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
 
@@ -149,3 +149,53 @@ class SysUser(Base):
     sex = Column(String(32))  # 性别
     user_name = Column(String(255))  # 用户名
     we_chat_id = Column(String(255))  # 微信ID
+
+
+class ProductCategory(Base):
+    __tablename__ = "product_category"
+
+    level_code_1 = Column(String(60), primary_key=True)
+    level_value_1 = Column(String(150))
+    level_code_2 = Column(String(60), primary_key=True)
+    level_value_2 = Column(String(150))
+    level_code_3 = Column(String(60), primary_key=True)
+    level_value_3 = Column(String(150))
+    level_code_4 = Column(String(60), primary_key=True)
+    level_value_4 = Column(String(150))
+    create_time = Column(DateTime)
+
+
+class ProductSku(Base):
+    __tablename__ = "product_sku"
+
+    sku_code = Column(String(60), primary_key=True, nullable=False, comment="SKUCODE")
+    product_name = Column(String(255), nullable=True, comment="商品名称")
+    product_code = Column(String(60), nullable=True, comment="商品代码")
+    product_desc = Column(String(255), nullable=True, comment="商品描述")
+    retail_price = Column(DECIMAL(16, 6), nullable=True)
+    upc = Column(String(60), nullable=True)
+    product_picture = Column(String(255), nullable=True, comment="图片")
+    product_pictureURL = Column(String(255), nullable=True, comment="图片地址")
+    brand_code = Column(String(60), nullable=True)
+    brand_name = Column(String(150), nullable=True)
+    vendor_code = Column(String(60), nullable=True, comment="供应商ID")
+    level_value_1 = Column(String(80), nullable=True, comment="商品层级1")
+    level_value_2 = Column(String(80), nullable=True, comment="商品层级2")
+    level_value_3 = Column(String(80), nullable=True, comment="商品层级3")
+    level_value_4 = Column(String(80), nullable=True, comment="商品层级4")
+    level_code_4 = Column(String(60), nullable=True, comment="商品层级4编码")
+    dimension_value1 = Column(String(60), nullable=True, comment="维度1")
+    dimension_value2 = Column(String(60), nullable=True, comment="维度2")
+    dimension_value3 = Column(String(60), nullable=True, comment="维度3")
+    size_desc = Column(String(80), nullable=True)
+    color_desc = Column(String(80), nullable=True)
+    cart_desc = Column(String(80), nullable=True)
+    dimension_system = Column(String(100), nullable=True)
+    season_code = Column(String(60), nullable=True, comment="季节代码")
+    season_desc = Column(String(60), nullable=True, comment="季节描述")
+    status = Column(String(10), nullable=True)
+    part_number = Column(String(255), nullable=True)
+    create_time = Column(DateTime, nullable=True)
+    create_user = Column(String(60), nullable=True)
+    update_time = Column(DateTime)
+    update_user = Column(String(60), nullable=True)

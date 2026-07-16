@@ -49,6 +49,14 @@ class CommissionStaffModel(Base):
     staff_code = Column(String(30), primary_key=True)  # 员工ID
     store_code = Column(String(30), primary_key=True)
     amount = Column(DECIMAL(12, 2))
+    amount_1 = Column(DECIMAL(12, 2))
+    amount_2 = Column(DECIMAL(12, 2))
+    amount_3 = Column(DECIMAL(12, 2))
+    amount_4 = Column(DECIMAL(12, 2))
+    amount_5 = Column(DECIMAL(12, 2))
+    amount_6 = Column(DECIMAL(12, 2))
+    amount_7 = Column(DECIMAL(12, 2))
+    amount_8 = Column(DECIMAL(12, 2))
     rule_detail_code = Column(String(60), primary_key=True)  # rule_detail_code
     remarks = Column(Text)
     total_days_store_work = Column(DECIMAL(12, 2))
@@ -72,7 +80,32 @@ class CommissionStaffDetailModel(Base):
     actual_attendance = Column(DECIMAL(12, 2))
     position = Column(String(100))  # 职位
     salary_coefficient = Column(DECIMAL(12, 2))
+    factor = Column(DECIMAL(12, 6))
     amount = Column(DECIMAL(12, 2))
+    amount_1 = Column(DECIMAL(12, 2))
+    amount_2 = Column(DECIMAL(12, 2))
+    amount_3 = Column(DECIMAL(12, 2))
+    amount_4 = Column(DECIMAL(12, 2))
+    amount_5 = Column(DECIMAL(12, 2))
+    amount_6 = Column(DECIMAL(12, 2))
+    amount_7 = Column(DECIMAL(12, 2))
+    amount_8 = Column(DECIMAL(12, 2))
+    staff_sales_1 = Column(DECIMAL(12, 2))
+    staff_sales_2 = Column(DECIMAL(12, 2))
+    staff_sales_3 = Column(DECIMAL(12, 2))
+    staff_sales_4 = Column(DECIMAL(12, 2))
+    staff_sales_5 = Column(DECIMAL(12, 2))
+    staff_sales_6 = Column(DECIMAL(12, 2))
+    staff_sales_7 = Column(DECIMAL(12, 2))
+    staff_sales_8 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_1 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_2 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_3 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_4 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_5 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_6 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_7 = Column(DECIMAL(12, 2))
+    tier_bonus_rate_8 = Column(DECIMAL(12, 2))
     rule_code = Column(String(30), primary_key=True)
     rule_detail_code = Column(String(60), primary_key=True)
     remarks = Column(Text)
@@ -111,6 +144,28 @@ class CommissionRuleDetailModel(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class CommissionRuleCategory(Base):
+    __tablename__ = "commissions_rule_category"
+    rule_detail_code = Column(String(60), primary_key=True)
+    level_value_1 = Column(String(60), primary_key=True)
+    value = Column(DECIMAL(12, 2))  # 对应的数值，如 0.5%
+    created_at = Column(DateTime, default=datetime.now)
+    creator_code = Column(String(30))
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+class StaffSalesCategory(Base):
+    __tablename__ = "commission_staff_sales_category"
+    staff_code = Column(String(30), primary_key=True)  # 员工ID
+    store_code = Column(String(30), primary_key=True)
+    fiscal_month = Column(String(50), primary_key=True)  # 财月
+    level_value_1 = Column(String(60), primary_key=True)
+    sales_value_ec = Column(DECIMAL(12, 2))  # 线上销售金额
+    sales_value_store = Column(DECIMAL(12, 2))  # 线下门店销售金额
+    created_at = Column(DateTime, default=datetime.now)
+    creator_code = Column(String(30))
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
 
 class CommissionRuleAssignmentModel(Base):
