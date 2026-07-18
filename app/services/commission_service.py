@@ -263,8 +263,8 @@ class CommissionRPTService:
                         # "commission_only": 0,
                         # "total_commission": 0,
                         "fiscal_month": row.fiscal_month or '',
-                        "individual_rule": '',
-                        "team_rule": '',
+                        # "individual_rule": '',
+                        # "team_rule": '',
                         "total_days_store_work":
                             row.total_days_store_work if row.total_days_store_work is not None else 0,
                         "store_code": row.store_code or '',
@@ -281,15 +281,26 @@ class CommissionRPTService:
                     })
 
                 # 根据规则类型累加金额
-                rule_class = row.rule_class
+                rule_class = row.rule_class.strip() if row.rule_class else None
                 amount = Decimal(str(row.amount)) if row.amount is not None else Decimal('0')
 
                 if rule_class == 'individual':
                     staff_commissions[key]['commission_only'] += amount
                     staff_commissions[key]['total_commission'] += amount
                     staff_commissions[key]['amount_individual'] += amount
-                    staff_commissions[key][
-                        'individual_commission_percent'] = f"{row.individual_commission_percent}%" if row.individual_commission_percent>0 else f"{amount/row.staff_sales_value:.2%}"
+                    # staff_commissions[key][
+                    #     'individual_commission_percent'] = f"{row.individual_commission_percent}%" if row.individual_commission_percent>0 else f"{amount/row.staff_sales_value:.2%}"
+
+                    if row.individual_commission_percent and row.individual_commission_percent > 0:
+                        staff_commissions[key][
+                            'individual_commission_percent'] = f"{row.individual_commission_percent}%"
+                    elif row.staff_sales_value and row.staff_sales_value > 0:
+                        staff_commissions[key][
+                            'individual_commission_percent'] = f"{amount / row.staff_sales_value:.2%}"
+                    else:
+                        staff_commissions[key][
+                            'individual_commission_percent'] = "0.00%"
+
                     staff_commissions[key]['individual_rule'] = row.rule_code
                 elif rule_class == 'team':
                     staff_commissions[key]['commission_only'] += amount
@@ -307,7 +318,12 @@ class CommissionRPTService:
                     staff_commissions[key]['amount_operational'] += amount
 
             # 转换为列表格式
-            formatted_data = list(staff_commissions.values())
+            # formatted_data = list(staff_commissions.values())
+
+            formatted_data = sorted(
+                staff_commissions.values(),
+                key=lambda x: x['store_code']
+            )
 
             app_logger.info(f"Returning {len(formatted_data)} formatted records")
 

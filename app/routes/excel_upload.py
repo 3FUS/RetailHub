@@ -347,7 +347,7 @@ class ExcelImportService:
                 # 如果有付款时间，则计算财月并汇总线上销售数据
                 if payment_time and staff_code and store_code and week and year:
                     # 格式化付款时间为年月日格式
-                    payment_date_str = payment_time.strftime('%Y-%m-%d')
+                    # payment_date_str = payment_time.strftime('%Y-%m-%d')
 
                     # 根据付款日期查找财月
                     query = select(DimensionDayWeek.fiscal_month).where(
