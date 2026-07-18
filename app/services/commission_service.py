@@ -21,7 +21,7 @@ from decimal import Decimal
 CATEGORY_FIELD_MAP = {
     'HBG': 'amount_1',
     'RTW': 'amount_2',
-    'FWT': 'amount_3',
+    'Shoes': 'amount_3',
     'Jewelry': 'amount_4',
     'Other': 'amount_5'
 }
@@ -29,7 +29,7 @@ CATEGORY_FIELD_MAP = {
 CATEGORY_INDEX_MAP = {
     'HBG': 1,
     'RTW': 2,
-    'FWT': 3,
+    'Shoes': 3,
     'Jewelry': 4,
     'Other': 5
 }
