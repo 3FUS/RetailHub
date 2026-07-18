@@ -250,35 +250,35 @@ class CommissionRPTService:
                     category_data[f'{cat_name}_bonus_commission'] = amt_val if amt_val is not None else 0
 
                 staff_commissions[key].update({
-                        "staff_no": row.staff_code or '',
-                        "full_name": row.full_name or '',
-                        "terminated_date": row.terminated_date or '',
-                        "position_from_wd": row.position_code or '',
-                        "position": row.position or '',
-                        "expected_attendance": row.expected_attendance if row.expected_attendance is not None else 0,
-                        "actual_attendance": row.actual_attendance if row.actual_attendance is not None else 0,
-                        "monthly_target": row.staff_target_value,
-                        "Sales": row.staff_sales_value,
-                        "achievement_rate": f"{row.staff_achievement_rate:.2f}%" if row.staff_achievement_rate is not None else "0.00%",
-                        # "commission_only": 0,
-                        # "total_commission": 0,
-                        "fiscal_month": row.fiscal_month or '',
-                        # "individual_rule": '',
-                        # "team_rule": '',
-                        "total_days_store_work":
-                            row.total_days_store_work if row.total_days_store_work is not None else 0,
-                        "store_code": row.store_code or '',
-                        "store_name": row.store_name or '',
-                        "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0,
-                        "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%" if row.store_achievement_rate is not None else "0.00%",
-                        "manage_region": row.manage_region or '',
-                        "region_achievement_rate": f"{round(region_achievement, 2)}%",
-                        "manage_channel": row.manage_channel or '',
-                        "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
-                        "city": row.city or '',
-                        "city_tier": row.city_tier or '',
-                        **category_data
-                    })
+                    "staff_no": row.staff_code or '',
+                    "full_name": row.full_name or '',
+                    "terminated_date": row.terminated_date or '',
+                    "position_from_wd": row.position_code or '',
+                    "position": row.position or '',
+                    "expected_attendance": row.expected_attendance if row.expected_attendance is not None else 0,
+                    "actual_attendance": row.actual_attendance if row.actual_attendance is not None else 0,
+                    "monthly_target": row.staff_target_value,
+                    "Sales": row.staff_sales_value,
+                    "achievement_rate": f"{row.staff_achievement_rate:.2f}%" if row.staff_achievement_rate is not None else "0.00%",
+                    # "commission_only": 0,
+                    # "total_commission": 0,
+                    "fiscal_month": row.fiscal_month or '',
+                    # "individual_rule": '',
+                    # "team_rule": '',
+                    "total_days_store_work":
+                        row.total_days_store_work if row.total_days_store_work is not None else 0,
+                    "store_code": row.store_code or '',
+                    "store_name": row.store_name or '',
+                    "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0,
+                    "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%" if row.store_achievement_rate is not None else "0.00%",
+                    "manage_region": row.manage_region or '',
+                    "region_achievement_rate": f"{round(region_achievement, 2)}%",
+                    "manage_channel": row.manage_channel or '',
+                    "channel_achievement_rate": f"{round(channel_achievement, 2)}%",
+                    "city": row.city or '',
+                    "city_tier": row.city_tier or '',
+                    **category_data
+                })
 
                 # 根据规则类型累加金额
                 rule_class = row.rule_class.strip() if row.rule_class else None
@@ -1277,6 +1277,7 @@ class CommissionService:
 
     @staticmethod
     async def create_add_adjustment(db: AsyncSession, adjustment: CommissionStaffCreate):
+        r_code = 'Z-01'
         try:
             adjustment_commission = CommissionStaffModel(
                 fiscal_month=adjustment.fiscal_month,
@@ -1284,7 +1285,7 @@ class CommissionService:
                 store_code=adjustment.store_code,
                 amount=adjustment.amount,
                 remarks=adjustment.remarks,
-                rule_detail_code="Z-01"  # 设置为调整类型
+                rule_detail_code=r_code  # 设置为调整类型
             )
 
             db.add(adjustment_commission)
@@ -1303,7 +1304,7 @@ class CommissionService:
                 actual_attendance=0,
                 amount=adjustment.amount,
                 rule_code="adjustment",
-                rule_detail_code="Z-01",
+                rule_detail_code=r_code,
                 remarks=adjustment.remarks,
                 total_days_store_work=0
             )
@@ -1348,6 +1349,9 @@ class CommissionService:
 
             adjustment_record = result.scalar_one_or_none()
 
+            if adjustment_record:
+                await db.delete(adjustment_record)
+
             detail_result = await db.execute(
                 select(CommissionStaffDetailModel)
                 .where(CommissionStaffDetailModel.fiscal_month == fiscal_month)
@@ -1359,9 +1363,6 @@ class CommissionService:
 
             if adjustment_detail_record:
                 await db.delete(adjustment_detail_record)
-
-            if adjustment_record:
-                await db.delete(adjustment_record)
 
             if adjustment_record or adjustment_detail_record:
                 await db.commit()
@@ -1559,12 +1560,12 @@ class CommissionService:
 
         if actual_attendance is None or actual_attendance <= 0:
             app_logger.debug(f"员工 {staff.get('staff_code', 'Unknown')} 应出勤为0或None，不发放佣金")
-            return Decimal('0')  # 应出勤为0，不发放佣金
+            return {"commission_amount": Decimal('0'), "factor": None}
 
         if not rule_info.consider_attendance or expected_attendance == 0:
             app_logger.debug(
                 f"规则 {getattr(rule_info, 'rule_code', 'Unknown')} 不考虑出勤率，返回原始佣金金额: {commission_amount}")
-            return commission_amount  # 不考虑出勤率
+            return {"commission_amount": commission_amount, "factor": None}
 
         position = staff['position']
         position_stat = position_stats.get(position, {})
@@ -1803,7 +1804,7 @@ class CommissionService:
                 .where(
                     CommissionStaffDetailModel.fiscal_month == fiscal_month,
                     CommissionStaffDetailModel.store_code == store_code,
-                    CommissionStaffModel.rule_detail_code != "Z-01"
+                    CommissionStaffDetailModel.rule_detail_code != "Z-01"
                 )
             )
             app_logger.debug(f"删除了 {delete_detail_result.rowcount} 条现有佣金明细记录")
@@ -2118,7 +2119,7 @@ class CommissionService:
 
                         category_fields = {}
                         staff_sales_fields = {}
-                        tier_bonus_rate_fields={}
+                        tier_bonus_rate_fields = {}
                         if category_result_data:
                             for cat_name, field_name in CATEGORY_FIELD_MAP.items():
                                 cat_data = category_result_data.get(cat_name, {})
@@ -2129,7 +2130,8 @@ class CommissionService:
                                 staff_sales_fields[staff_sales_field] = cat_data.get('sales_value', Decimal('0'))
 
                                 tier_bonus_rate_field = f"tier_bonus_rate_{suffix}"
-                                tier_bonus_rate_fields[tier_bonus_rate_field] = cat_data.get('tier_bonus_rate', Decimal('0'))
+                                tier_bonus_rate_fields[tier_bonus_rate_field] = cat_data.get('tier_bonus_rate',
+                                                                                             Decimal('0'))
                         else:
                             commission_amount = round(commission_amount, -1)
 
