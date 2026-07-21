@@ -34,6 +34,7 @@ CATEGORY_INDEX_MAP = {
     'Other': 5
 }
 
+
 class CommissionRPTService:
 
     @staticmethod
@@ -67,6 +68,7 @@ class CommissionRPTService:
                     CommissionRuleModel.rule_class,
                     CommissionStaffDetailModel.total_days_store_work,
                     CommissionStaffDetailModel.store_code,
+                    CommissionStoreModel.store_type,
                     CommissionStaffDetailModel.fiscal_month.label('fiscal_month'),
                     CommissionStaffDetailModel.store_sales_value,
                     CommissionStaffDetailModel.store_target_value,
@@ -219,6 +221,7 @@ class CommissionRPTService:
                 'total_days_store_work': 0.0,
                 'store_code': '',
                 'store_name': '',
+                'store_type':'',
                 'store_sales_value': 0,
                 'store_achievement_rate': 0,
                 'manage_region': '',
@@ -246,7 +249,7 @@ class CommissionRPTService:
                     rate_val = getattr(row, f'tier_bonus_rate_{idx}', None)
                     amt_val = getattr(row, f'amount_{idx}', None)
                     category_data[f'{cat_name}_sales_value'] = sales_val if sales_val is not None else 0
-                    category_data[f'{cat_name}_bonus_rate'] = rate_val if rate_val is not None else 0
+                    category_data[f'{cat_name}_bonus_rate'] = f"{rate_val:.2f}%" if rate_val is not None else "0.00%"
                     category_data[f'{cat_name}_bonus_commission'] = amt_val if amt_val is not None else 0
 
                 staff_commissions[key].update({
@@ -269,6 +272,7 @@ class CommissionRPTService:
                         row.total_days_store_work if row.total_days_store_work is not None else 0,
                     "store_code": row.store_code or '',
                     "store_name": row.store_name or '',
+                    "store_type":row.store_type or '',
                     "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0,
                     "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%" if row.store_achievement_rate is not None else "0.00%",
                     "manage_region": row.manage_region or '',
@@ -350,6 +354,7 @@ class CommissionRPTService:
                 "total_commission": {"en": "Total Commission", "zh": "总奖金", "width": 110},
                 "store_code": {"en": "Store Code", "zh": "店铺代码", "width": 100},
                 "store_name": {"en": "Store Name", "zh": "店铺名称", "width": 120},
+                "store_type": {"en": "Store Type", "zh": "店铺类型", "width": 100},
                 "fiscal_month": {"en": "Fiscal Month", "zh": "财月", "width": 100},
                 "individual_rule": {"en": "Individual Type", "zh": "个提规则", "width": 100},
                 "team_rule": {"en": "Pool Type", "zh": "团提规则", "width": 100},
@@ -1395,6 +1400,70 @@ class CommissionService:
         return Decimal('1.0')
 
     @staticmethod
+    async def calculate_category_commission_v2(
+            db: AsyncSession,
+            rule_detail_code: str,
+            staff_code: str,
+            category_sales: dict
+    ) -> dict:
+        try:
+            category_result = await db.execute(
+                select(
+                    CommissionRuleCategory.level_value_1,
+                    CommissionRuleCategory.value
+                ).where(
+                    CommissionRuleCategory.rule_detail_code == rule_detail_code
+                )
+            )
+            category_rules = category_result.fetchall()
+
+            if not category_rules:
+                app_logger.warning(f"规则 {rule_detail_code} 在 commissions_rule_category 中没有找到品类系数")
+                return {'total': Decimal('0')}
+
+            category_coefficients = {
+                row.level_value_1: Decimal(str(row.value))
+                for row in category_rules
+            }
+            app_logger.debug(f"员工 {staff_code} 品类系数: {category_coefficients}")
+
+            if not category_sales:
+                app_logger.warning(f"员工 {staff_code} 品类销售数据为空")
+                return {'total': Decimal('0')}
+
+            app_logger.debug(f"员工 {staff_code} 品类销售数据: {category_sales}")
+
+            result = {'total': Decimal('0')}
+            for cat_name, field_name in CATEGORY_FIELD_MAP.items():
+                sales_value = category_sales.get(cat_name, Decimal('0'))
+                coefficient = category_coefficients.get(cat_name)
+
+                if coefficient is not None:
+                    amount = Decimal(str(sales_value)) * (coefficient / Decimal('100'))
+                    amount = round(amount, 0)
+                    result[cat_name] = {
+                        'sales_value': Decimal(str(sales_value)),
+                        'amount': amount,
+                        'tier_bonus_rate': coefficient
+                    }
+                    result['total'] += amount
+                    app_logger.debug(
+                        f"品类 {cat_name}: 销售额 {sales_value} × 系数 {coefficient}% = {amount}")
+                else:
+                    result[cat_name] = {
+                        'sales_value': Decimal(str(sales_value)),
+                        'amount': Decimal('0'),
+                        'tier_bonus_rate': None
+                    }
+                    app_logger.warning(f"品类 {cat_name} 在规则 {rule_detail_code} 中没有定义系数，金额记为0")
+
+            app_logger.info(f"员工 {staff_code} 品类奖金结果: {result}")
+            return result
+        except Exception as e:
+            app_logger.error(f"计算品类奖金时发生错误: {str(e)}", exc_info=True)
+            return {'category_amounts': {}, 'total': Decimal('0')}
+
+    @staticmethod
     async def calculate_category_commission(
             db: AsyncSession,
             rule_detail_code: str,
@@ -1914,6 +1983,26 @@ class CommissionService:
             for staff in staff_attendances:
                 app_logger.debug(f"正在为员工 {staff['staff_code']} 计算佣金")
 
+                sales_category_result = await db.execute(
+                    select(
+                        StaffSalesCategory.level_value_1,
+                        StaffSalesCategory.sales_value_ec,
+                        StaffSalesCategory.sales_value_store
+                    ).where(
+                        StaffSalesCategory.staff_code == staff['staff_code'],
+                        StaffSalesCategory.store_code == store_code,
+                        StaffSalesCategory.fiscal_month == fiscal_month
+                    )
+                )
+                category_sales_rows = sales_category_result.fetchall()
+                staff_category_sales = {}
+                if category_sales_rows:
+                    staff_category_sales = {
+                        row.level_value_1: (row.sales_value_ec or 0) + (row.sales_value_store or 0)
+                        for row in category_sales_rows
+                    }
+                app_logger.debug(f"员工 {staff['staff_code']} 品类销售数据: {staff_category_sales}")
+
                 # 检查员工目标值
                 staff_target_value = staff['target_value']
                 app_logger.debug(f"员工 {staff['staff_code']} 目标值: {staff_target_value}")
@@ -2001,17 +2090,25 @@ class CommissionService:
                     commission_amount = 0.0
                     rule_detail_value = matching_detail.value or 0
 
-                    category_result_data = None
+                    category_result_data = {}
                     factor = None
+
+                    for cat_name, field_name in CATEGORY_FIELD_MAP.items():
+                        sales_value_category = staff_category_sales.get(cat_name, Decimal('0'))
+                        category_result_data[cat_name] = {
+                            'sales_value': Decimal(str(sales_value_category)),
+                            'amount': Decimal('0'),
+                            'tier_bonus_rate': None
+                        }
+
                     app_logger.debug(f"规则详情值: {rule_detail_value}")
                     if rule_detail_value < 0:
                         app_logger.debug(f"规则详情值判断，进行品类奖金计算")
-                        category_result = await CommissionService.calculate_category_commission(
+                        category_result = await CommissionService.calculate_category_commission_v2(
                             db,
                             matching_detail.rule_detail_code,
                             staff['staff_code'],
-                            store_code,
-                            fiscal_month
+                            staff_category_sales
                         )
                         commission_amount = category_result['total']
                         category_result_data = category_result
@@ -2120,19 +2217,19 @@ class CommissionService:
                         category_fields = {}
                         staff_sales_fields = {}
                         tier_bonus_rate_fields = {}
-                        if category_result_data:
-                            for cat_name, field_name in CATEGORY_FIELD_MAP.items():
-                                cat_data = category_result_data.get(cat_name, {})
+                        for cat_name, field_name in CATEGORY_FIELD_MAP.items():
+                            cat_data = category_result_data.get(cat_name, {})
+                            suffix = field_name.split('_', 1)[1]
+                            staff_sales_field = f"staff_sales_{suffix}"
+                            staff_sales_fields[staff_sales_field] = cat_data.get('sales_value', Decimal('0'))
+
+                            if rule_detail_value < 0:
                                 category_fields[field_name] = cat_data.get('amount', Decimal('0'))
-
-                                suffix = field_name.split('_', 1)[1]
-                                staff_sales_field = f"staff_sales_{suffix}"
-                                staff_sales_fields[staff_sales_field] = cat_data.get('sales_value', Decimal('0'))
-
                                 tier_bonus_rate_field = f"tier_bonus_rate_{suffix}"
                                 tier_bonus_rate_fields[tier_bonus_rate_field] = cat_data.get('tier_bonus_rate',
                                                                                              Decimal('0'))
-                        else:
+
+                        if rule_detail_value >= 0:
                             commission_amount = round(commission_amount, -1)
 
                         commission_record = CommissionStaffModel(
