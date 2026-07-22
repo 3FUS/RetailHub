@@ -110,7 +110,7 @@ class CommissionStaffDetailModel(Base):
     rule_detail_code = Column(String(60), primary_key=True)
     remarks = Column(Text)
     total_days_store_work = Column(DECIMAL(12, 2))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime)
     creator_code = Column(String(30))
 
 

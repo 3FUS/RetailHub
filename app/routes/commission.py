@@ -26,7 +26,7 @@ async def update_commission(attendance_update: StaffAttendanceUpdate,
         role_code = current_user['user_code']
         if await CommissionService.update_commission(db, attendance_update, role_code):
             data = await CommissionService.calculate_commissions_for_store(db, attendance_update.store_code,
-                                                                           attendance_update.fiscal_month)
+                                                                           attendance_update.fiscal_month,role_code)
             return {"code": 200, "data": data, "msg": "Success"}
         else:
             app_logger.warning(f"An error occurred while fetching targets")

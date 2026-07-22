@@ -221,7 +221,7 @@ class CommissionRPTService:
                 'total_days_store_work': 0.0,
                 'store_code': '',
                 'store_name': '',
-                'store_type':'',
+                'store_type': '',
                 'store_sales_value': 0,
                 'store_achievement_rate': 0,
                 'manage_region': '',
@@ -272,7 +272,7 @@ class CommissionRPTService:
                         row.total_days_store_work if row.total_days_store_work is not None else 0,
                     "store_code": row.store_code or '',
                     "store_name": row.store_name or '',
-                    "store_type":row.store_type or '',
+                    "store_type": row.store_type or '',
                     "store_sales_value": row.store_sales_value if row.store_sales_value is not None else 0,
                     "store_achievement_rate": f"{round(row.store_achievement_rate, 2)}%" if row.store_achievement_rate is not None else "0.00%",
                     "manage_region": row.manage_region or '',
@@ -1704,7 +1704,7 @@ class CommissionService:
 
         commission.status = "approved"
         commission.approver_id = 1  # Assuming current user ID is 1 for demo
-        commission.updated_at = datetime.utcnow()
+        commission.updated_at = datetime.now()
         await db.commit()
         return {"message": "Commission approved successfully"}
 
@@ -1713,7 +1713,8 @@ class CommissionService:
                                           store_target_value: float, store_sales_value: float,
                                           store_achievement_rate: float, staff_target_value: float,
                                           staff_sales_value: float,
-                                          staff_achievement_rate: float) -> CommissionStaffDetailModel:
+                                          staff_achievement_rate: float,
+                                          staff_category_sales: dict) -> CommissionStaffDetailModel:
         """
         创建默认的佣金明细记录
 
@@ -1731,6 +1732,11 @@ class CommissionService:
         Returns:
             CommissionStaffDetailModel: 佣金明细模型实例
         """
+        staff_sales_fields = {
+            f"staff_sales_{idx}": Decimal(str(staff_category_sales.get(cat_name, 0)))
+            for cat_name, idx in CATEGORY_INDEX_MAP.items()
+        }
+
         return CommissionStaffDetailModel(
             fiscal_month=fiscal_month,
             staff_code=staff['staff_code'],
@@ -1747,11 +1753,12 @@ class CommissionService:
             rule_code='R-00',
             rule_detail_code='R-00-0',
             amount=0,
-            total_days_store_work=0
+            total_days_store_work=0,
+            **staff_sales_fields
         )
 
     @staticmethod
-    async def calculate_commissions_for_store(db: AsyncSession, store_code: str, fiscal_month: str):
+    async def calculate_commissions_for_store(db: AsyncSession, store_code: str, fiscal_month: str,user_code:str=None):
         """
         为指定店铺计算员工佣金，支持一个岗位对应多个规则的情况
 
@@ -2024,7 +2031,8 @@ class CommissionService:
                     app_logger.warning(f"员工 {staff['staff_code']} 没有适用的规则，跳过计算 并记录")
                     commission_detail_record = CommissionService._create_default_commission_detail(
                         fiscal_month, staff, store_code, store_target_value, store_sales_value,
-                        store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate
+                        store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate,
+                        staff_category_sales
                     )
                     db.add(commission_detail_record)
                     continue
@@ -2078,7 +2086,8 @@ class CommissionService:
                             f"未找到规则 {rule_code} 匹配达成率 {target_achievement_rate}% 的详情 并记录")
                         commission_detail_record = CommissionService._create_default_commission_detail(
                             fiscal_month, staff, store_code, store_target_value, store_sales_value,
-                            store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate
+                            store_achievement_rate, staff_target_value, staff_sales_value, staff_achievement_rate,
+                            staff_category_sales
                         )
                         db.add(commission_detail_record)
                         continue
@@ -2238,6 +2247,8 @@ class CommissionService:
                             store_code=store_code,
                             amount=commission_amount,
                             rule_detail_code=matching_detail.rule_detail_code,
+                            created_at=datetime.now(),
+                            creator_code=user_code,
                             total_days_store_work=position_stat.get('total_attendance', 0),
                             **category_fields
                         )
@@ -2261,6 +2272,8 @@ class CommissionService:
                             amount=commission_amount,
                             total_days_store_work=position_stat.get('total_attendance', 0),
                             factor=factor,
+                            created_at=datetime.now(),
+                            creator_code=user_code,
                             **category_fields,
                             **staff_sales_fields,
                             **tier_bonus_rate_fields
@@ -2325,7 +2338,7 @@ class CommissionService:
 
         if Commission_store:
             Commission_store.store_type = store_type
-            Commission_store.updated_at = datetime.utcnow()
+            Commission_store.updated_at = datetime.now()
 
         result = await db.execute(select(TargetStoreMain).where(
             TargetStoreMain.store_code == store_code,
@@ -2335,7 +2348,7 @@ class CommissionService:
 
         if Target_store:
             Target_store.store_type = store_type
-            Target_store.updated_at = datetime.utcnow()
+            Target_store.updated_at = datetime.now()
 
         result = await db.execute(select(StoreModel).where(
             StoreModel.store_code == store_code
@@ -2360,7 +2373,7 @@ class CommissionService:
         Commission_store = result.scalar_one_or_none()
         if Commission_store:
             Commission_store.fiscal_period = fiscal_period_str
-            Commission_store.updated_at = datetime.utcnow()
+            Commission_store.updated_at = datetime.now()
             await db.commit()
             return Commission_store
 
