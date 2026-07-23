@@ -193,7 +193,9 @@ class CommissionRPTService:
             category_defaults = {}
             for cat_name, idx in CATEGORY_INDEX_MAP.items():
                 category_defaults[f'{cat_name}_sales_value'] = 0
+            for cat_name, idx in CATEGORY_INDEX_MAP.items():
                 category_defaults[f'{cat_name}_bonus_rate'] = 0
+            for cat_name, idx in CATEGORY_INDEX_MAP.items():
                 category_defaults[f'{cat_name}_bonus_commission'] = 0
 
             staff_commissions = defaultdict(lambda: {
@@ -369,11 +371,13 @@ class CommissionRPTService:
                 "city_tier": {"en": "City Tier", "zh": "城市等级", "width": 100}
             }
             for cat_name in CATEGORY_INDEX_MAP:
-                field_translations[f'{cat_name}_sales_value'] = {"en": f"{cat_name} Sales Value",
+                field_translations[f'{cat_name}_sales_value'] = {"en": f"{cat_name} Sales",
                                                                  "zh": f"{cat_name}销售额", "width": 120}
-                field_translations[f'{cat_name}_bonus_rate'] = {"en": f"{cat_name} Bonus Rate",
+            for cat_name in CATEGORY_INDEX_MAP:
+                field_translations[f'{cat_name}_bonus_rate'] = {"en": f"{cat_name} Commission Rate",
                                                                 "zh": f"{cat_name}奖金比例", "width": 120}
-                field_translations[f'{cat_name}_bonus_commission'] = {"en": f"{cat_name} Bonus Commission",
+            for cat_name in CATEGORY_INDEX_MAP:
+                field_translations[f'{cat_name}_bonus_commission'] = {"en": f"{cat_name} Commission",
                                                                       "zh": f"{cat_name}奖金", "width": 120}
 
             return {
