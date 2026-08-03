@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommission, FiscalPeriodUpdate, StoreTypeUpdate, \
     WithdrawnCommission, UpdateOpeningDay
-from app.schemas.target import StaffAttendanceUpdate
-from app.services.commission_service import CommissionService
+from app.schemas.target import StaffAttendanceUpdate, StaffPlannedAttendanceUpdate
+from app.services.commission_service import CommissionService, CommissionDataHubService
 from app.database import get_db
 from sqlalchemy.exc import SQLAlchemyError
 from app.core.security import get_current_user
@@ -18,6 +18,21 @@ router = APIRouter()
 #     return await CommissionService.create_commission(db, commission)
 
 
+@router.get("/commission_tiers", tags=["DataHub"])
+async def get_commission_tiers(fiscal_month: str, store_code: str, staff_code: str,
+                               db: AsyncSession = Depends(get_db),
+                               current_user: dict = Depends(get_current_user)):
+    try:
+        data = await CommissionDataHubService.get_commission_tiers_by_staff(db, fiscal_month, store_code, staff_code)
+        return {"code": 200, "data": data}
+    except SQLAlchemyError as e:
+        app_logger.error(f"get_commission_tiers Database error: {str(e)}")
+        return {"code": 500, "msg": "Database error occurred while fetching commission tiers"}
+    except Exception as e:
+        app_logger.error(f"get_commission_tiers An error occurred: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred while fetching commission tiers: {str(e)}"}
+
+
 @router.put("/update")
 async def update_commission(attendance_update: StaffAttendanceUpdate,
                             db: AsyncSession = Depends(get_db),
@@ -26,7 +41,7 @@ async def update_commission(attendance_update: StaffAttendanceUpdate,
         role_code = current_user['user_code']
         if await CommissionService.update_commission(db, attendance_update, role_code):
             data = await CommissionService.calculate_commissions_for_store(db, attendance_update.store_code,
-                                                                           attendance_update.fiscal_month,role_code)
+                                                                           attendance_update.fiscal_month, role_code)
             return {"code": 200, "data": data, "msg": "Success"}
         else:
             app_logger.warning(f"An error occurred while fetching targets")
@@ -65,6 +80,51 @@ async def get_commissions_by_key(fiscal_month: str, key_word: str = None, status
         )
 
 
+@router.get("/staff_commission_ranking", tags=["DataHub"])
+async def get_staff_commission_ranking(fiscal_month: str, org1: str, org2: str, org3: str,
+                                       org4: str,
+                                       cursor: int = 0, limit: int = 30,
+                                       rank_type: str = 'ALL',
+                                       sort_by: str = 'commissions',
+                                       is_prod: bool = False,
+                                       db: AsyncSession = Depends(get_db),
+                                       current_user: dict = Depends(get_current_user)):
+    try:
+        role_code = current_user['user_code']
+        data = await CommissionDataHubService.get_staff_commissions_list_by_role(
+            db, role_code, fiscal_month, org1, org2, org3, org4,
+            cursor, limit, rank_type, sort_by, is_prod
+        )
+        return {"code": 200, "data": data}
+    except SQLAlchemyError as e:
+        app_logger.error(f"get_staff_commission_ranking Database error: {str(e)}")
+        return {"code": 500, "msg": "Database error occurred while fetching staff commission ranking"}
+    except Exception as e:
+        app_logger.error(f"get_staff_commission_ranking An error occurred: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred while fetching staff commission ranking: {str(e)}"}
+
+
+@router.put("/update_planned_attendance", tags=["DataHub"])
+async def update_planned_attendance(request: StaffPlannedAttendanceUpdate,
+                                    db: AsyncSession = Depends(get_db),
+                                    current_user: dict = Depends(get_current_user)):
+    try:
+        result = await CommissionDataHubService.update_planned_attendance(
+            db, request.store_code, request.fiscal_month, request.staff_code,
+            request.planned_attendance
+        )
+        if result:
+            return {"code": 200, "msg": "Planned attendance updated successfully"}
+        else:
+            return {"code": 404, "msg": "Staff record not found"}
+    except SQLAlchemyError as e:
+        app_logger.error(f"update_planned_attendance Database error: {str(e)}")
+        return {"code": 500, "msg": "Database error occurred"}
+    except Exception as e:
+        app_logger.error(f"update_planned_attendance error: {str(e)}")
+        return {"code": 500, "msg": f"An error occurred: {str(e)}"}
+
+
 @router.get("/store_performance")
 async def get_store_performance(fiscal_month: str, store_code: str,
                                 db: AsyncSession = Depends(get_db),
@@ -94,7 +154,8 @@ async def get_commission_detail(fiscal_month: str, store_code: str, staff_code: 
                                 current_user: dict = Depends(get_current_user)):
     try:
         data = await CommissionService.get_commission_by_staff_code(db, staff_code, store_code, fiscal_month)
-        return {"code": 200, "data": data}
+        data_info = await CommissionService.get_commission_by_store_code(db, store_code, fiscal_month)
+        return {"code": 200, "data": data, "data_info": data_info}
     except SQLAlchemyError as e:
         app_logger.error(f"get_commission_detail An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": "Database error occurred while fetching targets"}
@@ -102,10 +163,11 @@ async def get_commission_detail(fiscal_month: str, store_code: str, staff_code: 
         app_logger.error(f"get_commission_detail An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": "An error occurred while fetching targets"}
 
+
 @router.delete("/delete_adjustment")
 async def delete_adjustment(fiscal_month: str, store_code: str, staff_code: str,
-                           db: AsyncSession = Depends(get_db),
-                           current_user: dict = Depends(get_current_user)):
+                            db: AsyncSession = Depends(get_db),
+                            current_user: dict = Depends(get_current_user)):
     try:
         # 调用服务层删除调整记录
         result = await CommissionService.delete_adjustment(db, fiscal_month, store_code, staff_code)
@@ -134,15 +196,18 @@ async def add_adjustment(add_adjustment: CommissionStaffCreate, db: AsyncSession
         app_logger.error(f"add_adjustment An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": f"An error occurred while fetching targets {str(e)}"}
 
+
 @router.post("/update_opening_day")
 async def update_opening_day(request: UpdateOpeningDay, db: AsyncSession = Depends(get_db)):
     try:
-        data = await CommissionService.update_opening_day(db, request.fiscal_month, request.store_code, request.opening_days)
+        data = await CommissionService.update_opening_day(db, request.fiscal_month, request.store_code,
+                                                          request.opening_days)
         return {"code": 200, "data": data, "msg": "Success"}
 
     except SQLAlchemyError as e:
         app_logger.error(f"update_opening_day An error occurred while fetching targets: {str(e)}")
         return {"code": 500, "msg": f"update_opening_day An error occurred while fetching targets"}
+
 
 @router.post("/batch_Approved")
 async def batch_audit_commission(request: BatchApprovedCommission, db: AsyncSession = Depends(get_db),

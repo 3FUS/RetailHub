@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from app.models.commission import CommissionStaffModel, CommissionStoreModel, CommissionRuleModel, \
     CommissionRuleAssignmentModel, CommissionRuleDetailModel, CommissionMainModel, CommissionStaffDetailModel, \
-    CommissionRuleCategory, StaffSalesCategory
+    CommissionRuleCategory, StaffSalesCategory, CommissionTrialStaffDetailModel
 from app.models.dimension import StoreModel, DimensionDayWeek, RoleOrgJoin
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommission
@@ -1170,10 +1170,29 @@ class CommissionService:
 
     @staticmethod
     async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str):
-        pass
+        try:
+            store_info_result = await db.execute(
+                select(CommissionStoreModel.store_type, CommissionStoreModel.status)
+                .where(CommissionStoreModel.store_code == store_code)
+                .where(CommissionStoreModel.fiscal_month == fiscal_month)
+            )
+            store_info_row = store_info_result.first()
+            data_info = {
+                'store_type': store_info_row.store_type if store_info_row else None,
+                'status': store_info_row.status if store_info_row else None
+            }
+            return data_info
+        except Exception as e:
+            # 记录异常信息（在实际应用中应该使用日志记录器）
+            app_logger.error(f"Error in get_commission_by_store_code: {str(e)}")
+            # 抛出异常以便上层处理
+            raise e
 
     @staticmethod
-    async def get_commission_by_staff_code(db: AsyncSession, staff_code: str, store_code: str, fiscal_month: str):
+    async def get_commission_by_staff_code(db: AsyncSession, staff_code: str, store_code: str, fiscal_month: str,
+                                           is_prod: bool = True):
+        DetailModel = CommissionStaffDetailModel if is_prod else CommissionTrialStaffDetailModel
+
         result = await db.execute(
             select(
                 CommissionRuleModel.rule_code,
@@ -1184,81 +1203,70 @@ class CommissionService:
                 CommissionRuleDetailModel.start_value,
                 CommissionRuleDetailModel.end_value,
                 CommissionRuleDetailModel.value,
-                CommissionStaffDetailModel.amount,
-                CommissionStaffDetailModel.amount_1,
-                CommissionStaffDetailModel.amount_2,
-                CommissionStaffDetailModel.amount_3,
-                CommissionStaffDetailModel.amount_4,
-                CommissionStaffDetailModel.amount_5,
-                CommissionStaffDetailModel.amount_6,
-                CommissionStaffDetailModel.amount_7,
-                CommissionStaffDetailModel.amount_8,
-                CommissionStaffDetailModel.staff_sales_1,
-                CommissionStaffDetailModel.staff_sales_2,
-                CommissionStaffDetailModel.staff_sales_3,
-                CommissionStaffDetailModel.staff_sales_4,
-                CommissionStaffDetailModel.staff_sales_5,
-                CommissionStaffDetailModel.staff_sales_6,
-                CommissionStaffDetailModel.staff_sales_7,
-                CommissionStaffDetailModel.staff_sales_8,
-                CommissionStaffDetailModel.tier_bonus_rate_1,
-                CommissionStaffDetailModel.tier_bonus_rate_2,
-                CommissionStaffDetailModel.tier_bonus_rate_3,
-                CommissionStaffDetailModel.tier_bonus_rate_4,
-                CommissionStaffDetailModel.tier_bonus_rate_5,
-                CommissionStaffDetailModel.tier_bonus_rate_6,
-                CommissionStaffDetailModel.tier_bonus_rate_7,
-                CommissionStaffDetailModel.tier_bonus_rate_8,
-                CommissionStaffDetailModel.store_achievement_rate,
-                CommissionStaffDetailModel.store_sales_value,
-                CommissionStaffDetailModel.staff_sales_value,
-                CommissionStaffDetailModel.staff_achievement_rate,
-                CommissionStaffDetailModel.factor,
-                CommissionStaffDetailModel.remarks
+                DetailModel.amount,
+                DetailModel.amount_1,
+                DetailModel.amount_2,
+                DetailModel.amount_3,
+                DetailModel.amount_4,
+                DetailModel.amount_5,
+                DetailModel.amount_6,
+                DetailModel.amount_7,
+                DetailModel.amount_8,
+                DetailModel.staff_sales_1,
+                DetailModel.staff_sales_2,
+                DetailModel.staff_sales_3,
+                DetailModel.staff_sales_4,
+                DetailModel.staff_sales_5,
+                DetailModel.staff_sales_6,
+                DetailModel.staff_sales_7,
+                DetailModel.staff_sales_8,
+                DetailModel.tier_bonus_rate_1,
+                DetailModel.tier_bonus_rate_2,
+                DetailModel.tier_bonus_rate_3,
+                DetailModel.tier_bonus_rate_4,
+                DetailModel.tier_bonus_rate_5,
+                DetailModel.tier_bonus_rate_6,
+                DetailModel.tier_bonus_rate_7,
+                DetailModel.tier_bonus_rate_8,
+                DetailModel.store_target_value,
+                DetailModel.store_achievement_rate,
+                DetailModel.store_sales_value,
+                DetailModel.staff_target_value,
+                DetailModel.staff_achievement_rate,
+                DetailModel.staff_sales_value,
+                DetailModel.expected_attendance,
+                DetailModel.actual_attendance,
+                DetailModel.position,
+                # DetailModel.store_type,
+                DetailModel.factor,
+                DetailModel.rule_detail_code,
+                DetailModel.remarks
             )
-            .select_from(CommissionStaffDetailModel)
+            .select_from(DetailModel)
             .join(CommissionRuleDetailModel,
-                  CommissionStaffDetailModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
+                  DetailModel.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
             .join(CommissionRuleModel,
                   CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
-            .where(CommissionStaffDetailModel.staff_code == staff_code)
-            .where(CommissionStaffDetailModel.store_code == store_code)
-            .where(CommissionStaffDetailModel.fiscal_month == fiscal_month)
-            .order_by(CommissionStaffDetailModel.rule_detail_code)
+            .where(DetailModel.staff_code == staff_code)
+            .where(DetailModel.store_code == store_code)
+            .where(DetailModel.fiscal_month == fiscal_month)
+            .order_by(DetailModel.rule_detail_code)
         )
         commissions = result.fetchall()
         formatted_commissions = []
         for commission in commissions:
-            # 格式化公式显示
-            if commission.rule_type == 'commission':
-                # 对于佣金类型，显示为百分比形式
-                formula = f" => {commission.value}%"
-            elif commission.rule_type == 'incentive':
-                # 对于激励类型，显示为固定金额
-                formula = f"=> ¥{commission.value}"
-            else:
-                # 默认显示
-                formula = f"{commission.value}"
-
-            # 添加区间信息到公式中
-            if commission.start_value is not None:
-                if commission.end_value is not None:
-                    formula = f"≥ {commission.start_value}% < {commission.end_value}%  {formula}"
-                else:
-                    formula = f"≥ {commission.start_value}%  {formula}"
-            elif commission.end_value is not None:
-                formula = f"< {commission.end_value}%  {formula}"
 
             detail_data = {
                 "rule_name": commission.rule_name,
                 "rule_class": commission.rule_class,
                 "rule_type": commission.rule_type,
                 "rule_basis": commission.rule_basis,
+                "rule_detail_code": commission.rule_detail_code,
                 "achievement_rate": commission.store_achievement_rate if commission.rule_basis == 'store' else commission.staff_achievement_rate,
-                # "formula": formula if commission.rule_code != 'adjustment' else commission.remarks,
                 "start_value": commission.start_value,
                 "end_value": commission.end_value,
                 "value": commission.value if commission.value >= 0 else None,
+                "target_value": commission.store_target_value if commission.rule_basis == 'store' else commission.staff_target_value,
                 "sales_value": commission.store_sales_value if commission.rule_basis == 'store' else commission.staff_sales_value,
                 "amount": commission.amount if commission.amount is not None else 0.0,
                 "share_rate": commission.factor if commission.factor is not None else None,
@@ -1572,7 +1580,7 @@ class CommissionService:
 
         for idx, staff in enumerate(staff_attendances):
             position = staff['position']
-            actual_attendance = Decimal(str(staff.get('actual_attendance', 0)))
+            actual_attendance = Decimal(str(staff['actual_attendance'] or 0))
             target_value = Decimal(str(staff['target_value']))
             sales_value = Decimal(str(staff['sales_value'] or 0))
 
@@ -1762,7 +1770,8 @@ class CommissionService:
         )
 
     @staticmethod
-    async def calculate_commissions_for_store(db: AsyncSession, store_code: str, fiscal_month: str,user_code:str=None):
+    async def calculate_commissions_for_store(db: AsyncSession, store_code: str, fiscal_month: str,
+                                              user_code: str = None, is_prod: bool = True):
         """
         为指定店铺计算员工佣金，支持一个岗位对应多个规则的情况
 
@@ -1853,6 +1862,10 @@ class CommissionService:
                     StaffAttendanceModel.position,
                     StaffAttendanceModel.actual_attendance,
                     StaffAttendanceModel.expected_attendance,
+                    case(
+                        (StaffAttendanceModel.planned_attendance.is_(None), StaffAttendanceModel.expected_attendance),
+                        else_=StaffAttendanceModel.planned_attendance
+                    ).label('planned_attendance'),
                     StaffAttendanceModel.salary_coefficient,
                     StaffAttendanceModel.target_value_ratio,
                     StaffAttendanceModel.target_value,
@@ -1867,27 +1880,36 @@ class CommissionService:
             app_logger.info(f"找到 {len(staff_attendances)} 名员工需要计算佣金")
 
             # 3. 删除该店铺该财月的所有现有佣金记录
-            app_logger.debug(f"删除店铺 {store_code} 在财月 {month_codes} 的现有佣金记录")
-            delete_result = await db.execute(
-                delete(CommissionStaffModel)
-                .where(
-                    CommissionStaffModel.fiscal_month == fiscal_month,
-                    CommissionStaffModel.store_code == store_code,
-                    CommissionStaffModel.rule_detail_code != "Z-01"
+            if is_prod:
+                app_logger.debug(f"删除店铺 {store_code} 在财月 {month_codes} 的现有佣金记录")
+                delete_result = await db.execute(
+                    delete(CommissionStaffModel)
+                    .where(
+                        CommissionStaffModel.fiscal_month == fiscal_month,
+                        CommissionStaffModel.store_code == store_code,
+                        CommissionStaffModel.rule_detail_code != "Z-01"
+                    )
                 )
-            )
-            app_logger.debug(f"删除了 {delete_result.rowcount} 条现有佣金记录")
+                app_logger.debug(f"删除了 {delete_result.rowcount} 条现有佣金记录")
 
-            # 同时删除 CommissionStaffDetailModel 记录
-            delete_detail_result = await db.execute(
-                delete(CommissionStaffDetailModel)
-                .where(
-                    CommissionStaffDetailModel.fiscal_month == fiscal_month,
-                    CommissionStaffDetailModel.store_code == store_code,
-                    CommissionStaffDetailModel.rule_detail_code != "Z-01"
+                # 同时删除 CommissionStaffDetailModel 记录
+                delete_detail_result = await db.execute(
+                    delete(CommissionStaffDetailModel)
+                    .where(
+                        CommissionStaffDetailModel.fiscal_month == fiscal_month,
+                        CommissionStaffDetailModel.store_code == store_code,
+                        CommissionStaffDetailModel.rule_detail_code != "Z-01"
+                    )
                 )
-            )
-            app_logger.debug(f"删除了 {delete_detail_result.rowcount} 条现有佣金明细记录")
+            else:
+                await db.execute(
+                    delete(CommissionTrialStaffDetailModel)
+                    .where(
+                        CommissionTrialStaffDetailModel.fiscal_month == fiscal_month,
+                        CommissionTrialStaffDetailModel.store_code == store_code
+                    )
+                )
+
             # 4. 如果没有员工数据，直接提交事务并返回
             if not staff_attendances:
                 app_logger.info(f"店铺 {store_code} 没有员工数据，直接提交事务")
@@ -1963,7 +1985,7 @@ class CommissionService:
                     processed_staff_attendances[staff_code] = {
                         'staff_code': staff.staff_code,
                         'position': staff.position,
-                        'actual_attendance': staff.actual_attendance or 0,
+                        'actual_attendance': staff.actual_attendance or 0 if is_prod else staff.planned_attendance,
                         'expected_attendance': staff.expected_attendance or 0,
                         'salary_coefficient': staff.salary_coefficient,
                         'target_value_ratio': staff.target_value_ratio,
@@ -1974,12 +1996,17 @@ class CommissionService:
                 else:
                     # 累加数值型字段
                     existing_staff = processed_staff_attendances[staff_code]
-                    existing_staff['actual_attendance'] += staff.actual_attendance or 0
+                    existing_staff[
+                        'actual_attendance'] += staff.actual_attendance or 0 if is_prod else staff.planned_attendance
                     existing_staff['expected_attendance'] += staff.expected_attendance or 0
                     existing_staff['sales_value'] += staff.sales_value or 0
                     existing_staff['target_value'] += staff.target_value or 0
                     existing_staff['fiscal_months'].append(staff.fiscal_month)
 
+            # if not is_prod:
+            #     for sc, att_dict in processed_staff_attendances.items():
+            #         if sc in trial_actual_attendances:
+            #             att_dict['actual_attendance'] = trial_actual_attendances[sc]
             # 转换为列表格式
             staff_attendances = list(processed_staff_attendances.values())
             app_logger.info(f"预处理后有 {len(staff_attendances)} 名唯一员工需要计算佣金")
@@ -2031,7 +2058,7 @@ class CommissionService:
                 rule_codes = position_to_rules.get(staff['position'], [])
                 app_logger.debug(f"员工 {staff['staff_code']} 岗位 {staff['position']} 适用的规则: {rule_codes}")
 
-                if not rule_codes:
+                if not rule_codes and is_prod:
                     app_logger.warning(f"员工 {staff['staff_code']} 没有适用的规则，跳过计算 并记录")
                     commission_detail_record = CommissionService._create_default_commission_detail(
                         fiscal_month, staff, store_code, store_target_value, store_sales_value,
@@ -2085,7 +2112,7 @@ class CommissionService:
                     )
                     matching_detail = rule_detail_result.fetchone()
 
-                    if not matching_detail:
+                    if not matching_detail and is_prod:
                         app_logger.warning(
                             f"未找到规则 {rule_code} 匹配达成率 {target_achievement_rate}% 的详情 并记录")
                         commission_detail_record = CommissionService._create_default_commission_detail(
@@ -2223,28 +2250,28 @@ class CommissionService:
 
                     # 只有佣金金额大于等0时才保存
 
-                    if commission_amount >= 0:
-                        position_stat = position_stats.get(staff['position'], {})
-                        app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
+                    position_stat = position_stats.get(staff['position'], {})
+                    app_logger.debug(f"为员工 {staff['staff_code']} 创建佣金记录: {commission_amount}")
 
-                        category_fields = {}
-                        staff_sales_fields = {}
-                        tier_bonus_rate_fields = {}
-                        for cat_name, field_name in CATEGORY_FIELD_MAP.items():
-                            cat_data = category_result_data.get(cat_name, {})
-                            suffix = field_name.split('_', 1)[1]
-                            staff_sales_field = f"staff_sales_{suffix}"
-                            staff_sales_fields[staff_sales_field] = cat_data.get('sales_value', Decimal('0'))
+                    category_fields = {}
+                    staff_sales_fields = {}
+                    tier_bonus_rate_fields = {}
+                    for cat_name, field_name in CATEGORY_FIELD_MAP.items():
+                        cat_data = category_result_data.get(cat_name, {})
+                        suffix = field_name.split('_', 1)[1]
+                        staff_sales_field = f"staff_sales_{suffix}"
+                        staff_sales_fields[staff_sales_field] = cat_data.get('sales_value', Decimal('0'))
 
-                            if rule_detail_value < 0:
-                                category_fields[field_name] = cat_data.get('amount', Decimal('0'))
-                                tier_bonus_rate_field = f"tier_bonus_rate_{suffix}"
-                                tier_bonus_rate_fields[tier_bonus_rate_field] = cat_data.get('tier_bonus_rate',
-                                                                                             Decimal('0'))
+                        if rule_detail_value < 0:
+                            category_fields[field_name] = cat_data.get('amount', Decimal('0'))
+                            tier_bonus_rate_field = f"tier_bonus_rate_{suffix}"
+                            tier_bonus_rate_fields[tier_bonus_rate_field] = cat_data.get('tier_bonus_rate',
+                                                                                         Decimal('0'))
 
-                        if rule_detail_value >= 0:
-                            commission_amount = round(commission_amount, -1)
+                    if rule_detail_value >= 0:
+                        commission_amount = round(commission_amount, -1)
 
+                    if is_prod:
                         commission_record = CommissionStaffModel(
                             fiscal_month=fiscal_month,
                             staff_code=staff['staff_code'],
@@ -2286,8 +2313,33 @@ class CommissionService:
 
                         db.add(commission_detail_record)
                     else:
-                        app_logger.debug(f"员工 {staff['staff_code']} 计算的佣金金额为 <=0，跳过记录")
 
+                        app_logger.debug(f"员工 {staff['staff_code']} 预计算的佣金金额")
+
+                        commission_detail_record = CommissionTrialStaffDetailModel(
+                            fiscal_month=fiscal_month,
+                            staff_code=staff['staff_code'],
+                            store_code=store_code,
+                            position=staff['position'],
+                            store_target_value=store_target_value,
+                            store_sales_value=store_sales_value,
+                            store_achievement_rate=store_achievement_rate,
+                            staff_target_value=staff_target_value,
+                            staff_sales_value=staff_sales_value,
+                            staff_achievement_rate=staff_achievement_rate,
+                            expected_attendance=staff['expected_attendance'] or 0,
+                            actual_attendance=staff['actual_attendance'] or 0,
+                            rule_code=rule_code,
+                            rule_detail_code=matching_detail.rule_detail_code,
+                            amount=commission_amount,
+                            total_days_store_work=position_stat.get('total_attendance', 0),
+                            factor=factor,
+                            created_at=datetime.now(),
+                            creator_code=user_code,
+                            **category_fields,
+                            **staff_sales_fields,
+                            **tier_bonus_rate_fields)
+                        db.add(commission_detail_record)
             # 8. 批量添加佣金记录
             if commission_records:
                 app_logger.info(f"准备插入 {len(commission_records)} 条佣金记录")
@@ -2412,5 +2464,400 @@ class CommissionService:
 
         except Exception as e:
             app_logger.error(f"Error in add_month_end: {str(e)}")
+            await db.rollback()
+            raise e
+
+
+class CommissionDataHubService:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    async def get_commission_tiers_by_staff(db: AsyncSession, fiscal_month: str, store_code: str, staff_code: str):
+        try:
+
+            await CommissionService.calculate_commissions_for_store(db, store_code, fiscal_month, staff_code, False)
+
+            position = 'Selling'
+            app_logger.info(
+                f"Starting get_commission_tiers_by_store for fiscal_month: {fiscal_month}, "
+                f"store_code: {store_code}, position: {position}")
+
+            query = (
+                select(
+                    CommissionStoreModel.store_type,
+                    CommissionRuleAssignmentModel.position,
+                    CommissionRuleModel.rule_code,
+                    CommissionRuleModel.rule_name,
+                    CommissionRuleModel.rule_class,
+                    CommissionRuleModel.rule_type,
+                    CommissionRuleDetailModel.rule_detail_code,
+                    CommissionRuleDetailModel.start_value,
+                    CommissionRuleDetailModel.end_value,
+                    CommissionRuleDetailModel.value,
+                    func.row_number().over(
+                        partition_by=CommissionRuleModel.rule_code,
+                        order_by=CommissionRuleDetailModel.start_value
+                    ).label('tier_index')
+                )
+                .select_from(CommissionStoreModel)
+                .join(CommissionRuleAssignmentModel,
+                      CommissionStoreModel.store_type == CommissionRuleAssignmentModel.store_type)
+                .join(CommissionRuleDetailModel,
+                      CommissionRuleAssignmentModel.rule_code == CommissionRuleDetailModel.rule_code)
+                .join(CommissionRuleModel,
+                      CommissionRuleDetailModel.rule_code == CommissionRuleModel.rule_code)
+                .where(
+                    CommissionStoreModel.fiscal_month == fiscal_month,
+                    CommissionStoreModel.store_code == store_code,
+                    CommissionRuleAssignmentModel.position == position,
+                )
+            )
+
+            result = await db.execute(query)
+            rows = result.fetchall()
+            store_type = rows[0].store_type if rows else None
+            app_logger.info(f"Fetched {len(rows)} tier rows for store {store_code}")
+
+            # if rows.merged_store_codes:
+            #     merged_code = rows.merged_store_codes.split(',')
+            #     merged_codes = [code.strip() for code in merged_code]
+            #
+            # if rows.fiscal_period and rows.fiscal_period != fiscal_month:
+            #     merged_month = rows.fiscal_period.split(',')
+            #     merged_months = [code.strip() for code in merged_month]
+            #
+            result_merged = await db.execute(
+                select(
+                    func.sum(TargetStoreMain.target_value).label('total_target_value'),
+                    func.sum(TargetStoreMain.sales_value).label('total_sales_value')
+                )
+                .where(
+                    TargetStoreMain.fiscal_month.in_([fiscal_month]),
+                    TargetStoreMain.store_code.in_([store_code])
+                )
+            )
+            merged_data = result_merged.fetchone()
+
+            store_target = merged_data.total_target_value
+            store_sales = merged_data.total_sales_value
+
+            store_achievement_rate = (store_sales / store_target) * 100 if store_target else None
+
+            staff_attendances_result = await db.execute(
+                select(
+                    StaffAttendanceModel.staff_code,
+                    StaffAttendanceModel.position,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.planned_attendance,
+                    StaffAttendanceModel.salary_coefficient,
+                    StaffAttendanceModel.target_value_ratio,
+                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.fiscal_month
+                ).where(
+                    StaffAttendanceModel.store_code.in_([store_code]),
+                    StaffAttendanceModel.fiscal_month.in_([fiscal_month]),
+                    StaffAttendanceModel.staff_code == staff_code
+                )
+            )
+            staff_attendances = staff_attendances_result.fetchone()
+
+            actual_attendance = staff_attendances.actual_attendance if staff_attendances else None
+            expected_attendance = staff_attendances.expected_attendance if staff_attendances else None
+            staff_target_value = staff_attendances.target_value if staff_attendances else None
+            staff_sales_value = staff_attendances.sales_value if staff_attendances else None
+            staff_achievement_rate = (staff_sales_value / staff_target_value) * 100 if staff_target_value else None
+            position = staff_attendances.position if staff_attendances else None
+            planned_attendance = staff_attendances.planned_attendance if staff_attendances.planned_attendance else staff_attendances.expected_attendance or 0
+
+            negative_rule_detail_codes = [row.rule_detail_code for row in rows if
+                                          row.value is not None and row.value < 0]
+            category_lookup = {}
+            if negative_rule_detail_codes:
+                category_result = await db.execute(
+                    select(
+                        CommissionRuleCategory.rule_detail_code,
+                        CommissionRuleCategory.level_value_1,
+                        CommissionRuleCategory.value,
+                        CommissionRuleDetailModel.start_value
+                    )
+                    .join(CommissionRuleDetailModel,
+                          CommissionRuleCategory.rule_detail_code == CommissionRuleDetailModel.rule_detail_code)
+                    .where(
+                        CommissionRuleCategory.rule_detail_code.in_(negative_rule_detail_codes)
+                    )
+                    .order_by(CommissionRuleDetailModel.start_value)
+                )
+                for cat_row in category_result.fetchall():
+                    if cat_row.rule_detail_code not in category_lookup:
+                        category_lookup[cat_row.rule_detail_code] = []
+                    category_lookup[cat_row.rule_detail_code].append({
+                        "level_value_1": cat_row.level_value_1,
+                        "tier_bonus_rate": cat_row.value,
+                    })
+
+            prev_category_by_class = {}
+
+            tier_dict = {}
+            for row in rows:
+                rule_class = row.rule_class
+                target_value = staff_target_value if rule_class == 'individual' else store_target
+                if rule_class not in tier_dict:
+                    tier_dict[rule_class] = []
+                detail_data = {
+                    # "store_type": row.store_type,
+                    # "position": row.position,
+                    "rule_code": row.rule_code,
+                    "rule_name": row.rule_name,
+                    "rule_class": row.rule_class,
+                    "rule_type": row.rule_type,
+                    "tier_index": row.tier_index,
+                    "rule_detail_code": row.rule_detail_code,
+                    "value": row.value if row.value is not None and row.value > 0 else None,
+                    "start_value": row.start_value if row.start_value is not None else None,
+                    "start_sales_value": target_value * row.start_value / Decimal(
+                        100) if row.start_value is not None else None
+                    # "end_value": row.end_value if row.end_value is not None else None
+                }
+                if row.value is not None and row.value < 0:
+                    sorted_categories = category_lookup.get(row.rule_detail_code, [])
+                    category_table = {}
+                    prev_categories = prev_category_by_class.get(row.rule_class, {})
+                    current_categories = {}
+                    for cat in sorted_categories:
+                        cat_name = cat["level_value_1"]
+                        current_rate = cat["tier_bonus_rate"]
+                        current_categories[cat_name] = current_rate
+                        prev_rate = prev_categories.get(cat_name)
+                        if prev_rate is not None:
+                            delta = current_rate - prev_rate if current_rate is not None else None
+                        else:
+                            delta = None
+                        category_table[cat_name] = {
+                            "tier_bonus_rate": current_rate,
+                            "delta": delta
+                        }
+                    prev_category_by_class[row.rule_class] = current_categories
+                    detail_data['category_table'] = category_table
+                tier_dict[rule_class].append(detail_data)
+
+            tier_commission_data = await CommissionService.get_commission_by_staff_code(db, staff_code, store_code,
+                                                                                        fiscal_month, False)
+
+            tier_dict['info'] = {'actual_attendance': actual_attendance,
+                                 'expected_attendance': expected_attendance,
+                                 'planned_attendance': planned_attendance,
+                                 'store_type': store_type,
+                                 'position': position}
+
+            tier_dict['info']['team'] = {'store_target': store_target,
+                                         'store_sales': store_sales,
+                                         'store_achievement_rate': f'{store_achievement_rate:.2f}%'}
+            tier_dict['info']['staff'] = {'staff_target': staff_target_value,
+                                          'staff_sales': staff_sales_value,
+                                          'staff_achievement_rate': f'{staff_achievement_rate:.2f}%'}
+
+            for comm in tier_commission_data:
+                rule_class = comm.get('rule_class')
+                if rule_class not in ('team', 'individual'):
+                    continue
+                current_detail_code = comm.get('rule_detail_code')
+                current_sales_value = comm.get('sales_value')
+                tier_list = tier_dict.get(rule_class, [])
+                gap_value = None
+                for i, tier in enumerate(tier_list):
+                    if tier.get('rule_detail_code') == current_detail_code:
+                        if i + 1 < len(tier_list):
+                            next_start_sales_value = tier_list[i + 1].get('start_sales_value')
+                            if next_start_sales_value is not None and current_sales_value is not None:
+                                gap_value = next_start_sales_value - current_sales_value
+                        break
+                if rule_class == 'team':
+                    tier_dict['info']['team']['gap_value'] = gap_value
+                elif rule_class == 'individual':
+                    tier_dict['info']['staff']['gap_value'] = gap_value
+
+            tier_dict['commission'] = tier_commission_data
+
+            return tier_dict
+
+        except Exception as e:
+            app_logger.error(f"Error in get_commission_tiers_by_store: {str(e)}")
+            raise
+
+    @staticmethod
+    async def get_staff_commissions_list_by_role(db: AsyncSession, role_code: str, fiscal_month: str,
+                                                 org1: str = 'ALL', org2: str = 'ALL', org3: str = 'ALL',
+                                                 org4: str = 'ALL',
+                                                 cursor: int = 0, limit: int = 30, rank_type: str = 'ALL',
+                                                 sort_by: str = 'commissions', is_prod: bool = False):
+        try:
+            store_permission_query = build_store_permission_query(role_code)
+            store_alias = store_permission_query.subquery()
+
+            DetailModel = CommissionStaffDetailModel if is_prod else CommissionTrialStaffDetailModel
+
+            amount_sum = func.sum(DetailModel.amount)
+
+            if sort_by == 'sales_value':
+                rank_order = StaffAttendanceModel.sales_value.desc()
+            else:
+                rank_order = amount_sum.desc()
+
+            base_subq = (
+                select(
+                    StaffAttendanceModel.store_code,
+                    StoreModel.store_name,
+                    StoreModel.manage_region,
+                    StoreModel.manage_channel,
+                    StoreModel.City,
+                    StaffAttendanceModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.avatar,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.planned_attendance,
+                    # StaffAttendanceModel.position,
+                    amount_sum.label('amount'),
+                    func.row_number().over(order_by=rank_order).label('rank')
+                )
+                .select_from(StaffAttendanceModel)
+                .join(StaffModel,
+                      StaffAttendanceModel.staff_code == StaffModel.staff_code)
+                .join(StoreModel,
+                      StaffAttendanceModel.store_code == StoreModel.store_code)
+                .outerjoin(DetailModel,
+                           (StaffAttendanceModel.fiscal_month == DetailModel.fiscal_month) &
+                           (StaffAttendanceModel.store_code == DetailModel.store_code) &
+                           (StaffAttendanceModel.staff_code == DetailModel.staff_code))
+                .where(
+                    StaffAttendanceModel.fiscal_month == fiscal_month,
+                )
+                .group_by(
+                    StaffAttendanceModel.store_code,
+                    StoreModel.store_name,
+                    StoreModel.manage_region,
+                    StoreModel.manage_channel,
+                    StoreModel.City,
+                    StaffAttendanceModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.avatar,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.planned_attendance
+                )
+            ).subquery()
+
+            query = (
+                select(
+                    base_subq.c.store_code,
+                    base_subq.c.store_name,
+                    base_subq.c.manage_region,
+                    base_subq.c.manage_channel,
+                    base_subq.c.staff_code,
+                    base_subq.c.first_name,
+                    base_subq.c.avatar,
+                    base_subq.c.sales_value,
+                    base_subq.c.target_value,
+                    base_subq.c.expected_attendance,
+                    base_subq.c.actual_attendance,
+                    base_subq.c.planned_attendance,
+                    base_subq.c.amount,
+                    base_subq.c.rank
+                )
+                .select_from(base_subq)
+                .join(store_alias,
+                      base_subq.c.store_code == store_alias.c.store_code)
+            )
+
+            if org1 and org1 != 'ALL':
+                org1_values = [v.strip() for v in org1.split(',')]
+                query = query.where(base_subq.c.manage_channel.in_(org1_values))
+
+            if org2 and org2 != 'ALL':
+                org2_values = [v.strip() for v in org2.split(',')]
+                query = query.where(base_subq.c.manage_region.in_(org2_values))
+
+            if org3 and org3 != 'ALL':
+                org3_values = [v.strip() for v in org3.split(',')]
+                query = query.where(base_subq.c.City.in_(org3_values))
+
+            if org4 and org4 != 'ALL':
+                org4_values = [v.strip() for v in org4.split(',')]
+                query = query.where(base_subq.c.store_code.in_(org4_values))
+
+            query = query.order_by(base_subq.c.rank)
+            query = query.offset(cursor).limit(limit + 1)
+
+            result = await db.execute(query)
+            rows = result.fetchall()
+
+            has_more = len(rows) > limit
+            if has_more:
+                rows = rows[:limit]
+
+            staff_list = []
+            for row in rows:
+                staff_list.append({
+                    "rank": row.rank,
+                    "store_code": row.store_code,
+                    "store_name": row.store_name,
+                    "manage_channel": row.manage_channel,
+                    "manage_region": row.manage_region,
+                    "staff_code": row.staff_code,
+                    "first_name": row.first_name,
+                    "avatar": row.avatar,
+                    "sales_value": row.sales_value,
+                    "target_value": row.target_value,
+                    "achievement_rate": f'{row.sales_value / row.target_value * 100:.2f}' if row.target_value and row.target_value > 0 and row.sales_value is not None else 0,
+                    "expected_attendance": row.expected_attendance,
+                    "actual_attendance": row.actual_attendance,
+                    "planned_attendance": row.planned_attendance if row.planned_attendance else row.expected_attendance,
+                    "value": row.amount if row.amount is not None else 0,
+                    "value_tag": 'COMM' if is_prod else 'Est COMM'
+                })
+
+            return {"rank_data": staff_list, "rank_type": rank_type, "has_more": has_more,
+                    "next_cursor": cursor + len(staff_list)}
+
+        except Exception as e:
+            app_logger.error(f"Error in get_staff_commissions_list_by_role: {str(e)}")
+            raise
+
+    @staticmethod
+    async def update_planned_attendance(db: AsyncSession, store_code: str, fiscal_month: str,
+                                        staff_code: str, planned_attendance) -> bool:
+        try:
+            app_logger.info(f"Starting update_planned_attendance: store={store_code}, "
+                            f"fiscal_month={fiscal_month}, staff={staff_code}, planned_attendance={planned_attendance}")
+
+            result = await db.execute(
+                select(StaffAttendanceModel)
+                .where(StaffAttendanceModel.staff_code == staff_code)
+                .where(StaffAttendanceModel.store_code == store_code)
+                .where(StaffAttendanceModel.fiscal_month == fiscal_month)
+            )
+            staff_record = result.scalar_one_or_none()
+
+            if staff_record:
+                old_value = staff_record.planned_attendance
+                staff_record.planned_attendance = planned_attendance
+                staff_record.updated_at = datetime.now()
+                await db.commit()
+                app_logger.info(f"Updated staff {staff_code} planned_attendance: {old_value} -> {planned_attendance}")
+                return True
+            else:
+                app_logger.warning(
+                    f"No record found for staff {staff_code} in store {store_code}, fiscal_month {fiscal_month}")
+                return False
+
+        except Exception as e:
+            app_logger.error(f"Error in update_planned_attendance: {str(e)}", exc_info=True)
             await db.rollback()
             raise e

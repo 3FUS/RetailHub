@@ -93,6 +93,12 @@ class StaffAttendanceUpdate(BaseModel):
     staff_status: str = "saved"
 
 
+class StaffPlannedAttendanceUpdate(BaseModel):
+    store_code: str
+    fiscal_month: str
+    staff_code: str
+    planned_attendance: Optional[Decimal] = None
+
 class BatchApprovedTarget(BaseModel):
     fiscal_month: str
     store_codes: List[str]
