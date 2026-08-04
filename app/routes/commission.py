@@ -154,7 +154,7 @@ async def get_commission_detail(fiscal_month: str, store_code: str, staff_code: 
                                 current_user: dict = Depends(get_current_user)):
     try:
         data = await CommissionService.get_commission_by_staff_code(db, staff_code, store_code, fiscal_month)
-        data_info = await CommissionService.get_commission_by_store_code(db, store_code, fiscal_month)
+        data_info = await CommissionService.get_commission_by_store_code(db, store_code, fiscal_month,staff_code)
         return {"code": 200, "data": data, "data_info": data_info}
     except SQLAlchemyError as e:
         app_logger.error(f"get_commission_detail An error occurred while fetching targets: {str(e)}")

@@ -1169,7 +1169,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str):
+    async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str,staff_code: str):
         try:
             store_info_result = await db.execute(
                 select(CommissionStoreModel.store_type, CommissionStoreModel.status)
@@ -1181,6 +1181,27 @@ class CommissionService:
                 'store_type': store_info_row.store_type if store_info_row else None,
                 'status': store_info_row.status if store_info_row else None
             }
+
+            attendance_result = await db.execute(
+                select(
+                    StaffAttendanceModel.position,
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.actual_attendance
+                )
+                .where(StaffAttendanceModel.store_code == store_code)
+                .where(StaffAttendanceModel.fiscal_month == fiscal_month)
+                .where(StaffAttendanceModel.staff_code == staff_code)
+            )
+            attendance_row = attendance_result.first()
+            if attendance_row:
+                data_info['position'] = attendance_row.position
+                data_info['expected_attendance'] = attendance_row.expected_attendance
+                data_info['actual_attendance'] = attendance_row.actual_attendance
+            else:
+                data_info['position'] = None
+                data_info['expected_attendance'] = None
+                data_info['actual_attendance'] = None
+
             return data_info
         except Exception as e:
             # 记录异常信息（在实际应用中应该使用日志记录器）
@@ -2478,7 +2499,35 @@ class CommissionDataHubService:
 
             await CommissionService.calculate_commissions_for_store(db, store_code, fiscal_month, staff_code, False)
 
-            position = 'Selling'
+            staff_attendances_result = await db.execute(
+                select(
+                    StaffAttendanceModel.staff_code,
+                    StaffAttendanceModel.position,
+                    StaffAttendanceModel.actual_attendance,
+                    StaffAttendanceModel.expected_attendance,
+                    StaffAttendanceModel.planned_attendance,
+                    StaffAttendanceModel.salary_coefficient,
+                    StaffAttendanceModel.target_value_ratio,
+                    StaffAttendanceModel.target_value,
+                    StaffAttendanceModel.sales_value,
+                    StaffAttendanceModel.fiscal_month
+                ).where(
+                    StaffAttendanceModel.store_code.in_([store_code]),
+                    StaffAttendanceModel.fiscal_month.in_([fiscal_month]),
+                    StaffAttendanceModel.staff_code == staff_code
+                )
+            )
+            staff_attendances = staff_attendances_result.fetchone()
+
+            actual_attendance = staff_attendances.actual_attendance if staff_attendances else None
+            expected_attendance = staff_attendances.expected_attendance if staff_attendances else None
+            staff_target_value = staff_attendances.target_value if staff_attendances else None
+            staff_sales_value = staff_attendances.sales_value if staff_attendances else None
+            staff_achievement_rate = (staff_sales_value / staff_target_value) * 100 if staff_target_value else None
+            position = staff_attendances.position if staff_attendances else None
+            planned_attendance = staff_attendances.planned_attendance if staff_attendances.planned_attendance else staff_attendances.expected_attendance or 0
+
+            # position = 'Selling'
             app_logger.info(
                 f"Starting get_commission_tiers_by_store for fiscal_month: {fiscal_month}, "
                 f"store_code: {store_code}, position: {position}")
@@ -2544,33 +2593,7 @@ class CommissionDataHubService:
 
             store_achievement_rate = (store_sales / store_target) * 100 if store_target else None
 
-            staff_attendances_result = await db.execute(
-                select(
-                    StaffAttendanceModel.staff_code,
-                    StaffAttendanceModel.position,
-                    StaffAttendanceModel.actual_attendance,
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.planned_attendance,
-                    StaffAttendanceModel.salary_coefficient,
-                    StaffAttendanceModel.target_value_ratio,
-                    StaffAttendanceModel.target_value,
-                    StaffAttendanceModel.sales_value,
-                    StaffAttendanceModel.fiscal_month
-                ).where(
-                    StaffAttendanceModel.store_code.in_([store_code]),
-                    StaffAttendanceModel.fiscal_month.in_([fiscal_month]),
-                    StaffAttendanceModel.staff_code == staff_code
-                )
-            )
-            staff_attendances = staff_attendances_result.fetchone()
 
-            actual_attendance = staff_attendances.actual_attendance if staff_attendances else None
-            expected_attendance = staff_attendances.expected_attendance if staff_attendances else None
-            staff_target_value = staff_attendances.target_value if staff_attendances else None
-            staff_sales_value = staff_attendances.sales_value if staff_attendances else None
-            staff_achievement_rate = (staff_sales_value / staff_target_value) * 100 if staff_target_value else None
-            position = staff_attendances.position if staff_attendances else None
-            planned_attendance = staff_attendances.planned_attendance if staff_attendances.planned_attendance else staff_attendances.expected_attendance or 0
 
             negative_rule_detail_codes = [row.rule_detail_code for row in rows if
                                           row.value is not None and row.value < 0]
@@ -2694,6 +2717,17 @@ class CommissionDataHubService:
                                                  cursor: int = 0, limit: int = 30, rank_type: str = 'ALL',
                                                  sort_by: str = 'commissions', is_prod: bool = False):
         try:
+
+            today = datetime.now().date()
+            current_fm_result = await db.execute(
+                select(DimensionDayWeek.fiscal_month).where(DimensionDayWeek.actual_date == today)
+            )
+            current_fm = current_fm_result.scalar_one_or_none()
+            if current_fm == fiscal_month:
+                is_prod = False
+            else:
+                is_prod = True
+
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
