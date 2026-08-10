@@ -11,7 +11,7 @@ from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommissio
 from app.models.target import TargetStoreMain
 
 from datetime import datetime
-from sqlalchemy import func, or_, exists, case
+from sqlalchemy import func, or_, exists, case, distinct
 from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
@@ -1169,7 +1169,7 @@ class CommissionService:
             raise e
 
     @staticmethod
-    async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str,staff_code: str):
+    async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str, staff_code: str):
         try:
             store_info_result = await db.execute(
                 select(CommissionStoreModel.store_type, CommissionStoreModel.status)
@@ -2006,7 +2006,8 @@ class CommissionService:
                     processed_staff_attendances[staff_code] = {
                         'staff_code': staff.staff_code,
                         'position': staff.position,
-                        'actual_attendance': staff.actual_attendance or 0 if is_prod else staff.planned_attendance,
+                        'actual_attendance': staff.actual_attendance or 0 if is_prod else (
+                                staff.planned_attendance or 0),
                         'expected_attendance': staff.expected_attendance or 0,
                         'salary_coefficient': staff.salary_coefficient,
                         'target_value_ratio': staff.target_value_ratio,
@@ -2018,7 +2019,8 @@ class CommissionService:
                     # 累加数值型字段
                     existing_staff = processed_staff_attendances[staff_code]
                     existing_staff[
-                        'actual_attendance'] += staff.actual_attendance or 0 if is_prod else staff.planned_attendance
+                        'actual_attendance'] += staff.actual_attendance or 0 if is_prod else (
+                                staff.planned_attendance or 0)
                     existing_staff['expected_attendance'] += staff.expected_attendance or 0
                     existing_staff['sales_value'] += staff.sales_value or 0
                     existing_staff['target_value'] += staff.target_value or 0
@@ -2593,8 +2595,6 @@ class CommissionDataHubService:
 
             store_achievement_rate = (store_sales / store_target) * 100 if store_target else None
 
-
-
             negative_rule_detail_codes = [row.rule_detail_code for row in rows if
                                           row.value is not None and row.value < 0]
             category_lookup = {}
@@ -2731,6 +2731,23 @@ class CommissionDataHubService:
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
+            channel_result = await db.execute(
+                select(func.count(distinct(store_alias.c.manage_channel)))
+                .select_from(store_alias)
+            )
+            channel_count = channel_result.scalar()
+
+            if channel_count > 2:
+                temp = 'ALL'
+            else:
+                channel_value_result = await db.execute(
+                    select(store_alias.c.manage_channel)
+                    .select_from(store_alias)
+                    .distinct()
+                )
+                channels = channel_value_result.scalars().all()
+                temp = channels[0] if len(channels) == 1 else 'ALL'
+
             DetailModel = CommissionStaffDetailModel if is_prod else CommissionTrialStaffDetailModel
 
             amount_sum = func.sum(DetailModel.amount)
@@ -2738,7 +2755,7 @@ class CommissionDataHubService:
             if sort_by == 'sales_value':
                 rank_order = StaffAttendanceModel.sales_value.desc()
             else:
-                rank_order = amount_sum.desc()
+                rank_order = [amount_sum.desc(), StaffAttendanceModel.sales_value.desc()]
 
             base_subq = (
                 select(
@@ -2770,6 +2787,7 @@ class CommissionDataHubService:
                            (StaffAttendanceModel.staff_code == DetailModel.staff_code))
                 .where(
                     StaffAttendanceModel.fiscal_month == fiscal_month,
+                    *([] if rank_type == 'ALL' else [StoreModel.manage_channel == rank_type])
                 )
                 .group_by(
                     StaffAttendanceModel.store_code,
@@ -2857,7 +2875,7 @@ class CommissionDataHubService:
                     "value_tag": 'COMM' if is_prod else 'Est COMM'
                 })
 
-            return {"rank_data": staff_list, "rank_type": rank_type, "has_more": has_more,
+            return {"rank_data": staff_list, "rank_type": temp, "has_more": has_more,
                     "next_cursor": cursor + len(staff_list)}
 
         except Exception as e:
