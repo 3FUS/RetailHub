@@ -11,7 +11,7 @@ from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommissio
 from app.models.target import TargetStoreMain
 
 from datetime import datetime
-from sqlalchemy import func, or_, exists, case, distinct
+from sqlalchemy import func, or_, exists, case, distinct, union_all, DECIMAL
 from sqlalchemy.orm import aliased
 from sqlalchemy import delete
 from app.utils.permissions import build_store_permission_query
@@ -1172,35 +1172,38 @@ class CommissionService:
     async def get_commission_by_store_code(db: AsyncSession, store_code: str, fiscal_month: str, staff_code: str):
         try:
             store_info_result = await db.execute(
-                select(CommissionStoreModel.store_type, CommissionStoreModel.status)
+                select(CommissionStoreModel.store_type, CommissionStoreModel.status, CommissionStoreModel.fiscal_period,
+                       CommissionStoreModel.merged_store_codes)
                 .where(CommissionStoreModel.store_code == store_code)
                 .where(CommissionStoreModel.fiscal_month == fiscal_month)
             )
             store_info_row = store_info_result.first()
             data_info = {
                 'store_type': store_info_row.store_type if store_info_row else None,
-                'status': store_info_row.status if store_info_row else None
+                'status': store_info_row.status if store_info_row else None,
+                'fiscal_period': store_info_row.fiscal_period if store_info_row else None,
+                'merged_store_codes': store_info_row.merged_store_codes if store_info_row else None
             }
 
-            attendance_result = await db.execute(
-                select(
-                    StaffAttendanceModel.position,
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.actual_attendance
-                )
-                .where(StaffAttendanceModel.store_code == store_code)
-                .where(StaffAttendanceModel.fiscal_month == fiscal_month)
-                .where(StaffAttendanceModel.staff_code == staff_code)
-            )
-            attendance_row = attendance_result.first()
-            if attendance_row:
-                data_info['position'] = attendance_row.position
-                data_info['expected_attendance'] = attendance_row.expected_attendance
-                data_info['actual_attendance'] = attendance_row.actual_attendance
-            else:
-                data_info['position'] = None
-                data_info['expected_attendance'] = None
-                data_info['actual_attendance'] = None
+            # attendance_result = await db.execute(
+            #     select(
+            #         StaffAttendanceModel.position,
+            #         StaffAttendanceModel.expected_attendance,
+            #         StaffAttendanceModel.actual_attendance
+            #     )
+            #     .where(StaffAttendanceModel.store_code == store_code)
+            #     .where(StaffAttendanceModel.fiscal_month == fiscal_month)
+            #     .where(StaffAttendanceModel.staff_code == staff_code)
+            # )
+            # attendance_row = attendance_result.first()
+            # if attendance_row:
+            #     data_info['position'] = attendance_row.position
+            #     data_info['expected_attendance'] = attendance_row.expected_attendance
+            #     data_info['actual_attendance'] = attendance_row.actual_attendance
+            # else:
+            #     data_info['position'] = None
+            #     data_info['expected_attendance'] = None
+            #     data_info['actual_attendance'] = None
 
             return data_info
         except Exception as e:
@@ -1275,8 +1278,18 @@ class CommissionService:
         )
         commissions = result.fetchall()
         formatted_commissions = []
+        expected_attendance = 0
+        actual_attendance = 0
+        position = None
+        staff_target_value = None
+        staff_sales_value = None
         for commission in commissions:
 
+            expected_attendance = commission.expected_attendance
+            actual_attendance = commission.actual_attendance
+            position = commission.position
+            staff_target_value = commission.staff_target_value
+            staff_sales_value = commission.staff_sales_value
             detail_data = {
                 "rule_name": commission.rule_name,
                 "rule_class": commission.rule_class,
@@ -1311,7 +1324,7 @@ class CommissionService:
                 detail_data['category_table'] = category_table
             formatted_commissions.append(detail_data)
 
-        return formatted_commissions
+        return formatted_commissions, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value
 
     @staticmethod
     async def create_add_adjustment(db: AsyncSession, adjustment: CommissionStaffCreate):
@@ -1824,7 +1837,7 @@ class CommissionService:
             else:
                 merged_codes = [store_code]
 
-            if fiscal_month != commission_store_record.fiscal_period:
+            if commission_store_record and fiscal_month != commission_store_record.fiscal_period:
                 month_code = commission_store_record.fiscal_period.split(',')
                 month_codes = [code.strip() for code in month_code]
             else:
@@ -2020,7 +2033,7 @@ class CommissionService:
                     existing_staff = processed_staff_attendances[staff_code]
                     existing_staff[
                         'actual_attendance'] += staff.actual_attendance or 0 if is_prod else (
-                                staff.planned_attendance or 0)
+                            staff.planned_attendance or 0)
                     existing_staff['expected_attendance'] += staff.expected_attendance or 0
                     existing_staff['sales_value'] += staff.sales_value or 0
                     existing_staff['target_value'] += staff.target_value or 0
@@ -2501,35 +2514,48 @@ class CommissionDataHubService:
 
             await CommissionService.calculate_commissions_for_store(db, store_code, fiscal_month, staff_code, False)
 
-            staff_attendances_result = await db.execute(
-                select(
-                    StaffAttendanceModel.staff_code,
-                    StaffAttendanceModel.position,
-                    StaffAttendanceModel.actual_attendance,
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.planned_attendance,
-                    StaffAttendanceModel.salary_coefficient,
-                    StaffAttendanceModel.target_value_ratio,
-                    StaffAttendanceModel.target_value,
-                    StaffAttendanceModel.sales_value,
-                    StaffAttendanceModel.fiscal_month
-                ).where(
-                    StaffAttendanceModel.store_code.in_([store_code]),
-                    StaffAttendanceModel.fiscal_month.in_([fiscal_month]),
-                    StaffAttendanceModel.staff_code == staff_code
-                )
-            )
-            staff_attendances = staff_attendances_result.fetchone()
+            tier_commission_data, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value = await CommissionService.get_commission_by_staff_code(
+                db, staff_code, store_code,
+                fiscal_month, False)
 
-            actual_attendance = staff_attendances.actual_attendance if staff_attendances else None
-            expected_attendance = staff_attendances.expected_attendance if staff_attendances else None
-            staff_target_value = staff_attendances.target_value if staff_attendances else None
-            staff_sales_value = staff_attendances.sales_value if staff_attendances else None
+            # comm_info = await CommissionService.get_commission_by_store_code(db, store_code, fiscal_month, staff_code,
+            #                                                                  '')
+
+            # if comm_info:
+            #     merged_code = comm_info['merged_store_codes'].split(',')
+            #     merged_codes = [code.strip() for code in merged_code]
+            #
+            # if comm_info and comm_info['fiscal_period'] != fiscal_month:
+            #     merged_month = rows.fiscal_period.split(',')
+            #     merged_months = [code.strip() for code in merged_month]
+            #
+            # staff_attendances_result = await db.execute(
+            #     select(
+            #         StaffAttendanceModel.staff_code,
+            #         StaffAttendanceModel.position,
+            #         StaffAttendanceModel.actual_attendance,
+            #         StaffAttendanceModel.expected_attendance,
+            #         StaffAttendanceModel.planned_attendance,
+            #         StaffAttendanceModel.salary_coefficient,
+            #         StaffAttendanceModel.target_value_ratio,
+            #         StaffAttendanceModel.target_value,
+            #         StaffAttendanceModel.sales_value,
+            #         StaffAttendanceModel.fiscal_month
+            #     ).where(
+            #         StaffAttendanceModel.store_code.in_([store_code]),
+            #         StaffAttendanceModel.fiscal_month.in_([fiscal_month]),
+            #         StaffAttendanceModel.staff_code == staff_code
+            #     )
+            # )
+            # staff_attendances = staff_attendances_result.fetchone()
+            #
+            # # actual_attendance = staff_attendances.actual_attendance if staff_attendances else None
+            # # expected_attendance = staff_attendances.expected_attendance if staff_attendances else None
+            # staff_target_value = staff_attendances.target_value if staff_attendances else None
+            # staff_sales_value = staff_attendances.sales_value if staff_attendances else None
             staff_achievement_rate = (staff_sales_value / staff_target_value) * 100 if staff_target_value else None
-            position = staff_attendances.position if staff_attendances else None
-            planned_attendance = staff_attendances.planned_attendance if staff_attendances.planned_attendance else staff_attendances.expected_attendance or 0
+            position = position if position else None
 
-            # position = 'Selling'
             app_logger.info(
                 f"Starting get_commission_tiers_by_store for fiscal_month: {fiscal_month}, "
                 f"store_code: {store_code}, position: {position}")
@@ -2537,6 +2563,7 @@ class CommissionDataHubService:
             query = (
                 select(
                     CommissionStoreModel.store_type,
+                    CommissionStoreModel.fiscal_period,
                     CommissionRuleAssignmentModel.position,
                     CommissionRuleModel.rule_code,
                     CommissionRuleModel.rule_name,
@@ -2568,16 +2595,9 @@ class CommissionDataHubService:
             result = await db.execute(query)
             rows = result.fetchall()
             store_type = rows[0].store_type if rows else None
+            fiscal_period = rows[0].fiscal_period if rows else None
             app_logger.info(f"Fetched {len(rows)} tier rows for store {store_code}")
 
-            # if rows.merged_store_codes:
-            #     merged_code = rows.merged_store_codes.split(',')
-            #     merged_codes = [code.strip() for code in merged_code]
-            #
-            # if rows.fiscal_period and rows.fiscal_period != fiscal_month:
-            #     merged_month = rows.fiscal_period.split(',')
-            #     merged_months = [code.strip() for code in merged_month]
-            #
             result_merged = await db.execute(
                 select(
                     func.sum(TargetStoreMain.target_value).label('total_target_value'),
@@ -2624,14 +2644,14 @@ class CommissionDataHubService:
             prev_category_by_class = {}
 
             tier_dict = {}
+
             for row in rows:
                 rule_class = row.rule_class
+
                 target_value = staff_target_value if rule_class == 'individual' else store_target
                 if rule_class not in tier_dict:
                     tier_dict[rule_class] = []
                 detail_data = {
-                    # "store_type": row.store_type,
-                    # "position": row.position,
                     "rule_code": row.rule_code,
                     "rule_name": row.rule_name,
                     "rule_class": row.rule_class,
@@ -2666,25 +2686,27 @@ class CommissionDataHubService:
                     detail_data['category_table'] = category_table
                 tier_dict[rule_class].append(detail_data)
 
-            tier_commission_data = await CommissionService.get_commission_by_staff_code(db, staff_code, store_code,
-                                                                                        fiscal_month, False)
-
+            # planned_attendance = staff_attendances.planned_attendance if staff_attendances.planned_attendance else expected_attendance or 0
             tier_dict['info'] = {'actual_attendance': actual_attendance,
                                  'expected_attendance': expected_attendance,
-                                 'planned_attendance': planned_attendance,
+                                 'planned_attendance': actual_attendance,
                                  'store_type': store_type,
-                                 'position': position}
+                                 'position': position,
+                                 'fiscal_period': fiscal_period}
 
             tier_dict['info']['team'] = {'store_target': store_target,
                                          'store_sales': store_sales,
                                          'store_achievement_rate': f'{store_achievement_rate:.2f}%'}
+            tier_dict['info']['operational'] = {'store_target': store_target,
+                                                'store_sales': store_sales,
+                                                'store_achievement_rate': f'{store_achievement_rate:.2f}%'}
             tier_dict['info']['staff'] = {'staff_target': staff_target_value,
                                           'staff_sales': staff_sales_value,
                                           'staff_achievement_rate': f'{staff_achievement_rate:.2f}%'}
 
             for comm in tier_commission_data:
                 rule_class = comm.get('rule_class')
-                if rule_class not in ('team', 'individual'):
+                if rule_class not in ('team', 'individual', 'operational'):
                     continue
                 current_detail_code = comm.get('rule_detail_code')
                 current_sales_value = comm.get('sales_value')
@@ -2701,6 +2723,8 @@ class CommissionDataHubService:
                     tier_dict['info']['team']['gap_value'] = gap_value
                 elif rule_class == 'individual':
                     tier_dict['info']['staff']['gap_value'] = gap_value
+                elif rule_class == 'operational':
+                    tier_dict['info']['operational']['gap_value'] = gap_value
 
             tier_dict['commission'] = tier_commission_data
 
@@ -2715,19 +2739,8 @@ class CommissionDataHubService:
                                                  org1: str = 'ALL', org2: str = 'ALL', org3: str = 'ALL',
                                                  org4: str = 'ALL',
                                                  cursor: int = 0, limit: int = 30, rank_type: str = 'ALL',
-                                                 sort_by: str = 'commissions', is_prod: bool = False):
+                                                 sort_by: str = 'commissions'):
         try:
-
-            today = datetime.now().date()
-            current_fm_result = await db.execute(
-                select(DimensionDayWeek.fiscal_month).where(DimensionDayWeek.actual_date == today)
-            )
-            current_fm = current_fm_result.scalar_one_or_none()
-            if current_fm == fiscal_month:
-                is_prod = False
-            else:
-                is_prod = True
-
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
 
@@ -2748,103 +2761,168 @@ class CommissionDataHubService:
                 channels = channel_value_result.scalars().all()
                 temp = channels[0] if len(channels) == 1 else 'ALL'
 
-            DetailModel = CommissionStaffDetailModel if is_prod else CommissionTrialStaffDetailModel
+            common_group_by = [
+                CommissionStoreModel.store_code,
+                StoreModel.store_name,
+                StoreModel.manage_region,
+                StoreModel.manage_channel,
+                StoreModel.City,
+                StaffAttendanceModel.staff_code,
+                StaffModel.first_name,
+                StaffModel.avatar,
+                CommissionStoreModel.status
+            ]
 
-            amount_sum = func.sum(DetailModel.amount)
+            common_where = [
+                CommissionStoreModel.fiscal_month == fiscal_month,
+                *([] if rank_type == 'ALL' else [StoreModel.manage_channel == rank_type])
+            ]
 
-            if sort_by == 'sales_value':
-                rank_order = StaffAttendanceModel.sales_value.desc()
-            else:
-                rank_order = [amount_sum.desc(), StaffAttendanceModel.sales_value.desc()]
-
-            base_subq = (
+            approved_subq = (
                 select(
-                    StaffAttendanceModel.store_code,
+                    CommissionStoreModel.store_code,
                     StoreModel.store_name,
                     StoreModel.manage_region,
                     StoreModel.manage_channel,
                     StoreModel.City,
-                    StaffAttendanceModel.staff_code,
+                    CommissionStaffDetailModel.staff_code,
                     StaffModel.first_name,
                     StaffModel.avatar,
-                    StaffAttendanceModel.sales_value,
-                    StaffAttendanceModel.target_value,
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.actual_attendance,
-                    StaffAttendanceModel.planned_attendance,
-                    # StaffAttendanceModel.position,
-                    amount_sum.label('amount'),
-                    func.row_number().over(order_by=rank_order).label('rank')
+                    func.max(CommissionStaffDetailModel.staff_sales_value).label('sales_value'),
+                    func.max(CommissionStaffDetailModel.staff_target_value).label('target_value'),
+                    func.max(CommissionStaffDetailModel.expected_attendance).label('expected_attendance'),
+                    func.max(CommissionStaffDetailModel.actual_attendance).label('actual_attendance'),
+                    func.cast(None, DECIMAL).label('planned_attendance'),
+                    func.sum(CommissionStaffDetailModel.amount).label('amount'),
+                    CommissionStoreModel.status
                 )
-                .select_from(StaffAttendanceModel)
+                .select_from(CommissionStoreModel)
+                .join(CommissionStaffDetailModel,
+                      (CommissionStoreModel.fiscal_month == CommissionStaffDetailModel.fiscal_month) &
+                      (CommissionStoreModel.store_code == CommissionStaffDetailModel.store_code))
+                .join(StaffModel,
+                      CommissionStaffDetailModel.staff_code == StaffModel.staff_code)
+                .join(StoreModel,
+                      CommissionStaffDetailModel.store_code == StoreModel.store_code)
+                .where(*common_where, CommissionStoreModel.status == 'approved')
+                .group_by(
+                    CommissionStoreModel.store_code,
+                    StoreModel.store_name,
+                    StoreModel.manage_region,
+                    StoreModel.manage_channel,
+                    StoreModel.City,
+                    CommissionStaffDetailModel.staff_code,
+                    StaffModel.first_name,
+                    StaffModel.avatar,
+                    CommissionStoreModel.status
+                )
+            )
+
+            common_columns = [
+                CommissionStoreModel.store_code,
+                StoreModel.store_name,
+                StoreModel.manage_region,
+                StoreModel.manage_channel,
+                StoreModel.City,
+                StaffAttendanceModel.staff_code,
+                StaffModel.first_name,
+                StaffModel.avatar,
+                func.max(StaffAttendanceModel.sales_value).label('sales_value'),
+                func.max(StaffAttendanceModel.target_value).label('target_value'),
+                func.max(StaffAttendanceModel.expected_attendance).label('expected_attendance'),
+                func.max(StaffAttendanceModel.actual_attendance).label('actual_attendance'),
+                func.max(StaffAttendanceModel.planned_attendance).label('planned_attendance'),
+                func.sum(CommissionTrialStaffDetailModel.amount).label('amount'),
+                CommissionStoreModel.status
+            ]
+
+            trial_subq = (
+                select(*common_columns)
+                .select_from(CommissionStoreModel)
+                .join(StaffAttendanceModel,
+                      (CommissionStoreModel.store_code == StaffAttendanceModel.store_code) &
+                      (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month))
                 .join(StaffModel,
                       StaffAttendanceModel.staff_code == StaffModel.staff_code)
                 .join(StoreModel,
                       StaffAttendanceModel.store_code == StoreModel.store_code)
-                .outerjoin(DetailModel,
-                           (StaffAttendanceModel.fiscal_month == DetailModel.fiscal_month) &
-                           (StaffAttendanceModel.store_code == DetailModel.store_code) &
-                           (StaffAttendanceModel.staff_code == DetailModel.staff_code))
-                .where(
-                    StaffAttendanceModel.fiscal_month == fiscal_month,
-                    *([] if rank_type == 'ALL' else [StoreModel.manage_channel == rank_type])
+                .outerjoin(CommissionTrialStaffDetailModel,
+                           (CommissionStoreModel.fiscal_month == CommissionTrialStaffDetailModel.fiscal_month) &
+                           (CommissionStoreModel.store_code == CommissionTrialStaffDetailModel.store_code) &
+                           (StaffAttendanceModel.staff_code == CommissionTrialStaffDetailModel.staff_code))
+                .where(*common_where, CommissionStoreModel.status != 'approved')
+                .group_by(*common_group_by)
+            )
+
+            union_subq = union_all(approved_subq, trial_subq).subquery()
+
+            if sort_by == 'sales_value':
+                rank_order = union_subq.c.sales_value.desc()
+            else:
+                rank_order = [union_subq.c.amount.desc(), union_subq.c.sales_value.desc()]
+
+            ranked_subq = (
+                select(
+                    union_subq.c.store_code,
+                    union_subq.c.store_name,
+                    union_subq.c.manage_region,
+                    union_subq.c.manage_channel,
+                    union_subq.c.City,
+                    union_subq.c.staff_code,
+                    union_subq.c.first_name,
+                    union_subq.c.avatar,
+                    union_subq.c.sales_value,
+                    union_subq.c.target_value,
+                    union_subq.c.expected_attendance,
+                    union_subq.c.actual_attendance,
+                    union_subq.c.planned_attendance,
+                    union_subq.c.amount,
+                    union_subq.c.status,
+                    func.row_number().over(order_by=rank_order).label('rank')
                 )
-                .group_by(
-                    StaffAttendanceModel.store_code,
-                    StoreModel.store_name,
-                    StoreModel.manage_region,
-                    StoreModel.manage_channel,
-                    StoreModel.City,
-                    StaffAttendanceModel.staff_code,
-                    StaffModel.first_name,
-                    StaffModel.avatar,
-                    StaffAttendanceModel.sales_value,
-                    StaffAttendanceModel.target_value,
-                    StaffAttendanceModel.expected_attendance,
-                    StaffAttendanceModel.actual_attendance,
-                    StaffAttendanceModel.planned_attendance
-                )
+                .select_from(union_subq)
             ).subquery()
 
             query = (
                 select(
-                    base_subq.c.store_code,
-                    base_subq.c.store_name,
-                    base_subq.c.manage_region,
-                    base_subq.c.manage_channel,
-                    base_subq.c.staff_code,
-                    base_subq.c.first_name,
-                    base_subq.c.avatar,
-                    base_subq.c.sales_value,
-                    base_subq.c.target_value,
-                    base_subq.c.expected_attendance,
-                    base_subq.c.actual_attendance,
-                    base_subq.c.planned_attendance,
-                    base_subq.c.amount,
-                    base_subq.c.rank
+                    ranked_subq.c.store_code,
+                    ranked_subq.c.store_name,
+                    ranked_subq.c.manage_region,
+                    ranked_subq.c.manage_channel,
+                    ranked_subq.c.staff_code,
+                    ranked_subq.c.first_name,
+                    ranked_subq.c.avatar,
+                    ranked_subq.c.sales_value,
+                    ranked_subq.c.target_value,
+                    ranked_subq.c.expected_attendance,
+                    ranked_subq.c.actual_attendance,
+                    ranked_subq.c.planned_attendance,
+                    ranked_subq.c.amount,
+                    ranked_subq.c.rank,
+                    ranked_subq.c.status
                 )
-                .select_from(base_subq)
+                .select_from(ranked_subq)
                 .join(store_alias,
-                      base_subq.c.store_code == store_alias.c.store_code)
+                      ranked_subq.c.store_code == store_alias.c.store_code)
             )
 
             if org1 and org1 != 'ALL':
                 org1_values = [v.strip() for v in org1.split(',')]
-                query = query.where(base_subq.c.manage_channel.in_(org1_values))
+                query = query.where(ranked_subq.c.manage_channel.in_(org1_values))
 
             if org2 and org2 != 'ALL':
                 org2_values = [v.strip() for v in org2.split(',')]
-                query = query.where(base_subq.c.manage_region.in_(org2_values))
+                query = query.where(ranked_subq.c.manage_region.in_(org2_values))
 
             if org3 and org3 != 'ALL':
                 org3_values = [v.strip() for v in org3.split(',')]
-                query = query.where(base_subq.c.City.in_(org3_values))
+                query = query.where(ranked_subq.c.City.in_(org3_values))
 
             if org4 and org4 != 'ALL':
                 org4_values = [v.strip() for v in org4.split(',')]
-                query = query.where(base_subq.c.store_code.in_(org4_values))
+                query = query.where(ranked_subq.c.store_code.in_(org4_values))
 
-            query = query.order_by(base_subq.c.rank)
+            query = query.order_by(ranked_subq.c.rank)
             query = query.offset(cursor).limit(limit + 1)
 
             result = await db.execute(query)
@@ -2872,7 +2950,7 @@ class CommissionDataHubService:
                     "actual_attendance": row.actual_attendance,
                     "planned_attendance": row.planned_attendance if row.planned_attendance else row.expected_attendance,
                     "value": row.amount if row.amount is not None else 0,
-                    "value_tag": 'COMM' if is_prod else 'Est COMM'
+                    "value_tag": 'COMM' if row.status == 'approved' else 'Est COMM'
                 })
 
             return {"rank_data": staff_list, "rank_type": temp, "has_more": has_more,
@@ -2881,35 +2959,3 @@ class CommissionDataHubService:
         except Exception as e:
             app_logger.error(f"Error in get_staff_commissions_list_by_role: {str(e)}")
             raise
-
-    @staticmethod
-    async def update_planned_attendance(db: AsyncSession, store_code: str, fiscal_month: str,
-                                        staff_code: str, planned_attendance) -> bool:
-        try:
-            app_logger.info(f"Starting update_planned_attendance: store={store_code}, "
-                            f"fiscal_month={fiscal_month}, staff={staff_code}, planned_attendance={planned_attendance}")
-
-            result = await db.execute(
-                select(StaffAttendanceModel)
-                .where(StaffAttendanceModel.staff_code == staff_code)
-                .where(StaffAttendanceModel.store_code == store_code)
-                .where(StaffAttendanceModel.fiscal_month == fiscal_month)
-            )
-            staff_record = result.scalar_one_or_none()
-
-            if staff_record:
-                old_value = staff_record.planned_attendance
-                staff_record.planned_attendance = planned_attendance
-                staff_record.updated_at = datetime.now()
-                await db.commit()
-                app_logger.info(f"Updated staff {staff_code} planned_attendance: {old_value} -> {planned_attendance}")
-                return True
-            else:
-                app_logger.warning(
-                    f"No record found for staff {staff_code} in store {store_code}, fiscal_month {fiscal_month}")
-                return False
-
-        except Exception as e:
-            app_logger.error(f"Error in update_planned_attendance: {str(e)}", exc_info=True)
-            await db.rollback()
-            raise e
