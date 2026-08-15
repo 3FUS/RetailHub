@@ -153,7 +153,7 @@ async def get_commission_detail(fiscal_month: str, store_code: str, staff_code: 
                                 db: AsyncSession = Depends(get_db),
                                 current_user: dict = Depends(get_current_user)):
     try:
-        data, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value = await CommissionService.get_commission_by_staff_code(
+        data, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value,store_target, store_sales = await CommissionService.get_commission_by_staff_code(
             db, staff_code, store_code, fiscal_month)
         data_info = await CommissionService.get_commission_by_store_code(db, store_code, fiscal_month, staff_code)
         data_info['expected_attendance'] = expected_attendance

@@ -1283,6 +1283,8 @@ class CommissionService:
         position = None
         staff_target_value = None
         staff_sales_value = None
+        store_target_value = None
+        store_sales_value = None
         for commission in commissions:
 
             expected_attendance = commission.expected_attendance
@@ -1290,6 +1292,9 @@ class CommissionService:
             position = commission.position
             staff_target_value = commission.staff_target_value
             staff_sales_value = commission.staff_sales_value
+            store_target_value = commission.store_target_value
+            store_sales_value = commission.store_sales_value
+
             detail_data = {
                 "rule_name": commission.rule_name,
                 "rule_class": commission.rule_class,
@@ -1324,7 +1329,7 @@ class CommissionService:
                 detail_data['category_table'] = category_table
             formatted_commissions.append(detail_data)
 
-        return formatted_commissions, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value
+        return formatted_commissions, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value, store_target_value, store_sales_value
 
     @staticmethod
     async def create_add_adjustment(db: AsyncSession, adjustment: CommissionStaffCreate):
@@ -2514,7 +2519,7 @@ class CommissionDataHubService:
 
             await CommissionService.calculate_commissions_for_store(db, store_code, fiscal_month, staff_code, False)
 
-            tier_commission_data, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value = await CommissionService.get_commission_by_staff_code(
+            tier_commission_data, expected_attendance, actual_attendance, position, staff_target_value, staff_sales_value, store_target, store_sales = await CommissionService.get_commission_by_staff_code(
                 db, staff_code, store_code,
                 fiscal_month, False)
 
@@ -2598,20 +2603,20 @@ class CommissionDataHubService:
             fiscal_period = rows[0].fiscal_period if rows else None
             app_logger.info(f"Fetched {len(rows)} tier rows for store {store_code}")
 
-            result_merged = await db.execute(
-                select(
-                    func.sum(TargetStoreMain.target_value).label('total_target_value'),
-                    func.sum(TargetStoreMain.sales_value).label('total_sales_value')
-                )
-                .where(
-                    TargetStoreMain.fiscal_month.in_([fiscal_month]),
-                    TargetStoreMain.store_code.in_([store_code])
-                )
-            )
-            merged_data = result_merged.fetchone()
+            # result_merged = await db.execute(
+            #     select(
+            #         func.sum(TargetStoreMain.target_value).label('total_target_value'),
+            #         func.sum(TargetStoreMain.sales_value).label('total_sales_value')
+            #     )
+            #     .where(
+            #         TargetStoreMain.fiscal_month.in_([fiscal_month]),
+            #         TargetStoreMain.store_code.in_([store_code])
+            #     )
+            # )
+            # merged_data = result_merged.fetchone()
 
-            store_target = merged_data.total_target_value
-            store_sales = merged_data.total_sales_value
+            # store_target = merged_data.total_target_value
+            # store_sales = merged_data.total_sales_value
 
             store_achievement_rate = (store_sales / store_target) * 100 if store_target else None
 
@@ -2644,7 +2649,7 @@ class CommissionDataHubService:
             prev_category_by_class = {}
 
             tier_dict = {}
-
+            app_logger.info(f"Starting to process tier data for store {store_code}")
             for row in rows:
                 rule_class = row.rule_class
 
@@ -2696,13 +2701,13 @@ class CommissionDataHubService:
 
             tier_dict['info']['team'] = {'store_target': store_target,
                                          'store_sales': store_sales,
-                                         'store_achievement_rate': f'{store_achievement_rate:.2f}%'}
+                                         'store_achievement_rate': f'{store_achievement_rate:.2f}%' if store_achievement_rate is not None else None}
             tier_dict['info']['operational'] = {'store_target': store_target,
                                                 'store_sales': store_sales,
-                                                'store_achievement_rate': f'{store_achievement_rate:.2f}%'}
+                                                'store_achievement_rate': f'{store_achievement_rate:.2f}%' if store_achievement_rate is not None else None}
             tier_dict['info']['staff'] = {'staff_target': staff_target_value,
                                           'staff_sales': staff_sales_value,
-                                          'staff_achievement_rate': f'{staff_achievement_rate:.2f}%'}
+                                          'staff_achievement_rate': f'{staff_achievement_rate:.2f}%' if staff_achievement_rate is not None else None}
 
             for comm in tier_commission_data:
                 rule_class = comm.get('rule_class')
