@@ -2985,6 +2985,27 @@ class CommissionDataHubService:
             app_logger.info(f"Starting update_planned_attendance: store={store_code}, "
                             f"fiscal_month={fiscal_month}, staff={staff_code}, planned_attendance={planned_attendance}")
 
+            store_result = await db.execute(
+                select(CommissionStoreModel.fiscal_period)
+                .where(CommissionStoreModel.store_code == store_code)
+                .where(CommissionStoreModel.fiscal_month == fiscal_month)
+            )
+            fiscal_period = store_result.scalar_one_or_none()
+
+            if fiscal_period and ',' in fiscal_period:
+                period_list = [p.strip() for p in fiscal_period.split(',')]
+                other_months = [p for p in period_list if p != fiscal_month]
+                if other_months:
+                    app_logger.info(f"fiscal_period contains multiple months: {fiscal_period}, "
+                                    f"resetting planned_attendance=0 for other months: {other_months}")
+                    await db.execute(
+                        update(StaffAttendanceModel)
+                        .where(StaffAttendanceModel.staff_code == staff_code)
+                        .where(StaffAttendanceModel.store_code == store_code)
+                        .where(StaffAttendanceModel.fiscal_month.in_(other_months))
+                        .values(planned_attendance=0, updated_at=datetime.now())
+                    )
+
             result = await db.execute(
                 select(StaffAttendanceModel)
                 .where(StaffAttendanceModel.staff_code == staff_code)
