@@ -2832,10 +2832,22 @@ class CommissionDataHubService:
                 StaffAttendanceModel.staff_code,
                 StaffModel.first_name,
                 StaffModel.avatar,
-                func.max(StaffAttendanceModel.sales_value).label('sales_value'),
-                func.max(StaffAttendanceModel.target_value).label('target_value'),
-                func.max(StaffAttendanceModel.expected_attendance).label('expected_attendance'),
-                func.max(StaffAttendanceModel.actual_attendance).label('actual_attendance'),
+                func.coalesce(
+                    func.max(CommissionTrialStaffDetailModel.staff_sales_value),
+                    func.max(StaffAttendanceModel.sales_value)
+                ).label('sales_value'),
+                func.coalesce(
+                    func.max(CommissionTrialStaffDetailModel.staff_target_value),
+                    func.max(StaffAttendanceModel.target_value)
+                ).label('target_value'),
+                func.coalesce(
+                    func.max(CommissionTrialStaffDetailModel.expected_attendance),
+                    func.max(StaffAttendanceModel.expected_attendance)
+                ).label('expected_attendance'),
+                func.coalesce(
+                    func.max(CommissionTrialStaffDetailModel.actual_attendance),
+                    func.max(StaffAttendanceModel.actual_attendance)
+                ).label('actual_attendance'),
                 func.max(StaffAttendanceModel.planned_attendance).label('planned_attendance'),
                 func.sum(CommissionTrialStaffDetailModel.amount).label('amount'),
                 CommissionStoreModel.status
@@ -2964,3 +2976,36 @@ class CommissionDataHubService:
         except Exception as e:
             app_logger.error(f"Error in get_staff_commissions_list_by_role: {str(e)}")
             raise
+
+
+    @staticmethod
+    async def update_planned_attendance(db: AsyncSession, store_code: str, fiscal_month: str,
+                                        staff_code: str, planned_attendance) -> bool:
+        try:
+            app_logger.info(f"Starting update_planned_attendance: store={store_code}, "
+                            f"fiscal_month={fiscal_month}, staff={staff_code}, planned_attendance={planned_attendance}")
+
+            result = await db.execute(
+                select(StaffAttendanceModel)
+                .where(StaffAttendanceModel.staff_code == staff_code)
+                .where(StaffAttendanceModel.store_code == store_code)
+                .where(StaffAttendanceModel.fiscal_month == fiscal_month)
+            )
+            staff_record = result.scalar_one_or_none()
+
+            if staff_record:
+                old_value = staff_record.planned_attendance
+                staff_record.planned_attendance = planned_attendance
+                staff_record.updated_at = datetime.now()
+                await db.commit()
+                app_logger.info(f"Updated staff {staff_code} planned_attendance: {old_value} -> {planned_attendance}")
+                return True
+            else:
+                app_logger.warning(
+                    f"No record found for staff {staff_code} in store {store_code}, fiscal_month {fiscal_month}")
+                return False
+
+        except Exception as e:
+            app_logger.error(f"Error in update_planned_attendance: {str(e)}", exc_info=True)
+            await db.rollback()
+            raise e
