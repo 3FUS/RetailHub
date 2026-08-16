@@ -13,7 +13,7 @@ from app.models.target import TargetStoreMain
 from datetime import datetime
 from sqlalchemy import func, or_, exists, case, distinct, union_all, DECIMAL
 from sqlalchemy.orm import aliased
-from sqlalchemy import delete
+from sqlalchemy import delete, update
 from app.utils.permissions import build_store_permission_query
 from app.utils.logger import app_logger
 from decimal import Decimal
