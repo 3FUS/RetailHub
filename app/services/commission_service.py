@@ -574,8 +574,9 @@ class CommissionRPTService:
                       CommissionStaffDetailModel.staff_code == StaffModel.staff_code)
                 .join(store_alias,
                       CommissionStoreModel.store_code == store_alias.c.store_code)
-                .where(CommissionStoreModel.fiscal_month == fiscal_month,
-                       CommissionStaffDetailModel.amount > 0)
+                .where(CommissionStoreModel.fiscal_month == fiscal_month
+                       #,CommissionStaffDetailModel.amount > 0
+                       )
                 .group_by(
                     store_alias.c.store_name,
                     CommissionStoreModel.store_code,
@@ -2744,7 +2745,7 @@ class CommissionDataHubService:
                                                  org1: str = 'ALL', org2: str = 'ALL', org3: str = 'ALL',
                                                  org4: str = 'ALL',
                                                  cursor: int = 0, limit: int = 30, rank_type: str = 'ALL',
-                                                 sort_by: str = 'commissions'):
+                                                 sort_by: str = 'commissions', primary_group: str = ''):
         try:
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
@@ -2780,6 +2781,7 @@ class CommissionDataHubService:
 
             common_where = [
                 CommissionStoreModel.fiscal_month == fiscal_month,
+                CommissionStoreModel.merged_flag == 0,
                 *([] if rank_type == 'ALL' else [StoreModel.manage_channel == rank_type])
             ]
 
@@ -2878,6 +2880,11 @@ class CommissionDataHubService:
             else:
                 rank_order = [union_subq.c.amount.desc(), union_subq.c.sales_value.desc()]
 
+            if sort_by == 'sales_value':
+                rank_key = union_subq.c.sales_value.desc()
+            else:
+                rank_key = union_subq.c.amount.desc()
+
             ranked_subq = (
                 select(
                     union_subq.c.store_code,
@@ -2895,7 +2902,7 @@ class CommissionDataHubService:
                     union_subq.c.planned_attendance,
                     union_subq.c.amount,
                     union_subq.c.status,
-                    func.row_number().over(order_by=rank_order).label('rank')
+                    func.dense_rank().over(order_by=rank_key).label('rank')
                 )
                 .select_from(union_subq)
             ).subquery()
@@ -2939,6 +2946,9 @@ class CommissionDataHubService:
                 org4_values = [v.strip() for v in org4.split(',')]
                 query = query.where(ranked_subq.c.store_code.in_(org4_values))
 
+            if primary_group and primary_group == 'SALES_ASSOCIATE':
+                query = query.where(ranked_subq.c.staff_code.in_(role_code))
+
             query = query.order_by(ranked_subq.c.rank)
             query = query.offset(cursor).limit(limit + 1)
 
@@ -2976,7 +2986,6 @@ class CommissionDataHubService:
         except Exception as e:
             app_logger.error(f"Error in get_staff_commissions_list_by_role: {str(e)}")
             raise
-
 
     @staticmethod
     async def update_planned_attendance(db: AsyncSession, store_code: str, fiscal_month: str,

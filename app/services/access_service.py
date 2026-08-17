@@ -68,4 +68,13 @@ async def verify_password(session: Session, user_code: str, user_password: str):
     else:
         approve = False
 
-    return {"verify_result": verify_result, "approve": approve}
+    pg_sql = text("""
+                  SELECT primary_group
+                  FROM hrs_employee
+                  WHERE employee_id = :employee_id
+                  """)
+    pg_result = session.execute(pg_sql, {"employee_id": user_code}).fetchone()
+
+    primary_group = pg_result[0] if pg_result else None
+
+    return {"verify_result": verify_result, "approve": approve, "primary_group": primary_group}

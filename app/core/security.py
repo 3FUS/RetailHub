@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.services.access_service import verify_password
 
 from app.utils.logger import app_logger
+
 # from app.database import get_sqlserver_db
 
 # OAuth2配置
@@ -55,7 +56,8 @@ async def get_current_user(
     except JWTError:
         raise credentials_exception
 
-    return {"user_code": user_code, "approve": payload.get("approve", False)}
+    return {"user_code": user_code, "approve": payload.get("approve", False),
+            "primary_group": payload.get("primary_group", '')}
 
 
 async def authenticate_user(
@@ -68,5 +70,6 @@ async def authenticate_user(
     """
     data = await verify_password(session, user_code, password)
     if data.get("verify_result", False):
-        return {"user_code": user_code, "approve": data.get("approve", False)}
+        return {"user_code": user_code, "approve": data.get("approve", False),
+                "primary_group": data.get("primary_group", '')}
     return None
