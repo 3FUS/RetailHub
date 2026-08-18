@@ -1290,11 +1290,16 @@ class CommissionService:
 
             expected_attendance = commission.expected_attendance
             actual_attendance = commission.actual_attendance
-            position = commission.position
-            staff_target_value = commission.staff_target_value
-            staff_sales_value = commission.staff_sales_value
-            store_target_value = commission.store_target_value
-            store_sales_value = commission.store_sales_value
+            if commission.position is not None:
+                position = commission.position
+            if commission.staff_target_value is not None:
+                staff_target_value = commission.staff_target_value
+            if commission.staff_sales_value is not None:
+                staff_sales_value = commission.staff_sales_value
+            if commission.store_target_value is not None:
+                store_target_value = commission.store_target_value
+            if commission.store_sales_value is not None:
+                store_sales_value = commission.store_sales_value
 
             detail_data = {
                 "rule_name": commission.rule_name,
@@ -1336,6 +1341,28 @@ class CommissionService:
     async def create_add_adjustment(db: AsyncSession, adjustment: CommissionStaffCreate):
         r_code = 'Z-01'
         try:
+
+            existing_detail = await db.execute(
+                select(CommissionStaffDetailModel)
+                .where(CommissionStaffDetailModel.fiscal_month == adjustment.fiscal_month)
+                .where(CommissionStaffDetailModel.store_code == adjustment.store_code)
+                .where(CommissionStaffDetailModel.staff_code == adjustment.staff_code)
+                .where(CommissionStaffDetailModel.rule_detail_code != r_code)
+                .limit(1)
+            )
+            existing_row = existing_detail.scalar_one_or_none()
+
+            store_target_value = existing_row.store_target_value if existing_row and existing_row.store_target_value is not None else 0
+            store_sales_value = existing_row.store_sales_value if existing_row and existing_row.store_sales_value is not None else 0
+            store_achievement_rate = existing_row.store_achievement_rate if existing_row and existing_row.store_achievement_rate is not None else 0
+            staff_target_value = existing_row.staff_target_value if existing_row and existing_row.staff_target_value is not None else 0
+            staff_sales_value = existing_row.staff_sales_value if existing_row and existing_row.staff_sales_value is not None else 0
+            staff_achievement_rate = existing_row.staff_achievement_rate if existing_row and existing_row.staff_achievement_rate is not None else 0
+            expected_attendance = existing_row.expected_attendance if existing_row and existing_row.expected_attendance is not None else 0
+            actual_attendance = existing_row.actual_attendance if existing_row and existing_row.actual_attendance is not None else 0
+            total_days_store_work = existing_row.total_days_store_work if existing_row and existing_row.total_days_store_work is not None else 0
+            position = existing_row.position if existing_row and existing_row.position is not None else None
+
             adjustment_commission = CommissionStaffModel(
                 fiscal_month=adjustment.fiscal_month,
                 staff_code=adjustment.staff_code,
@@ -1351,19 +1378,20 @@ class CommissionService:
                 fiscal_month=adjustment.fiscal_month,
                 staff_code=adjustment.staff_code,
                 store_code=adjustment.store_code,
-                store_target_value=0,
-                store_sales_value=0,
-                store_achievement_rate=0,
-                staff_target_value=0,
-                staff_sales_value=0,
-                staff_achievement_rate=0,
-                expected_attendance=0,
-                actual_attendance=0,
+                store_target_value=store_target_value,
+                store_sales_value=store_sales_value,
+                store_achievement_rate=store_achievement_rate,
+                staff_target_value=staff_target_value,
+                staff_sales_value=staff_sales_value,
+                staff_achievement_rate=staff_achievement_rate,
+                expected_attendance=expected_attendance,
+                actual_attendance=actual_attendance,
                 amount=adjustment.amount,
                 rule_code="adjustment",
                 rule_detail_code=r_code,
                 remarks=adjustment.remarks,
-                total_days_store_work=0
+                total_days_store_work=total_days_store_work,
+                position=position
             )
             db.add(adjustment_detail)
 
@@ -2947,7 +2975,7 @@ class CommissionDataHubService:
                 query = query.where(ranked_subq.c.store_code.in_(org4_values))
 
             if primary_group and primary_group == 'SALES_ASSOCIATE':
-                query = query.where(ranked_subq.c.staff_code.in_(role_code))
+                query = query.where(ranked_subq.c.staff_code.in_([role_code]))
 
             query = query.order_by(ranked_subq.c.rank)
             query = query.offset(cursor).limit(limit + 1)
