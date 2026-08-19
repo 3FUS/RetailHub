@@ -1314,7 +1314,7 @@ class CommissionService:
                 "target_value": commission.store_target_value if commission.rule_basis == 'store' else commission.staff_target_value,
                 "sales_value": commission.store_sales_value if commission.rule_basis == 'store' else commission.staff_sales_value,
                 "amount": commission.amount if commission.amount is not None else 0.0,
-                "share_rate": commission.factor if commission.factor is not None else None,
+                "share_rate": commission.factor if commission.factor is not None else (100 if commission.rule_class == 'team' and commission.rule_detail_code != 'R-05' else None),
                 "adjustment_remarks": commission.remarks
             }
 
@@ -2935,28 +2935,50 @@ class CommissionDataHubService:
                 .select_from(union_subq)
             ).subquery()
 
-            query = (
-                select(
-                    ranked_subq.c.store_code,
-                    ranked_subq.c.store_name,
-                    ranked_subq.c.manage_region,
-                    ranked_subq.c.manage_channel,
-                    ranked_subq.c.staff_code,
-                    ranked_subq.c.first_name,
-                    ranked_subq.c.avatar,
-                    ranked_subq.c.sales_value,
-                    ranked_subq.c.target_value,
-                    ranked_subq.c.expected_attendance,
-                    ranked_subq.c.actual_attendance,
-                    ranked_subq.c.planned_attendance,
-                    ranked_subq.c.amount,
-                    ranked_subq.c.rank,
-                    ranked_subq.c.status
+            if primary_group and primary_group == 'SALES_ASSOCIATE':
+                query = (
+                    select(
+                        ranked_subq.c.store_code,
+                        ranked_subq.c.store_name,
+                        ranked_subq.c.manage_region,
+                        ranked_subq.c.manage_channel,
+                        ranked_subq.c.staff_code,
+                        ranked_subq.c.first_name,
+                        ranked_subq.c.avatar,
+                        ranked_subq.c.sales_value,
+                        ranked_subq.c.target_value,
+                        ranked_subq.c.expected_attendance,
+                        ranked_subq.c.actual_attendance,
+                        ranked_subq.c.planned_attendance,
+                        ranked_subq.c.amount,
+                        ranked_subq.c.rank,
+                        ranked_subq.c.status
+                    )
+                    .select_from(ranked_subq)
                 )
-                .select_from(ranked_subq)
-                .join(store_alias,
-                      ranked_subq.c.store_code == store_alias.c.store_code)
-            )
+            else:
+                query = (
+                    select(
+                        ranked_subq.c.store_code,
+                        ranked_subq.c.store_name,
+                        ranked_subq.c.manage_region,
+                        ranked_subq.c.manage_channel,
+                        ranked_subq.c.staff_code,
+                        ranked_subq.c.first_name,
+                        ranked_subq.c.avatar,
+                        ranked_subq.c.sales_value,
+                        ranked_subq.c.target_value,
+                        ranked_subq.c.expected_attendance,
+                        ranked_subq.c.actual_attendance,
+                        ranked_subq.c.planned_attendance,
+                        ranked_subq.c.amount,
+                        ranked_subq.c.rank,
+                        ranked_subq.c.status
+                    )
+                    .select_from(ranked_subq)
+                    .join(store_alias,
+                          ranked_subq.c.store_code == store_alias.c.store_code)
+                )
 
             if org1 and org1 != 'ALL':
                 org1_values = [v.strip() for v in org1.split(',')]
@@ -2970,12 +2992,11 @@ class CommissionDataHubService:
                 org3_values = [v.strip() for v in org3.split(',')]
                 query = query.where(ranked_subq.c.City.in_(org3_values))
 
-            if org4 and org4 != 'ALL':
-                org4_values = [v.strip() for v in org4.split(',')]
-                query = query.where(ranked_subq.c.store_code.in_(org4_values))
-
             if primary_group and primary_group == 'SALES_ASSOCIATE':
                 query = query.where(ranked_subq.c.staff_code.in_([role_code]))
+            elif org4 and org4 != 'ALL':
+                org4_values = [v.strip() for v in org4.split(',')]
+                query = query.where(ranked_subq.c.store_code.in_(org4_values))
 
             query = query.order_by(ranked_subq.c.rank)
             query = query.offset(cursor).limit(limit + 1)
