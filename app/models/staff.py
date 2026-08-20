@@ -26,6 +26,7 @@ class StaffAttendanceModel(Base):
     sales_value_ec = Column(DECIMAL(12, 2))  # 线上销售金额
     sales_value_store = Column(DECIMAL(12, 2))  # 线下门店销售金额
     del_flag = Column(Boolean, default=False, nullable=False)
+    fiscal_store = Column(String(30))
     deletable = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     creator_code = Column(String(30))

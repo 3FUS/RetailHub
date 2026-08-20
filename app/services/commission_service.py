@@ -1314,7 +1314,7 @@ class CommissionService:
                 "target_value": commission.store_target_value if commission.rule_basis == 'store' else commission.staff_target_value,
                 "sales_value": commission.store_sales_value if commission.rule_basis == 'store' else commission.staff_sales_value,
                 "amount": commission.amount if commission.amount is not None else 0.0,
-                "share_rate": commission.factor if commission.factor is not None else (100 if commission.rule_class == 'team' and commission.rule_detail_code != 'R-05' else None),
+                "share_rate": commission.factor if commission.factor is not None else (100 if commission.rule_class == 'team' and commission.rule_code != 'R-05' else None),
                 "adjustment_remarks": commission.remarks
             }
 
@@ -2887,7 +2887,7 @@ class CommissionDataHubService:
                 select(*common_columns)
                 .select_from(CommissionStoreModel)
                 .join(StaffAttendanceModel,
-                      (CommissionStoreModel.store_code == StaffAttendanceModel.store_code) &
+                      (CommissionStoreModel.store_code == StaffAttendanceModel.fiscal_store) &
                       (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month))
                 .join(StaffModel,
                       StaffAttendanceModel.staff_code == StaffModel.staff_code)
