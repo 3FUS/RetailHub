@@ -1314,7 +1314,7 @@ class CommissionService:
                 "target_value": commission.store_target_value if commission.rule_basis == 'store' else commission.staff_target_value,
                 "sales_value": commission.store_sales_value if commission.rule_basis == 'store' else commission.staff_sales_value,
                 "amount": commission.amount if commission.amount is not None else 0.0,
-                "share_rate": commission.factor if commission.factor is not None else (100 if commission.rule_class == 'team' and commission.rule_code != 'R-05' else None),
+                "share_rate": commission.factor if commission.factor is not None else (100 if (commission.rule_class == 'team' and commission.rule_code != 'R-05') or commission.rule_class == 'operational' else None),
                 "adjustment_remarks": commission.remarks
             }
 
