@@ -2892,7 +2892,7 @@ class CommissionDataHubService:
                 .join(StaffModel,
                       StaffAttendanceModel.staff_code == StaffModel.staff_code)
                 .join(StoreModel,
-                      StaffAttendanceModel.store_code == StoreModel.store_code)
+                      CommissionStoreModel.store_code == StoreModel.store_code)
                 .outerjoin(CommissionTrialStaffDetailModel,
                            (CommissionStoreModel.fiscal_month == CommissionTrialStaffDetailModel.fiscal_month) &
                            (CommissionStoreModel.store_code == CommissionTrialStaffDetailModel.store_code) &
