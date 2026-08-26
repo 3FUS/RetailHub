@@ -22,6 +22,22 @@ class DimensionDayWeek(Base):
     create_user = Column(String(60), nullable=True, default=None)
 
 
+class StoreCompModel(Base):
+    """
+    门店对比模型
+    对应数据库中的store_comp表
+    """
+    __tablename__ = "store_comp"
+
+    store_code = Column(String(30), primary_key=True, nullable=False)
+    month_comp = Column(String(10), primary_key=True, nullable=False)
+    month_vs = Column(String(10), nullable=True, default=None)
+    comp_flag = Column(String(10), nullable=True, default=None)
+    create_user = Column(String(60), nullable=True, default=None)
+    create_time = Column(DateTime, nullable=True, default=None)
+    update_user = Column(String(60), nullable=True, default=None)
+    update_time = Column(DateTime, nullable=True, default=None)
+
 class StoreModel(Base):
     """
     门店信息模型

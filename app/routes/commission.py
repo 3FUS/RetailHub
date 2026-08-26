@@ -87,6 +87,7 @@ async def get_staff_commission_ranking(fiscal_month: str, org1: str, org2: str, 
                                        rank_type: str = 'ALL',
                                        sort_by: str = 'commissions',
                                        is_prod: bool = False,
+                                       comp: int = 0,
                                        db: AsyncSession = Depends(get_db),
                                        current_user: dict = Depends(get_current_user)):
     try:
@@ -95,7 +96,7 @@ async def get_staff_commission_ranking(fiscal_month: str, org1: str, org2: str, 
         app_logger.info(f"primary_group: {primary_group}")
         data = await CommissionDataHubService.get_staff_commissions_list_by_role(
             db, role_code, fiscal_month, org1, org2, org3, org4,
-            cursor, limit, rank_type, sort_by, primary_group
+            cursor, limit, rank_type, sort_by, primary_group,comp
         )
         return {"code": 200, "data": data}
     except SQLAlchemyError as e:

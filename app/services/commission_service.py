@@ -5,7 +5,7 @@ from sqlalchemy.future import select
 from app.models.commission import CommissionStaffModel, CommissionStoreModel, CommissionRuleModel, \
     CommissionRuleAssignmentModel, CommissionRuleDetailModel, CommissionMainModel, CommissionStaffDetailModel, \
     CommissionRuleCategory, StaffSalesCategory, CommissionTrialStaffDetailModel
-from app.models.dimension import StoreModel, DimensionDayWeek, RoleOrgJoin
+from app.models.dimension import StoreModel, DimensionDayWeek, RoleOrgJoin,StoreCompModel
 from app.models.staff import StaffAttendanceModel, StaffModel
 from app.schemas.commission import CommissionStaffCreate, BatchApprovedCommission
 from app.models.target import TargetStoreMain
@@ -2773,7 +2773,7 @@ class CommissionDataHubService:
                                                  org1: str = 'ALL', org2: str = 'ALL', org3: str = 'ALL',
                                                  org4: str = 'ALL',
                                                  cursor: int = 0, limit: int = 30, rank_type: str = 'ALL',
-                                                 sort_by: str = 'commissions', primary_group: str = ''):
+                                                 sort_by: str = 'commissions', primary_group: str = '', comp: int = 0):
         try:
             store_permission_query = build_store_permission_query(role_code)
             store_alias = store_permission_query.subquery()
@@ -2795,23 +2795,56 @@ class CommissionDataHubService:
                 channels = channel_value_result.scalars().all()
                 temp = channels[0] if len(channels) == 1 else 'ALL'
 
-            common_group_by = [
-                CommissionStoreModel.store_code,
-                StoreModel.store_name,
-                StoreModel.manage_region,
-                StoreModel.manage_channel,
-                StoreModel.City,
-                StaffAttendanceModel.staff_code,
-                StaffModel.first_name,
-                StaffModel.avatar,
-                CommissionStoreModel.status
-            ]
-
             common_where = [
                 CommissionStoreModel.fiscal_month == fiscal_month,
                 CommissionStoreModel.merged_flag == 0,
                 *([] if rank_type == 'ALL' else [StoreModel.manage_channel == rank_type])
             ]
+
+            if comp != 0:
+                common_where.append(
+                    exists().where(
+                        (StoreCompModel.store_code == CommissionStoreModel.store_code) &
+                        (StoreCompModel.month_comp == fiscal_month) &
+                        (StoreCompModel.comp_flag == 'Y')
+                    )
+                )
+
+            attendance_subq = (
+                select(
+                    StaffAttendanceModel.fiscal_store,
+                    StaffAttendanceModel.fiscal_month,
+                    StaffAttendanceModel.staff_code,
+                    func.sum(StaffAttendanceModel.sales_value).label('sales_value'),
+                    func.sum(StaffAttendanceModel.target_value).label('target_value'),
+                    func.sum(StaffAttendanceModel.expected_attendance).label('expected_attendance'),
+                    func.sum(StaffAttendanceModel.actual_attendance).label('actual_attendance'),
+                    func.sum(StaffAttendanceModel.planned_attendance).label('planned_attendance')
+                )
+                .group_by(
+                    StaffAttendanceModel.fiscal_store,
+                    StaffAttendanceModel.fiscal_month,
+                    StaffAttendanceModel.staff_code
+                )
+            ).subquery()
+
+            trial_sub = (
+                select(
+                    CommissionTrialStaffDetailModel.fiscal_month,
+                    CommissionTrialStaffDetailModel.store_code,
+                    CommissionTrialStaffDetailModel.staff_code,
+                    func.sum(CommissionTrialStaffDetailModel.amount).label('amount'),
+                    func.sum(CommissionTrialStaffDetailModel.staff_sales_value).label('staff_sales_value'),
+                    func.sum(CommissionTrialStaffDetailModel.staff_target_value).label('staff_target_value'),
+                    func.sum(CommissionTrialStaffDetailModel.expected_attendance).label('expected_attendance'),
+                    func.sum(CommissionTrialStaffDetailModel.actual_attendance).label('actual_attendance')
+                )
+                .group_by(
+                    CommissionTrialStaffDetailModel.fiscal_month,
+                    CommissionTrialStaffDetailModel.store_code,
+                    CommissionTrialStaffDetailModel.staff_code
+                )
+            ).subquery()
 
             approved_subq = (
                 select(
@@ -2853,64 +2886,67 @@ class CommissionDataHubService:
                 )
             )
 
-            common_columns = [
-                CommissionStoreModel.store_code,
-                StoreModel.store_name,
-                StoreModel.manage_region,
-                StoreModel.manage_channel,
-                StoreModel.City,
-                StaffAttendanceModel.staff_code,
-                StaffModel.first_name,
-                StaffModel.avatar,
-                func.coalesce(
-                    func.max(CommissionTrialStaffDetailModel.staff_sales_value),
-                    func.max(StaffAttendanceModel.sales_value)
-                ).label('sales_value'),
-                func.coalesce(
-                    func.max(CommissionTrialStaffDetailModel.staff_target_value),
-                    func.max(StaffAttendanceModel.target_value)
-                ).label('target_value'),
-                func.coalesce(
-                    func.max(CommissionTrialStaffDetailModel.expected_attendance),
-                    func.max(StaffAttendanceModel.expected_attendance)
-                ).label('expected_attendance'),
-                func.coalesce(
-                    func.max(CommissionTrialStaffDetailModel.actual_attendance),
-                    func.max(StaffAttendanceModel.actual_attendance)
-                ).label('actual_attendance'),
-                func.max(StaffAttendanceModel.planned_attendance).label('planned_attendance'),
-                func.sum(CommissionTrialStaffDetailModel.amount).label('amount'),
-                CommissionStoreModel.status
-            ]
-
             trial_subq = (
-                select(*common_columns)
+                select(
+                    CommissionStoreModel.store_code,
+                    StoreModel.store_name,
+                    StoreModel.manage_region,
+                    StoreModel.manage_channel,
+                    StoreModel.City,
+                    func.coalesce(
+                        attendance_subq.c.staff_code,
+                        trial_sub.c.staff_code
+                    ).label('staff_code'),
+                    func.coalesce(
+                        StaffModel.first_name,
+                        trial_sub.c.staff_code
+                    ).label('first_name'),
+                    StaffModel.avatar,
+                    func.coalesce(
+                        trial_sub.c.staff_sales_value,
+                        attendance_subq.c.sales_value
+                    ).label('sales_value'),
+                    func.coalesce(
+                        trial_sub.c.staff_target_value,
+                        attendance_subq.c.target_value
+                    ).label('target_value'),
+                    func.coalesce(
+                        trial_sub.c.expected_attendance,
+                        attendance_subq.c.expected_attendance
+                    ).label('expected_attendance'),
+                    func.coalesce(
+                        trial_sub.c.actual_attendance,
+                        attendance_subq.c.actual_attendance
+                    ).label('actual_attendance'),
+                    attendance_subq.c.planned_attendance,
+                    trial_sub.c.amount,
+                    CommissionStoreModel.status
+                )
                 .select_from(CommissionStoreModel)
-                .join(StaffAttendanceModel,
-                      (CommissionStoreModel.store_code == StaffAttendanceModel.fiscal_store) &
-                      (CommissionStoreModel.fiscal_month == StaffAttendanceModel.fiscal_month))
-                .join(StaffModel,
-                      StaffAttendanceModel.staff_code == StaffModel.staff_code)
                 .join(StoreModel,
                       CommissionStoreModel.store_code == StoreModel.store_code)
-                .outerjoin(CommissionTrialStaffDetailModel,
-                           (CommissionStoreModel.fiscal_month == CommissionTrialStaffDetailModel.fiscal_month) &
-                           (CommissionStoreModel.store_code == CommissionTrialStaffDetailModel.store_code) &
-                           (StaffAttendanceModel.staff_code == CommissionTrialStaffDetailModel.staff_code))
+                .outerjoin(attendance_subq,
+                           (CommissionStoreModel.store_code == attendance_subq.c.fiscal_store) &
+                           (CommissionStoreModel.fiscal_month == attendance_subq.c.fiscal_month))
+                .outerjoin(StaffModel,
+                           attendance_subq.c.staff_code == StaffModel.staff_code)
+                .outerjoin(trial_sub,
+                           (CommissionStoreModel.fiscal_month == trial_sub.c.fiscal_month) &
+                           (CommissionStoreModel.store_code == trial_sub.c.store_code) &
+                           (func.coalesce(attendance_subq.c.staff_code,
+                                          trial_sub.c.staff_code) == trial_sub.c.staff_code))
                 .where(*common_where, CommissionStoreModel.status != 'approved')
-                .group_by(*common_group_by)
             )
 
             union_subq = union_all(approved_subq, trial_subq).subquery()
 
             if sort_by == 'sales_value':
-                rank_order = union_subq.c.sales_value.desc()
-            else:
-                rank_order = [union_subq.c.amount.desc(), union_subq.c.sales_value.desc()]
-
-            if sort_by == 'sales_value':
+                rank_order = [union_subq.c.sales_value.desc(), union_subq.c.amount.desc(),
+                              union_subq.c.staff_code.asc()]
                 rank_key = union_subq.c.sales_value.desc()
             else:
+                rank_order = [union_subq.c.amount.desc(), union_subq.c.sales_value.desc(),
+                              union_subq.c.staff_code.asc()]
                 rank_key = union_subq.c.amount.desc()
 
             ranked_subq = (
@@ -2930,6 +2966,7 @@ class CommissionDataHubService:
                     union_subq.c.planned_attendance,
                     union_subq.c.amount,
                     union_subq.c.status,
+                    func.row_number().over(order_by=rank_order).label('row_num'),
                     func.dense_rank().over(order_by=rank_key).label('rank')
                 )
                 .select_from(union_subq)
@@ -2998,8 +3035,11 @@ class CommissionDataHubService:
                 org4_values = [v.strip() for v in org4.split(',')]
                 query = query.where(ranked_subq.c.store_code.in_(org4_values))
 
-            query = query.order_by(ranked_subq.c.rank)
+            query = query.order_by(ranked_subq.c.row_num)
             query = query.offset(cursor).limit(limit + 1)
+
+            app_logger.info(
+                f"get_staff_commissions_list_by_role SQL: {query.compile(compile_kwargs={'literal_binds': True})}")
 
             result = await db.execute(query)
             rows = result.fetchall()
