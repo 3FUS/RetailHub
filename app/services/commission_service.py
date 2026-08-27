@@ -2834,10 +2834,10 @@ class CommissionDataHubService:
                     CommissionTrialStaffDetailModel.store_code,
                     CommissionTrialStaffDetailModel.staff_code,
                     func.sum(CommissionTrialStaffDetailModel.amount).label('amount'),
-                    func.sum(CommissionTrialStaffDetailModel.staff_sales_value).label('staff_sales_value'),
-                    func.sum(CommissionTrialStaffDetailModel.staff_target_value).label('staff_target_value'),
-                    func.sum(CommissionTrialStaffDetailModel.expected_attendance).label('expected_attendance'),
-                    func.sum(CommissionTrialStaffDetailModel.actual_attendance).label('actual_attendance')
+                    func.max(CommissionTrialStaffDetailModel.staff_sales_value).label('staff_sales_value'),
+                    func.max(CommissionTrialStaffDetailModel.staff_target_value).label('staff_target_value'),
+                    func.max(CommissionTrialStaffDetailModel.expected_attendance).label('expected_attendance'),
+                    func.max(CommissionTrialStaffDetailModel.actual_attendance).label('actual_attendance')
                 )
                 .group_by(
                     CommissionTrialStaffDetailModel.fiscal_month,
