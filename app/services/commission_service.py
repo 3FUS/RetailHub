@@ -2918,7 +2918,10 @@ class CommissionDataHubService:
                         trial_sub.c.actual_attendance,
                         attendance_subq.c.actual_attendance
                     ).label('actual_attendance'),
-                    attendance_subq.c.planned_attendance,
+                    func.coalesce(
+                        trial_sub.c.actual_attendance,
+                        attendance_subq.c.planned_attendance
+                    ).label('planned_attendance'),
                     trial_sub.c.amount,
                     CommissionStoreModel.status
                 )
